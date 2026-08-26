@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/act_rename" android:title="Rename" />
+    <item android:id="@+id/act_props" android:title="Properties" />
+    <item android:id="@+id/act_copy" android:title="Copy" />
+    <item android:id="@+id/act_cut" android:title="Cut" />
+    <item android:id="@+id/act_delete" android:title="Delete" />
+    <item android:id="@+id/act_share" android:title="Share" />
+</menu>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/menu_paste" android:title="Paste" />
+    <item android:id="@+id/menu_new_folder" android:title="New folder" />
+    <item android:id="@+id/menu_new_file" android:title="New file" />
+    <item android:id="@+id/menu_sort" android:title="Sort by…" />
+    <item android:id="@+id/menu_hidden" android:title="Show hidden files" />
+    <item android:id="@+id/menu_storage" android:title="Storage access…" />
+    <item android:id="@+id/menu_refresh" android:title="Refresh" />
+</menu>

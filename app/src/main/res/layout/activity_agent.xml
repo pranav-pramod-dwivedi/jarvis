@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="JARVIS AGENT"
+        android:textColor="#CFE8FF"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/agent_ctx"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="monospace"
+        android:textColor="#6E8CA0"
+        android:textSize="11sp" />
+
+    <ScrollView
+        android:id="@+id/agent_scroller"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1"
+        android:background="#0A0F14">
+
+        <TextView
+            android:id="@+id/agent_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:padding="10dp"
+            android:text="Try:\n• ls\n• read /storage/emulated/0/Download/x.apk\n• find jarvis\n• search TODO\n• write /storage/emulated/0/test.txt hello\n• run uname -a\n• opencode (prompt)\n"
+            android:textColor="#B9D4E8"
+            android:textIsSelectable="true"
+            android:textSize="12sp" />
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/agent_input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Ask JARVIS…"
+            android:inputType="text"
+            android:textColor="#E6F2FF"
+            android:textColorHint="#556B7E" />
+
+        <Button
+            android:id="@+id/agent_send"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SEND" />
+    </LinearLayout>
+</LinearLayout>

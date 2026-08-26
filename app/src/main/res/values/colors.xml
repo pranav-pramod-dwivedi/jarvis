@@ -7,4 +7,14 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- JARVIS dark futuristic palette -->
+    <color name="jv_bg">#FF0B1116</color>
+    <color name="jv_surface">#FF101820</color>
+    <color name="jv_surface_hi">#FF16232E</color>
+    <color name="jv_accent">#FF4FD1C5</color>
+    <color name="jv_accent_dim">#FF2A8F87</color>
+    <color name="jv_text">#FFE6F2FF</color>
+    <color name="jv_text_dim">#FF6E8CA0</color>
+    <color name="jv_danger">#FFC62828</color>
 </resources>

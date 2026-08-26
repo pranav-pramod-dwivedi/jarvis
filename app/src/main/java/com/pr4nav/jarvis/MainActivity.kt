@@ -1,266 +1,264 @@
 package com.pr4nav.jarvis
 
-import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.StatFs
 import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
+import org.json.JSONObject
 import java.text.SimpleDateFormat
-import java.util.ArrayDeque
 import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
-    data class TestSpec(
-        val label: String,
-        val displayCmd: String,
-        val path: String,
-        val args: Array<String>
-    )
-
     private lateinit var statusView: TextView
     private lateinit var outputView: TextView
+    private lateinit var stageView: TextView
     private lateinit var infoView: TextView
+    private lateinit var storageView: TextView
     private lateinit var scroller: ScrollView
-    private lateinit var buttons: List<Button>
 
     private val handler = Handler(Looper.getMainLooper())
-    private val queue = ArrayDeque<TestSpec>()
-    private var currentSpec: TestSpec? = null
-    private var currentId = 0
-    private var reqCounter = 1000
-    private var sentAtMs = 0L
-    private var seqName = ""
+    private val stages = LinkedHashMap<String, String>()
+    private var polling = false
     private var pendingAuto: String? = null
 
     companion object {
         private const val TAG = "JARVIS"
-        private const val PERM = "com.termux.permission.RUN_COMMAND"
-        private const val TERMUX_PKG = "com.termux"
-        private const val TERMUX_SVC = "com.termux.app.RunCommandService"
-
-        // Exact action/extras of the official Termux RUN_COMMAND interface
-        // (TermuxConstants.RUN_COMMAND_SERVICE, termux-app >= 0.95;
-        //  results require >= 0.109).
-        private const val ACTION_RUN_COMMAND = "com.termux.RUN_COMMAND"
-        private const val EXTRA_PATH = "com.termux.RUN_COMMAND_PATH"
-        private const val EXTRA_ARGUMENTS = "com.termux.RUN_COMMAND_ARGUMENTS"
-        private const val EXTRA_WORKDIR = "com.termux.RUN_COMMAND_WORKDIR"
-        private const val EXTRA_BACKGROUND = "com.termux.RUN_COMMAND_BACKGROUND"
-        private const val EXTRA_COMMAND_LABEL = "com.termux.RUN_COMMAND_COMMAND_LABEL"
-        private const val EXTRA_PENDING_INTENT = "com.termux.RUN_COMMAND_PENDING_INTENT"
-
-        private const val SH = "/data/data/com.termux/files/usr/bin/sh"
-        private const val HOME = "/data/data/com.termux/files/home"
-
-        private const val TIMEOUT_MS = 20_000L
-        private const val REQ_PERM = 42
-
-        private val SPEC_ECHO = TestSpec("echo", "echo JARVIS_TERMUX_OK", SH, arrayOf("-c", "echo JARVIS_TERMUX_OK"))
-        private val SPEC_PWD = TestSpec("pwd", "pwd", SH, arrayOf("-c", "pwd"))
-        private val SPEC_WHOAMI = TestSpec("whoami", "whoami", SH, arrayOf("-c", "whoami"))
-        private val SPEC_UNAME = TestSpec("uname", "uname -a", SH, arrayOf("-c", "uname -a"))
-        private val SPEC_RC = TestSpec("rc3", "exit 3  (rc must be 3)", SH, arrayOf("-c", "exit 3"))
-        private val SPEC_STDERR = TestSpec("stderr", "echo stderr_line >&2; exit 7", SH, arrayOf("-c", "echo stderr_line >&2; exit 7"))
-
-        private val SCRIPT_SETUP_CMD =
-            "printf '%s\\n' '#!/data/data/com.termux/files/usr/bin/sh' 'echo \"Jarvis bridge works\"' 'date' 'pwd' " +
-                "> \"\$HOME/jarvis_test.sh\"; chmod +x \"\$HOME/jarvis_test.sh\""
-        private val SPEC_SCRIPT_SETUP = TestSpec("script-setup", "(create ~/jarvis_test.sh)", SH, arrayOf("-c", SCRIPT_SETUP_CMD))
-        private val SPEC_SCRIPT_RUN = TestSpec("script-run", "~/jarvis_test.sh", "~/jarvis_test.sh", arrayOf())
-
-        private fun basic4() = listOf(SPEC_ECHO, SPEC_PWD, SPEC_WHOAMI, SPEC_UNAME)
-        private fun script2() = listOf(SPEC_SCRIPT_SETUP, SPEC_SCRIPT_RUN)
+        private const val POLL_LABEL = "__poll"
+        private const val POLL_MS = 2000L
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        TermuxBridge.init(this)
+        Fs.init(this)
+
         statusView = findViewById(R.id.status_view)
         outputView = findViewById(R.id.output_view)
+        stageView = findViewById(R.id.stage_view)
         infoView = findViewById(R.id.info_view)
+        storageView = findViewById(R.id.storage_view)
         scroller = findViewById(R.id.scroller)
-        buttons = listOf(
-            findViewById(R.id.btn_echo), findViewById(R.id.btn_pwd),
-            findViewById(R.id.btn_whoami), findViewById(R.id.btn_uname),
-            findViewById(R.id.btn_rc), findViewById(R.id.btn_stderr),
-            findViewById(R.id.btn_test_termux), findViewById(R.id.btn_script)
-        )
 
-        findViewById<Button>(R.id.btn_echo).setOnClickListener { runSequence("single", listOf(SPEC_ECHO)) }
-        findViewById<Button>(R.id.btn_pwd).setOnClickListener { runSequence("single", listOf(SPEC_PWD)) }
-        findViewById<Button>(R.id.btn_whoami).setOnClickListener { runSequence("single", listOf(SPEC_WHOAMI)) }
-        findViewById<Button>(R.id.btn_uname).setOnClickListener { runSequence("single", listOf(SPEC_UNAME)) }
-        findViewById<Button>(R.id.btn_rc).setOnClickListener { runSequence("single", listOf(SPEC_RC)) }
-        findViewById<Button>(R.id.btn_stderr).setOnClickListener { runSequence("single", listOf(SPEC_STDERR)) }
-        findViewById<Button>(R.id.btn_test_termux).setOnClickListener { runSequence("TEST TERMUX", basic4()) }
-        findViewById<Button>(R.id.btn_script).setOnClickListener { runSequence("TEST JARVIS SCRIPT", script2()) }
+        findViewById<Button>(R.id.btn_open_files).setOnClickListener {
+            startActivity(Intent(this, BrowserActivity::class.java))
+        }
+        findViewById<Button>(R.id.btn_nav_agent).setOnClickListener {
+            startActivity(Intent(this, AgentActivity::class.java))
+        }
+        findViewById<Button>(R.id.btn_nav_status).setOnClickListener {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
+        }
+        findViewById<Button>(R.id.btn_permissions).setOnClickListener {
+            startActivity(Intent(this, PermissionsActivity::class.java))
+        }
+        findViewById<Button>(R.id.btn_bootstrap).setOnClickListener { launchBootstrap() }
+        findViewById<Button>(R.id.btn_auth).setOnClickListener { openAuthSession() }
+        findViewById<Button>(R.id.btn_stop).setOnClickListener { stopEverything() }
 
-        if (!hasPerm()) requestPermissions(arrayOf(PERM), REQ_PERM)
         refreshInfo()
+
+        val prefs = getPreferences(MODE_PRIVATE)
+        if (!prefs.getBoolean("perm_asked_v1", false)) {
+            prefs.edit().putBoolean("perm_asked_v1", true).apply()
+            startActivity(Intent(this, PermissionsActivity::class.java))
+        }
 
         pendingAuto = intent?.getStringExtra("auto")
         maybeRunAuto()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        pendingAuto = intent.getStringExtra("auto")
+        maybeRunAuto()
+    }
+
     override fun onResume() {
         super.onResume()
-        ResultBus.listener = ::onResult
+        refreshInfo()
+        ResultBus.listeners += ::onResult
     }
 
     override fun onPause() {
-        ResultBus.listener = null
+        ResultBus.listeners -= ::onResult
         super.onPause()
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        refreshInfo()
-        if (requestCode == REQ_PERM) {
-            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-                append("permission RUN_COMMAND granted")
-                maybeRunAuto()
-            } else {
-                setStatus(FAILED, "Failed: RUN_COMMAND permission denied")
-                append("DENIED. Grant manually: Settings -> Apps -> Jarvis -> Permissions -> Additional permissions")
-            }
-        }
-    }
-
-    private fun hasPerm(): Boolean =
-        ContextCompat.checkSelfPermission(this, PERM) == PackageManager.PERMISSION_GRANTED
-
     private fun refreshInfo() {
         val ver = try {
-            packageManager.getPackageInfo(TERMUX_PKG, 0).versionName
-        } catch (e: Exception) {
-            null
-        }
-        infoView.text =
-            "Termux: ${ver ?: "NOT INSTALLED"}  |  RUN_COMMAND perm: ${if (hasPerm()) "granted" else "NOT granted"}\n" +
-                "Offline by design: no INTERNET permission, pure local intents"
+            packageManager.getPackageInfo(TermuxBridge.TERMUX_PKG, 0).versionName
+        } catch (e: Exception) { null }
+        val perm = TermuxBridge.hasPermission()
+        infoView.text = "Termux ${ver ?: "NOT INSTALLED"} · bridge ${if (perm) "permitted" else "not permitted"} · ${Fs.accessLevel}"
         if (ver == null) setStatus(FAILED, "Failed: Termux not installed")
+
+        try {
+            val (avail, total) = Fs.Java.storageInfo()
+            val gb = { v: Long -> String.format(Locale.US, "%.1f GB", v / 1e9) }
+            storageView.text = "Internal Storage\n${gb(avail)} available of ${gb(total)}\nPath: /storage/emulated/0"
+        } catch (e: Exception) {
+            storageView.text = "Internal Storage: ${e.message}"
+        }
+
+        if (!perm) requestPermissions(arrayOf(TermuxBridge.PERM), 42)
+        if (!Fs.hasAllFiles && Build.VERSION.SDK_INT >= 30) {
+            append("Tip: grant All-Files-Access for full file-manager power (Status screen → Grant).")
+        }
     }
 
     private fun maybeRunAuto() {
         val auto = pendingAuto ?: return
-        if (!hasPerm()) return
+        if (!TermuxBridge.hasPermission()) return
+        if (polling) { Log.i(TAG, "auto '$auto' ignored: busy"); pendingAuto = null; return }
         pendingAuto = null
         when (auto) {
-            "basic" -> runSequence("AUTO-BASIC", basic4())
-            "script" -> runSequence("AUTO-SCRIPT", script2())
-            "all" -> runSequence("AUTO-ALL", basic4() + script2())
+            "bootstrap" -> launchBootstrap()
+            "auth" -> openAuthSession()
+            "selftest" -> SelfTest.run(this) { line -> runOnUiThread { append(line) } }
         }
     }
 
-    private fun runSequence(name: String, specs: List<TestSpec>) {
-        if (currentSpec != null || !hasPerm()) return
-        queue.clear()
-        queue.addAll(specs)
-        seqName = name
-        Log.i(TAG, "SEQ_BEGIN $name (${specs.size} steps)")
-        stepNext()
+    // ================= INSTALLER =================
+
+    private fun termuxScriptCmd(): TermuxBridgeSpec {
+        val script = assets.open("bootstrap.sh").bufferedReader().readText()
+        val b64 = android.util.Base64.encodeToString(script.toByteArray(), android.util.Base64.NO_WRAP)
+        val chunks = mutableListOf<String>()
+        for (i in 0 until b64.length step 2000) chunks.add(b64.substring(i, minOf(i + 2000, b64.length)))
+        val sb = StringBuilder("mkdir -p ~/jarvis/bin ~/jarvis/logs ~/jarvis/state && ")
+        sb.append("echo '${chunks[0]}' > ~/jarvis/bin/bootstrap.sh.b64")
+        for (i in 1 until chunks.size) sb.append(" && echo '${chunks[i]}' >> ~/jarvis/bin/bootstrap.sh.b64")
+        sb.append(" && base64 -d ~/jarvis/bin/bootstrap.sh.b64 > ~/jarvis/bin/bootstrap.sh")
+        sb.append(" && chmod +x ~/jarvis/bin/bootstrap.sh")
+        sb.append(" && (nohup ~/jarvis/bin/bootstrap.sh >>~/jarvis/logs/boot.out 2>&1 &)")
+        sb.append(" && echo BOOTSTRAP_LAUNCHED")
+        return TermuxBridgeSpec("__launch", sb.toString())
     }
 
-    private fun stepNext() {
-        val next = queue.pollFirst() ?: run {
-            Log.i(TAG, "SEQ_END $seqName")
-            if (seqName.startsWith("AUTO")) Log.i(TAG, "AUTO_DONE $seqName")
-            setButtonsEnabled(true)
-            return
+    private fun launchBootstrap() {
+        if (!TermuxBridge.hasPermission()) { setStatus(FAILED, "Grant RUN_COMMAND permission first"); return }
+        append("Deploying bootstrap script…")
+        stages.clear(); renderStages()
+        Thread {
+            TermuxBridge.execute("__clear", "> ~/jarvis/state/events.ndjson 2>/dev/null", 10_000)
+            val r = TermuxBridge.execute("__launch", termuxScriptCmd().cmd, 90_000)
+            runOnUiThread {
+                if (r?.stdout?.contains("BOOTSTRAP_LAUNCHED") == true) {
+                    append("Bootstrap running inside Termux. Tracking stages…")
+                    startPolling()
+                } else {
+                    setStatus(FAILED, "Launch failed: ${r?.internalError ?: r?.stderr ?: "no response"}")
+                }
+            }
+        }.start()
+    }
+
+    private fun openAuthSession() {
+        if (!TermuxBridge.hasPermission()) return
+        Thread {
+            TermuxBridge.execute("__auth", "~/jarvis/bin/bootstrap.sh auth", 15_000, background = false)
+            runOnUiThread {
+                setStatus(WAITING, "Finish login in the Termux window…")
+                append("Interactive auth opened. After login, tap INSTALL / BOOTSTRAP again.")
+            }
+        }.start()
+    }
+
+    private fun stopEverything() {
+        polling = false
+        handler.removeCallbacksAndMessages(null)
+        Thread { TermuxBridge.execute("__stop", "pkill -f jarvis/bin/bootstrap.sh; echo STOPPED", 10_000) }.start()
+        setStatus(IDLE, "Stopped")
+    }
+
+    private fun startPolling() {
+        if (polling) return
+        polling = true
+        pollTick()
+    }
+
+    private fun pollTick() {
+        if (!polling) return
+        Thread {
+            val r = TermuxBridge.execute(POLL_LABEL, "tail -n 80 ~/jarvis/state/events.ndjson 2>/dev/null || echo NO_STATE", 20_000)
+            runOnUiThread { if (r != null) handlePoll(r.stdout) }
+            handler.postDelayed({ pollTick() }, POLL_MS)
+        }.start()
+    }
+
+    private fun handlePoll(stdout: String?) {
+        if (stdout.isNullOrBlank() || stdout.contains("NO_STATE")) return
+        for (line in stdout.lines()) {
+            val t = line.trim()
+            if (!t.startsWith("{")) continue
+            try {
+                val o = JSONObject(t)
+                val st = o.optString("stage") ?: continue
+                val status = o.optString("status")
+                val msg = o.optString("msg")
+                stages[st] = "$status|$msg"
+                Log.i(TAG, "STAGE $st $status $msg")
+                if (status == "failed" || (st == "jarvis" && status == "done")) polling = false
+            } catch (_: Exception) {}
         }
-        send(next)
+        renderStages(); renderPill()
     }
 
-    private fun send(spec: TestSpec) {
-        currentSpec = spec
-        sentAtMs = System.currentTimeMillis()
-        val id = ++reqCounter
-        currentId = id
+    private fun renderStages() {
+        if (stages.isEmpty()) { stageView.text = ""; return }
+        val sb = StringBuilder()
+        for ((name, v) in stages) {
+            val p = v.split("|", limit = 2)
+            val sym = when (p.getOrNull(0)) {
+                "done" -> "✓"; "running" -> "⟳"; "fixing" -> "🔧"; "failed" -> "✗"; "warn" -> "△"; "auth_required" -> "⚠"; else -> "○"
+            }
+            sb.append(sym).append(' ').append(name.padEnd(9)).append("  ").append(p.getOrNull(1) ?: "").append('\n')
+        }
+        stageView.text = sb.toString()
+    }
 
-        val piFlags = PendingIntent.FLAG_ONE_SHOT or
-            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
-        val resultIntent = Intent(this, TermuxResultReceiver::class.java)
-            .putExtra(ResultBus.EXTRA_LABEL, spec.label)
-            .putExtra(ResultBus.EXTRA_CMD, spec.displayCmd)
-        val pi = PendingIntent.getBroadcast(applicationContext, id, resultIntent, piFlags)
-
-        val intent = Intent()
-            .setClassName(TERMUX_PKG, TERMUX_SVC)
-            .setAction(ACTION_RUN_COMMAND)
-            .putExtra(EXTRA_PATH, spec.path)
-            .putExtra(EXTRA_ARGUMENTS, spec.args)
-            .putExtra(EXTRA_WORKDIR, HOME)
-            .putExtra(EXTRA_BACKGROUND, true)
-            .putExtra(EXTRA_COMMAND_LABEL, "$seqName/${spec.label}")
-            .putExtra(EXTRA_PENDING_INTENT, pi)
-
-        setButtonsEnabled(false)
-        setStatus(WAITING, "Waiting… sent '$${spec.label}' to Termux")
-        append("$ ${spec.displayCmd}")
-        handler.postDelayed({ onTimeout(id) }, TIMEOUT_MS)
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-            else startService(intent)
-        } catch (e: Exception) {
-            handler.removeCallbacksAndMessages(null)
-            completeStep(TermuxResult(spec.label, spec.displayCmd, null, null, null, null, null,
-                internalError = "startService failed: ${e.javaClass.simpleName}: ${e.message}"))
+    private fun renderPill() {
+        var failed: String? = null; var authReq = false; var done = false; var running = ""
+        for ((name, v) in stages) {
+            val p = v.split("|", limit = 2)
+            when (p.getOrNull(0)) {
+                "failed" -> if (failed == null) failed = p.getOrNull(1) ?: name
+                "auth_required" -> authReq = true
+                "running", "fixing" -> running = p.getOrNull(1) ?: ""
+            }
+            if (name == "jarvis" && p.getOrNull(0) == "done") done = true
+        }
+        when {
+            done -> setStatus(CONNECTED, "Jarvis ready ✓")
+            failed != null -> setStatus(FAILED, "Failed: $failed")
+            authReq -> setStatus(WAITING, "Authentication required — tap OPEN AUTH")
+            else -> setStatus(WAITING, running.ifBlank { "Preparing Jarvis…" })
         }
     }
 
-    private fun onTimeout(id: Int) {
-        val spec = currentSpec ?: return
-        if (id != currentId) return
-        completeStep(TermuxResult(spec.label, spec.displayCmd, null, null, null, null, null, internalError =
-            "TIMEOUT after ${TIMEOUT_MS / 1000}s, no result from Termux. Checks: Termux installed & opened once? " +
-                "allow-external-apps=true in ~/.termux/termux.properties? RUN_COMMAND permission granted?"))
-    }
+    // ================= result routing =================
 
     private fun onResult(r: TermuxResult) {
-        if (r.label != currentSpec?.label) {
-            append("(ignored unmatched result for '${r.label}')")
-            return
-        }
-        handler.removeCallbacksAndMessages(null)
-        completeStep(r)
+        if (r.label == POLL_LABEL) handlePoll(r.stdout)
     }
 
-    private fun completeStep(r: TermuxResult) {
-        val spec = currentSpec
-        currentSpec = null
-        val ms = System.currentTimeMillis() - sentAtMs
-
-        append("stdout: ${r.stdout?.takeIf { it.isNotBlank() } ?: "<empty>"}")
-        append("stderr: ${r.stderr?.takeIf { it.isNotBlank() } ?: "<empty>"}")
-
-        val internalProblem = r.internalError != null || (r.err != null && r.err != -1)
-        if (internalProblem) {
-            setStatus(FAILED, "Failed: ${r.internalError ?: r.errmsg}")
-        } else {
-            val rcPart = "rc=${r.exitCode}"
-            if (r.exitCode != null && r.exitCode != 0) append("NOTE: command ran, nonzero $rcPart")
-            setStatus(CONNECTED, "Connected ($rcPart)")
-        }
-        append("rc=${r.exitCode ?: "?"} err=${r.err ?: "?"} errmsg=${r.errmsg ?: ""} ${ms}ms ${if (internalProblem) "[FAILED]" else "[OK]"}")
-        Log.i(TAG, "STEP_DONE $seqName/${r.label} rc=${r.exitCode} err=${r.err} internal=${r.internalError} ${ms}ms")
-        append("")
-        stepNext()
-    }
-
-    // ---- UI helpers ----
+    // ---- helpers ----
+    data class TermuxBridgeSpec(val label: String, val cmd: String)
 
     private val IDLE = "IDLE"; private val WAITING = "WAITING"
     private val CONNECTED = "CONNECTED"; private val FAILED = "FAILED"
@@ -269,18 +267,14 @@ class MainActivity : AppCompatActivity() {
         statusView.text = detail
         statusView.setBackgroundColor(
             when (state) {
-                CONNECTED -> 0xFF2E7D32.toInt()
-                FAILED -> 0xFFC62828.toInt()
-                WAITING -> 0xFFF9A825.toInt()
-                else -> 0xFF37474F.toInt()
+                CONNECTED -> 0xFF2E7D32.toInt(); FAILED -> 0xFFC62828.toInt()
+                WAITING -> 0xFFF9A825.toInt(); else -> 0xFF37474F.toInt()
             }
         )
     }
 
-    private fun setButtonsEnabled(enabled: Boolean) = buttons.forEach { it.isEnabled = enabled }
-
     private fun append(line: String) {
-        val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
+        val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
         outputView.append("[$ts] $line\n")
         scroller.post { scroller.fullScroll(View.FOCUS_DOWN) }
     }
