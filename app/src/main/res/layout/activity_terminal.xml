@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <TextView
+        android:id="@+id/term_prompt"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="monospace"
+        android:singleLine="true"
+        android:ellipsize="start"
+        android:textColor="#4FD1C5"
+        android:textSize="12sp" />
+
+    <ScrollView
+        android:id="@+id/term_scroller"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="4dp"
+        android:layout_weight="1"
+        android:background="#05080B">
+
+        <TextView
+            android:id="@+id/term_out"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:padding="8dp"
+            android:text="JARVIS terminal — backed by Termux.\nVERIFY/OPEN only: destructive commands are blocked.\n"
+            android:textColor="#C8E4F8"
+            android:textIsSelectable="true"
+            android:textSize="12sp" />
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/term_fn_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <Button android:id="@+id/fk_clear" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="10sp" android:text="CLEAR" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/fk_hist" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="10sp" android:text="HIST" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/fk_pwd" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="10sp" android:text="PWD" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/fk_ls" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="10sp" android:text="LS" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/fk_date" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="10sp" android:text="DATE" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/fk_uname" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="10sp" android:text="UNAME" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/fk_df" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="10sp" android:text="DF" android:textColor="#9FD8FF" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal">
+
+        <Button android:id="@+id/k_esc" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="11sp" android:text="ESC" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/k_tab" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="11sp" android:text="TAB" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/k_ctrl" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="11sp" android:text="CTRL" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/k_fn" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="11sp" android:text="FN" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/k_up" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="11sp" android:text="↑" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/k_down" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="11sp" android:text="↓" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/k_left" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="11sp" android:text="←" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/k_right" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="11sp" android:text="→" android:textColor="#9FD8FF" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button android:id="@+id/k_home" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="10sp" android:text="HOME" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/k_end" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="10sp" android:text="END" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/k_pgup" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="10sp" android:text="PGUP" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/k_pgdn" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="10sp" android:text="PGDN" android:textColor="#9FD8FF" />
+        <Button android:id="@+id/k_stop" style="?android:attr/buttonBarButtonStyle" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:textSize="10sp" android:text="STOP" android:textColor="#FF9E9E" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/term_input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="monospace"
+            android:hint="command…"
+            android:inputType="text"
+            android:textColor="#E6F2FF"
+            android:textColorHint="#556B7E" />
+
+        <Button
+            android:id="@+id/term_send"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="RUN" />
+    </LinearLayout>
+</LinearLayout>

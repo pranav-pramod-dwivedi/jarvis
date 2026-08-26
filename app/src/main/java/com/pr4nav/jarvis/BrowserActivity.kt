@@ -77,6 +77,16 @@ class BrowserActivity : AppCompatActivity() {
         findViewById<View>(R.id.btn_new_file).setOnClickListener { newFile() }
         findViewById<View>(R.id.btn_sort).setOnClickListener { sortByDialog() }
         findViewById<View>(R.id.btn_saf).setOnClickListener { pickSaf() }
+        findViewById<View>(R.id.btn_paste).setOnClickListener {
+            if (clip == null) Toast.makeText(this, "Nothing on clipboard — select files, then COPY/CUT", Toast.LENGTH_SHORT).show()
+            else paste()
+        }
+
+        // Selection bottom bar (same ops as the ActionMode menu — one implementation each via Fs)
+        findViewById<View>(R.id.act_copy).setOnClickListener { doClip(cut = false) }
+        findViewById<View>(R.id.act_cut).setOnClickListener { doClip(cut = true) }
+        findViewById<View>(R.id.act_delete).setOnClickListener { if (selected.isNotEmpty()) confirmDelete(selected.toList()) { } }
+        findViewById<View>(R.id.act_share).setOnClickListener { if (selected.isNotEmpty()) share(selected.toList()) }
 
         searchBox.setOnEditorActionListener { _, _, _ ->
             val q = searchBox.text.toString().trim()
@@ -87,7 +97,9 @@ class BrowserActivity : AppCompatActivity() {
         listView.onItemClickListener { pos ->
             val e = currentEntries.getOrNull(pos) ?: return@onItemClickListener
             if (selected.isNotEmpty()) { toggleSelect(e); return@onItemClickListener }
-            if (e.isDir) load(e.path) else openFile(e)
+            if (e.isDir) load(e.path)
+            else if (isTextLike(e)) startActivity(Intent(this, EditorActivity::class.java).putExtra("path", e.path))
+            else openFile(e)
         }
         listView.onItemLongClickListener { pos ->
             toggleSelect(currentEntries.getOrNull(pos) ?: return@onItemLongClickListener)
@@ -205,6 +217,8 @@ class BrowserActivity : AppCompatActivity() {
                 R.id.act_delete -> { confirmDelete(selected.toList()) { mode.finish() } }
                 R.id.act_share -> { share(selected.toList()); mode.finish() }
                 R.id.act_rename -> { renameDialog(selected.first()); mode.finish() }
+                R.id.act_edit -> { editFile(selected.first()); mode.finish() }
+                R.id.act_open -> { openFile(selected.first()); mode.finish() }
                 R.id.act_props -> { properties(selected.first()); mode.finish() }
             }
             return true
@@ -218,6 +232,15 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     // ---------- operations ----------
+
+    private fun doClip(cut: Boolean) {
+        if (selected.isEmpty()) return
+        val items = selected.toList()
+        clip = Clip(cut, items)
+        actionMode?.finish()
+        findViewById<View>(R.id.btn_paste).isEnabled = true
+        Toast.makeText(this, "${items.size} ${if (cut) "cut" else "copied"} — open destination, tap PASTE", Toast.LENGTH_LONG).show()
+    }
 
     private fun confirmDelete(items: List<Fs.Entry>, onDone: () -> Unit) {
         val big = items.any { it.isDir }
@@ -239,19 +262,35 @@ class BrowserActivity : AppCompatActivity() {
 
     private fun paste() {
         val c = clip ?: return
-        val dstDir = SessionState.dir
+        val dstDir = SessionState.dir.trimEnd('/')
         thread {
             val errs = ArrayList<String>()
+            var done = 0
             for (e in c.items) {
-                val dst = "$dstDir/${e.name}"
-                if (dst == e.path) continue
+                var dst = "$dstDir/${e.name}"
+                if (dst == e.path) {
+                    // same folder: auto-rename instead of silently doing nothing
+                    val base = e.name.substringBeforeLast('.', e.name)
+                    val ext = if (e.name.contains('.')) "." + e.name.substringAfterLast('.', "") else ""
+                    var i = 1
+                    while (Fs.exists("$dstDir/$base ($i)$ext")) i++
+                    dst = "$dstDir/$base ($i)$ext"
+                } else {
+                    var i = 1
+                    var target = dst
+                    while (Fs.exists(target)) { target = "$dstDir/${e.name.substringBeforeLast('.', e.name)} ($i)${if (e.name.contains('.')) "." + e.name.substringAfterLast('.', "") else ""}"; i++ }
+                    dst = target
+                }
                 try {
                     if (c.cut) Fs.move(e.path, dst) else Fs.copy(e.path, dst)
+                    done++
                 } catch (ex: Exception) { errs.add("${e.name}: ${ex.message}") }
             }
-            clip = if (c.cut) null else clip
+            if (c.cut) clip = null
             runOnUiThread {
                 if (errs.isNotEmpty()) Toast.makeText(this, errs.joinToString("\n"), Toast.LENGTH_LONG).show()
+                else Toast.makeText(this, "$done item(s) ${if (c.cut) "moved" else "copied"}", Toast.LENGTH_SHORT).show()
+                findViewById<View>(R.id.btn_paste).isEnabled = clip != null
                 load(SessionState.dir)
             }
         }
@@ -282,6 +321,21 @@ class BrowserActivity : AppCompatActivity() {
                     catch (ex: Exception) { Toast.makeText(this, ex.message, Toast.LENGTH_LONG).show() }
                 }
             }.setNegativeButton("Cancel", null).show()
+    }
+
+    private fun isTextLike(e: Fs.Entry): Boolean =
+        e.mime.startsWith("text/") || listOf(
+            "kt", "java", "py", "js", "ts", "sh", "json", "xml", "md", "gradle", "kts",
+            "txt", "csv", "log", "yml", "yaml", "toml", "ini", "conf", "html", "css", "c", "cpp", "h"
+        ).contains(e.name.substringAfterLast('.', "").lowercase()) || !e.name.contains('.')
+
+    private fun editFile(e: Fs.Entry) {
+        if (!isTextLike(e)) {
+            Toast.makeText(this, "Binary file — not editable as text. Use Open / Share / Properties.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (e.size > 2_000_000) { Toast.makeText(this, "File too large for inline editor (>2MB)", Toast.LENGTH_LONG).show(); return }
+        startActivity(Intent(this, EditorActivity::class.java).putExtra("path", e.path))
     }
 
     private fun properties(e: Fs.Entry) {

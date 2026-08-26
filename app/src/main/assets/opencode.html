@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Jarvis — Opencode</title>
+<style>
+:root{--bg:#0a0a0a;--fg:#e6e6e6;--muted:#9a9a9a;--border:#242424;--card:#141414;--accent:#3fb950;--accent2:#1f6feb;}
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto}
+a{color:var(--accent2)}header{position:sticky;top:0;z-index:5;background:#0a0a0af2;backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:10px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+header b{font-size:14px}header small{color:var(--muted)}header input,header select{flex:1;min-width:140px;background:#111;border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:8px 10px}
+header button{background:var(--accent2);color:#fff;border:0;border-radius:10px;padding:8px 12px;font-weight:700}
+header button.secondary{background:#1e1e1e;border:1px solid var(--border);color:var(--fg)}
+#layout{display:grid;grid-template-columns:280px 1fr;min-height:calc(100% - 56px)}
+#left{border-right:1px solid var(--border);background:#0e0e0e;display:flex;flex-direction:column;min-height:0}
+#left h3{margin:12px 12px 6px;color:var(--muted);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+#sessions{flex:1;overflow:auto;padding:0 8px 8px}
+.sess{padding:10px 10px;border:1px solid var(--border);border-radius:12px;background:var(--card);margin:6px 0;cursor:pointer}
+.sess.active{border-color:var(--accent2);box-shadow:0 0 0 1px var(--accent2) inset}
+.sess .t{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sess .d{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#main{padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+#webFallback{border:1px dashed var(--border);border-radius:12px;padding:10px;background:#111;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#webFallback button{background:#21262d;color:var(--fg);border:1px solid var(--border)}
+.msgs{flex:1;overflow:auto;border:1px solid var(--border);border-radius:14px;background:#0f0f0f;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:260px;max-height:52vh}
+.msg{max-width:92%;padding:10px 12px;border-radius:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.msg.user{align-self:flex-end;background:var(--accent2);color:#fff;border-bottom-right-radius:6px}
+.msg.assistant{align-self:flex-start;background:var(--card);border:1px solid var(--border)}
+.msg .role{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.tools{border:1px solid var(--border);border-radius:14px;background:#0f0f0f;padding:10px}
+.tools b{font-size:12px;color:var(--muted)}
+.tool{border:1px solid var(--border);border-radius:10px;padding:8px;margin-top:8px;background:var(--card);font-size:12px}
+.row{display:flex;gap:8px;align-items:center}
+.row textarea, .row input{flex:1;background:#111;border:1px solid var(--border);color:var(--fg);border-radius:12px;padding:12px;min-height:44px}
+.row button{min-width:96px}
+.badge{font-size:11px;padding:2px 8px;border-radius:999px;background:#21262d;border:1px solid var(--border);color:var(--muted)}
+@media(max-width:860px){#layout{grid-template-columns:1fr} #left{order:2} }
+</style>
+</head>
+<body>
+<header>
+  <b>Jarvis · Opencode</b><small id="status">disconnected</small>
+  <input id="baseUrl" placeholder="http://127.0.0.1:4096"/>
+  <input id="creds" placeholder="user:pass (optional)" style="max-width:180px"/>
+  <button id="btnConnect">Connect</button>
+  <button class="secondary" id="btnNew">New session</button>
+  <select id="agentSel"><option value="">agent: build</option><option value="build">build</option><option value="plan">plan</option></select>
+  <select id="modelSel"><option value="">model: auto</option></select>
+  <button class="secondary" id="btnOpenWeb">Open native Web UI ↗</button>
+</header>
+<div id="layout">
+  <aside id="left">
+    <div class="row" style="padding:10px 8px"><input id="dir" placeholder="project dir (empty = global)"/><button class="secondary" id="btnRefresh">↻</button></div>
+    <h3>Sessions</h3>
+    <div id="sessions"></div>
+    <h3>Current</h3>
+    <div style="padding:0 8px 12px"><div id="curInfo" class="badge">no session</div></div>
+  </aside>
+  <main id="main">
+    <div id="webFallback">
+      <span>Web UI running at <code id="webUrl">—</code></span>
+      <button id="btnLoadWeb">Load Web UI in WebView</button>
+      <small style="color:var(--muted)">If API says "not found", open Web UI — same server, HTML at <code>/</code>.</small>
+    </div>
+    <div id="msgs" class="msgs"></div>
+    <div id="tools" class="tools"><b>Tools & permission</b><div id="toolList"><small style="color:var(--muted)">No tool calls yet.</small></div><div id="permBox" style="display:none;margin-top:8px;padding:8px;border:1px solid #f0883e;border-radius:10px;background:#1a1208"><div id="permText"></div><div class="row" style="margin-top:8px"><button id="permOnce">Allow once</button><button id="permAlways">Always</button><button class="secondary" id="permReject">Reject</button></div></div></div>
+    <div class="row"><textarea id="prompt" placeholder="Ask opencode… (Shift+Enter = newline)"></textarea><button id="send">Send</button></div>
+    <small style="color:var(--muted)">Tip: <code>opencode web</code> and <code>opencode serve</code> expose the same API. Web is easier to verify — it shows HTML at <code>/</code>.</small>
+  </main>
+</div>
+<script>
+const $ = s=>document.querySelector(s);
+const baseInput=$('#baseUrl'), credsInput=$('#creds'), statusEl=$('#status'), dirInput=$('#dir');
+const sessionsEl=$('#sessions'), msgsEl=$('#msgs'), toolListEl=$('#toolList'), curInfoEl=$('#curInfo');
+const agentSel=$('#agentSel'), modelSel=$('#modelSel'), promptEl=$('#prompt'), webUrlEl=$('#webUrl');
+let baseUrl='', authHeader='', currentSession=null, es=null, pendingPerm=null;
+
+function getAuth(){ const v=credsInput.value.trim(); if(!v) return ''; if(v.includes(':')){const i=v.indexOf(':'); return 'Basic '+btoa(v.slice(0,i)+':'+v.slice(i+1));} return 'Basic '+btoa('opencode:'+v); }
+function headers(extra){ const h={'Accept':'application/json'}; const a=getAuth()||authHeader; if(a) h['Authorization']=a; Object.assign(h,extra||{}); return h; }
+function q(params){ const u=new URLSearchParams(); for(const[k,v] of Object.entries(params)) if(v) u.set(k,v); const s=u.toString(); return s?'?'+s:''; }
+async function api(path, opts={}){
+  const url = baseUrl.replace(/\/+$/,'') + path + (opts.q? q(opts.q):'');
+  const init={method:opts.method||'GET', headers:headers(opts.headers)};
+  if(opts.body!==undefined) { init.body = typeof opts.body==='string'? opts.body: JSON.stringify(opts.body); init.headers['Content-Type']='application/json'; }
+  const r=await fetch(url, init); const text=await r.text();
+  if(!r.ok) throw new Error('HTTP '+r.status+' '+path+': '+text.slice(0,240));
+  if(!text) return null; try{return JSON.parse(text);}catch{return text;}
+}
+function setStatus(t, ok){ statusEl.textContent=t; statusEl.style.color= ok? '#3fb950':'#f85149'; webUrlEl.textContent=baseUrl||'—'; }
+
+async function connect(){
+  baseUrl = (baseInput.value.trim() || 'http://127.0.0.1:4096').replace(/\/+$/,'');
+  // bridge may have injected creds
+  try{
+    // try both health endpoints
+    let h=null; try{ h=await api('/global/health'); }catch{ h=await api('/api/health'); }
+    setStatus('connected '+(h.version||''), true);
+    await refreshAll();
+    startSSE();
+  }catch(e){ setStatus('not found — try Web UI ('+e.message.slice(0,80)+')', false); }
+}
+
+async function refreshAll(){
+  const dir=dirInput.value.trim()||undefined;
+  // models
+  try{ const prov=await api('/config/providers'); const opts=['<option value="">model: auto</option>']; (prov.providers||prov||[]).forEach(p=> (p.models||[]).forEach(m=> opts.push(`<option value="${p.id}/${m.id}">${p.id}/${m.id}</option>`))); modelSel.innerHTML=opts.join(''); }catch{}
+  // sessions
+  const list = await api('/session', {q:{directory:dir}}) .catch(()=>[]);
+  const arr = Array.isArray(list)? list: (list.data||[]);
+  sessionsEl.innerHTML = arr.map(s=> `<div class="sess ${currentSession===s.id?'active':''}" data-id="${s.id}"><div class="t">${(s.title||s.id||'').slice(0,48)}</div><div class="d">${(s.directory||'')}</div></div>`).join('') || '<small style="color:var(--muted);padding:8px;display:block">No sessions</small>';
+  sessionsEl.querySelectorAll('.sess').forEach(el=> el.onclick=()=> openSession(el.dataset.id));
+  curInfoEl.textContent = currentSession? currentSession.slice(0,16): 'no session';
+}
+async function openSession(id){
+  currentSession=id; await refreshAll(); await loadMessages();
+}
+async function loadMessages(){
+  if(!currentSession) return;
+  const dir=dirInput.value.trim()||undefined;
+  const msgs = await api('/session/'+encodeURIComponent(currentSession)+'/message', {q:{directory:dir, limit:'40'}}).catch(()=>[]);
+  const arr = Array.isArray(msgs)? msgs: (msgs.data||[]);
+  msgsEl.innerHTML='';
+  arr.forEach(m=>{
+    const info=m.info||m; const parts=m.parts||m.content||[];
+    const role=(info.role||'assistant'); const text = (parts.filter(p=>p.type==='text').map(p=>p.text).join('\n\n')||'').trim();
+    if(!text && parts.length===0) return;
+    const div=document.createElement('div'); div.className='msg '+(role==='user'?'user':'assistant');
+    div.innerHTML = `<div class="role">${role} · ${(info.agent||'')}${info.modelID?'/'+info.modelID:''}</div><div>${text.replace(/</g,'&lt;')}</div>`;
+    msgsEl.appendChild(div);
+  });
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+  // tools/diff
+  try{
+    const diff = await api('/session/'+encodeURIComponent(currentSession)+'/diff', {q:{directory:dir}}).catch(()=>[]);
+    const tools = Array.isArray(diff)? diff: [];
+    toolListEl.innerHTML = tools.length? tools.slice(-8).map(t=> `<div class="tool"><b>${t.tool||t.type||'tool'}</b> · ${t.status||''}<div>${(t.title||t.file||'').slice(0,160)}</div></div>`).join(''): '<small style="color:var(--muted)">No tool calls yet.</small>';
+  }catch{}
+}
+async function sendPrompt(){
+  const text=promptEl.value.trim(); if(!text||!currentSession) { if(!currentSession) alert('Create a session first'); return; }
+  const dir=dirInput.value.trim()||undefined; promptEl.value='';
+  const body={parts:[{type:'text', text}], agent: agentSel.value||undefined, model: modelSel.value? {providerID:modelSel.value.split('/')[0], modelID:modelSel.value.split('/')[1]}:undefined};
+  await api('/session/'+encodeURIComponent(currentSession)+'/prompt_async', {method:'POST', body, q:{directory:dir}});
+}
+async function newSession(){
+  const dir=dirInput.value.trim()||'/tmp';
+  const s=await api('/session', {method:'POST', body:{}, q:{directory:dir}});
+  currentSession=s.id||s.sessionID||s.session?.id; await refreshAll(); await loadMessages();
+}
+function startSSE(){
+  if(es) try{es.close()}catch{}
+  const dir=dirInput.value.trim();
+  let url = baseUrl.replace(/\/+$/,'') + '/global/event';
+  if(dir) url+='?directory='+encodeURIComponent(dir);
+  const a=getAuth()||authHeader;
+  // EventSource can't set headers; use fetch streaming fallback if auth needed — for now try native ES, server also accepts query auth? We inject via cookie-like: append auth as query if needed (opencode supports Basic only, so try without and rely on already-connected health)
+  es = new EventSource(url);
+  es.onopen=()=> setStatus('live', true);
+  es.onerror=()=> setStatus('reconnecting…', false);
+  es.onmessage=(ev)=>{
+    try{
+      const data=JSON.parse(ev.data);
+      const t=data.type||ev.type||'';
+      if(t.includes('permission') && data.requestId){ pendingPerm=data; $('#permText').textContent=data.pattern||data.title||'Permission?'; $('#permBox').style.display='block'; }
+      if(t.includes('session')||t.includes('message')||t.includes('part')) loadMessages();
+    }catch{ /* heartbeat */}
+  };
+}
+async function replyPerm(decision){
+  if(!pendingPerm) return;
+  await api('/permission/'+encodeURIComponent(pendingPerm.requestId)+'/reply', {method:'POST', body:{reply:decision}, q:{directory:dirInput.value.trim()||undefined}});
+  $('#permBox').style.display='none'; pendingPerm=null;
+}
+
+// wire
+$('#btnConnect').onclick=connect; $('#btnRefresh').onclick=refreshAll; $('#btnNew').onclick=newSession; $('#send').onclick=sendPrompt;
+$('#permOnce').onclick=()=>replyPerm('once'); $('#permAlways').onclick=()=>replyPerm('always'); $('#permReject').onclick=()=>replyPerm('reject');
+promptEl.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendPrompt(); }});
+$('#btnOpenWeb').onclick=()=>{ if(window.Jarvis) Jarvis.openWeb(baseUrl||baseInput.value); else window.open((baseUrl||baseInput.value||'http://127.0.0.1:4096'), '_blank'); };
+$('#btnLoadWeb').onclick=()=>{ if(window.Jarvis) Jarvis.openWeb(baseUrl||baseInput.value); else window.open((baseUrl||baseInput.value||'http://127.0.0.1:4096'), '_blank'); };
+
+// bridge injection from Android
+window.__jarvisSetConfig = (url, user, pass)=>{
+  if(url) baseInput.value=url;
+  if(user&&pass) { credsInput.value=user+':'+pass; authHeader='Basic '+btoa(user+':'+pass); }
+  webUrlEl.textContent=url||baseUrl;
+};
+// auto-connect if bridge already set
+setTimeout(()=>{ if(baseInput.value) connect(); else { baseInput.value='http://127.0.0.1:4096'; } }, 300);
+</script>
+</body>
+</html>

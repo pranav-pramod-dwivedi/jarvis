@@ -275,13 +275,11 @@ object Fs {
         }
 
         override fun list(path: String): List<Entry> {
-            val out = sh("ls -1Ap '$path'")
+            val out = sh("ls -1Apl --time-style=+%s '$path'")
             if (out.startsWith("ERR:")) throw FsException(out.removePrefix("ERR:"))
-            return out.lines().filter { it.isNotBlank() }.map { n ->
-                val isDir = n.endsWith("/")
-                val clean = n.trimEnd('/')
-                Entry(clean, "$path/$clean", isDir, 0, 0, clean.startsWith("."))
-            }.sortedWith(compareByDescending<Entry> { it.isDir }.thenBy { it.name.lowercase() })
+            return Termux.parseLs(out, path).sortedWith(
+                compareByDescending<Entry> { it.isDir }.thenBy { it.name.lowercase() }
+            )
         }
 
         override fun read(path: String): String {
@@ -327,14 +325,29 @@ object Fs {
         override val rootPath = "/data/data/com.termux/files/home"
         override val available get() = Shell.termuxReachable()
 
+        private fun q(s: String) = "'" + s.replace("'", "'\\''") + "'"
+
+        /** Parse `ls -1Apl --time-style=+%s` lines into entries with REAL size+date. */
+        fun parseLs(out: String, path: String): List<Entry> =
+            out.lines().filter { it.isNotBlank() && !it.startsWith("total ") }.mapNotNull { line ->
+                val m = Regex("^([\\-dlbcps][rwxstST+-]+)\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\d+)\\s+(.+)$").find(line)
+                    ?: return@mapNotNull null
+                val perms = m.groupValues[1]
+                val size = m.groupValues[2].toLongOrNull() ?: 0L
+                val mod = m.groupValues[3].toLongOrNull() ?: 0L
+                var name = m.groupValues[4].trim()
+                val isDir = perms.startsWith("d") || name.endsWith("/")
+                if (name.endsWith("/")) name = name.trimEnd('/')
+                if (perms.startsWith("l")) name = name.substringBefore(" ->").trim()
+                Entry(name, "$path/$name", isDir, if (isDir) 0L else size, mod * 1000L, name.startsWith("."))
+            }
+
         override fun list(path: String): List<Entry> {
-            val out = Shell.termux("ls -1Ap '$path' 2>&1")
-            if (out.rc != 0) throw FsException(out.err.ifBlank { out.out })
-            return out.out.lines().filter { it.isNotBlank() }.map { n ->
-                val isDir = n.endsWith("/")
-                val clean = n.trimEnd('/')
-                Entry(clean, "$path/$clean", isDir, 0, 0, clean.startsWith("."))
-            }.sortedWith(compareByDescending<Entry> { it.isDir }.thenBy { it.name.lowercase() })
+            val r = Shell.termux("ls -1Apl --time-style=+%s ${q(path)} 2>&1")
+            if (r.rc != 0) throw FsException(r.err.ifBlank { r.out })
+            return parseLs(r.out, path).sortedWith(
+                compareByDescending<Entry> { it.isDir }.thenBy { it.name.lowercase() }
+            )
         }
 
         override fun read(path: String): String {
@@ -381,6 +394,31 @@ object Fs {
         Root.detect()
     }
 
+    /** Resolve relative paths against the shared cwd (browser + agent share SessionState.dir). */
+    fun resolve(path: String): String {
+        val p = path.trim()
+        if (p.isEmpty()) return SessionState.dir
+        if (p.startsWith("/") || p.startsWith("saf:")) return p
+        return SessionState.dir.trimEnd('/') + "/" + p
+    }
+
+    /** Structured FS log + enriched errors at the single choke point every caller shares. */
+    private fun <T> routed(op: String, path: String, block: () -> T): T {
+        val b = backendFor(path)
+        val t0 = System.currentTimeMillis()
+        try {
+            val r = block()
+            android.util.Log.i("JARVIS_FSC", "$op ok backend=${b.id} path=$path ${System.currentTimeMillis() - t0}ms")
+            return r
+        } catch (e: FsException) {
+            android.util.Log.w("JARVIS_FSC", "$op FAIL backend=${b.id} path=$path: ${e.message}")
+            throw FsException("${e.message}\n[op=$op backend=${b.id} path=$path]")
+        } catch (e: Exception) {
+            android.util.Log.w("JARVIS_FSC", "$op FAIL backend=${b.id} path=$path: ${e.message}")
+            throw FsException("Fs.$op failed: ${e.message}\n[path=$path backend=${b.id}]")
+        }
+    }
+
     /** Best backend for a given path. Agent never sees this detail. */
     fun backendFor(path: String): Backend = when {
         path.startsWith("/data/data/com.termux") -> Termux
@@ -402,16 +440,16 @@ object Fs {
             else -> "App-Private Access"
         }
 
-    fun list(path: String) = backendFor(path).list(path)
-    fun read(path: String) = backendFor(path).read(path)
-    fun write(path: String, content: String, append: Boolean = false) = backendFor(path).write(path, content, append)
-    fun mkdir(path: String) = backendFor(path).mkdir(path)
-    fun create(path: String) = backendFor(path).create(path)
-    fun delete(path: String) = backendFor(path).delete(path)
-    fun rename(from: String, to: String) = backendFor(from).rename(from, to)
-    fun copy(src: String, dst: String) = backendFor(src).copy(src, dst)
-    fun move(src: String, dst: String) = backendFor(src).move(src, dst)
-    fun exists(path: String) = backendFor(path).exists(path)
-    fun stat(path: String) = backendFor(path).stat(path)
-    fun search(root: String, query: String, max: Int = 100) = backendFor(root).search(root, query, max)
+    fun list(path: String) = routed("list", path) { backendFor(path).list(path) }
+    fun read(path: String) = routed("read", path) { backendFor(path).read(path) }
+    fun write(path: String, content: String, append: Boolean = false) = routed("write", path) { backendFor(path).write(path, content, append) }
+    fun mkdir(path: String) = routed("mkdir", path) { backendFor(path).mkdir(path) }
+    fun create(path: String) = routed("create", path) { backendFor(path).create(path) }
+    fun delete(path: String) = routed("delete", path) { backendFor(path).delete(path) }
+    fun rename(from: String, to: String) = routed("rename", from) { backendFor(from).rename(from, to) }
+    fun copy(src: String, dst: String) = routed("copy", src) { backendFor(src).copy(src, dst) }
+    fun move(src: String, dst: String) = routed("move", src) { backendFor(src).move(src, dst) }
+    fun exists(path: String) = routed("exists", path) { backendFor(path).exists(path) }
+    fun stat(path: String) = routed("stat", path) { backendFor(path).stat(path) }
+    fun search(root: String, query: String, max: Int = 100) = routed("search", root) { backendFor(root).search(root, query, max) }
 }

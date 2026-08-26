@@ -1,0 +1,189 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# jarvis-opencode — single Termux tool that IS the OpenCode brain.
+# Same API the Android GUI + agent use (serve/web on 127.0.0.1). No Chrome, no proot required.
+# Install:  bash install.sh   (or: cp jarvis-opencode $PREFIX/bin/ && chmod +x $PREFIX/bin/jarvis-opencode)
+# Requires: bash, curl, jq, opencode binary (npm i -g opencode or pkg install opencode)
+set -euo pipefail
+
+BASE_CANDIDATES=("http://127.0.0.1:4096" "http://127.0.0.1:4097" "http://127.0.0.1:4098" "http://127.0.0.1:4099" "http://127.0.0.1:45377")
+USER="${OPENCODE_SERVER_USERNAME:-opencode}"
+PASS="${OPENCODE_SERVER_PASSWORD:-}"
+CONFIG_DIR="${HOME}/.config/jarvis-opencode"
+CONFIG_FILE="${CONFIG_DIR}/config.json"
+
+mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+load_config() {
+  if [[ -f "$CONFIG_FILE" ]]; then
+    local b u p
+    b=$(jq -r '.baseUrl // empty' "$CONFIG_FILE" 2>/dev/null || true)
+    u=$(jq -r '.username // empty' "$CONFIG_FILE" 2>/dev/null || true)
+    p=$(jq -r '.password // empty' "$CONFIG_FILE" 2>/dev/null || true)
+    [[ -n "$b" ]] && BASE_CANDIDATES=("$b" "${BASE_CANDIDATES[@]}")
+    [[ -n "$u" ]] && USER="$u"
+    [[ -n "$p" ]] && PASS="$p"
+  fi
+}
+save_config() {
+  local base="$1" u="$2" p="$3"
+  jq -n --arg b "$base" --arg u "$u" --arg p "$p" '{baseUrl:$b,username:$u,password:$p}' > "$CONFIG_FILE"
+}
+
+auth_args=()
+discover_base() {
+  load_config
+  for b in "${BASE_CANDIDATES[@]}"; do
+    local code
+    if [[ -n "$PASS" ]]; then
+      code=$(curl -sk -u "${USER}:${PASS}" -o /dev/null -w "%{http_code}" "$b/global/health" 2>/dev/null || echo 000)
+      if [[ "$code" == 200 ]]; then echo "$b"; return 0; fi
+      code=$(curl -sk -u "${USER}:${PASS}" -o /dev/null -w "%{http_code}" "$b/api/health" 2>/dev/null || echo 000)
+      if [[ "$code" == 200 ]]; then echo "$b"; return 0; fi
+    fi
+    code=$(curl -sk -o /dev/null -w "%{http_code}" "$b/global/health" 2>/dev/null || echo 000)
+    if [[ "$code" == 200 ]]; then echo "$b"; return 0; fi
+  done
+  echo "${BASE_CANDIDATES[0]}"
+}
+
+BASE="$(discover_base)"
+CURL_AUTH=()
+if [[ -n "$PASS" ]]; then CURL_AUTH=(-u "${USER}:${PASS}"); fi
+
+api() {
+  local method="$1" path="$2" data="${3:-}" q="${4:-}"
+  local url="${BASE}${path}${q}"
+  local tmp
+  tmp=$(mktemp)
+  local code
+  if [[ -n "$data" ]]; then
+    code=$(curl -sk "${CURL_AUTH[@]}" -H "Content-Type: application/json" -H "Accept: application/json" \
+      -X "$method" --data "$data" -o "$tmp" -w "%{http_code}" "$url" 2>/dev/null || echo 000)
+  else
+    code=$(curl -sk "${CURL_AUTH[@]}" -H "Accept: application/json" -X "$method" -o "$tmp" -w "%{http_code}" "$url" 2>/dev/null || echo 000)
+  fi
+  if [[ "$code" -ge 200 && "$code" -lt 300 ]]; then cat "$tmp"; rm -f "$tmp"; return 0; fi
+  # try fallback health path
+  echo "HTTP $code $(cat "$tmp" | head -c 400)" >&2
+  rm -f "$tmp"; return 1
+}
+
+cmd_start() {
+  local port="${1:-4096}"
+  local user="${2:-jarvis}"
+  local pass="${3:-}"
+  if [[ -z "$pass" ]]; then pass=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 24); fi
+  export OPENCODE_SERVER_USERNAME="$user" OPENCODE_SERVER_PASSWORD="$pass"
+  echo "[*] starting opencode web on 127.0.0.1:$port (cors *)..."
+  # prefer web (HTML at /), fallback serve — both same API
+  nohup bash -c "opencode web --hostname 127.0.0.1 --port $port --cors \"*\" --cors \"file://*\" 2>>/tmp/jarvis-opencode.log || opencode serve --hostname 127.0.0.1 --port $port --cors \"*\" --cors \"file://*\" >>/tmp/jarvis-opencode.log 2>&1" &>/dev/null &
+  sleep 2
+  USER="$user" PASS="$pass" BASE="http://127.0.0.1:$port"
+  CURL_AUTH=(-u "${USER}:${PASS}")
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -sk -u "${USER}:${PASS}" -o /dev/null -w "%{http_code}" "$BASE/global/health" 2>/dev/null | grep -q 200; then
+      save_config "$BASE" "$USER" "$PASS"
+      echo "{\"ok\":true,\"baseUrl\":\"$BASE\",\"port\":$port,\"ownership\":\"JARVIS\"}" | jq .
+      return 0
+    fi
+    sleep 1
+  done
+  echo "{\"ok\":false,\"error\":\"server did not become healthy\"}" | jq .
+  return 1
+}
+
+cmd_status() {
+  local b
+  b=$(discover_base)
+  local h
+  h=$(curl -sk "${CURL_AUTH[@]}" "$b/global/health" 2>/dev/null || curl -sk "${CURL_AUTH[@]}" "$b/api/health" 2>/dev/null || echo '{}')
+  echo "$h" | jq --arg base "$b" '{ok:true, baseUrl:$base, health: .}' 2>/dev/null || echo "$h"
+  # sessions count
+  curl -sk "${CURL_AUTH[@]}" "$b/session" 2>/dev/null | jq '{sessions: (if type=="array" then length else (.data|length // 0) end)}' 2>/dev/null || true
+}
+
+cmd_projects() { api GET "/project" | jq .; }
+cmd_sessions() {
+  local dir="${1:-}"
+  local q=""
+  [[ -n "$dir" ]] && q="?directory=$(printf %s "$dir" | jq -sRr @uri)"
+  api GET "/session" "" "$q" | jq .
+}
+cmd_create() {
+  local dir="$1" title="${2:-}"
+  local q="?directory=$(printf %s "$dir" | jq -sRr @uri)"
+  local body="{}"
+  [[ -n "$title" ]] && body=$(jq -n --arg t "$title" '{title:$t}')
+  api POST "/session" "$body" "$q" | jq .
+}
+cmd_send() {
+  local sid="$1" prompt="$2" agent="${3:-}" model="${4:-}"
+  local dir="${5:-}"
+  local q=""
+  [[ -n "$dir" ]] && q="?directory=$(printf %s "$dir" | jq -sRr @uri)"
+  local body
+  body=$(jq -n --arg t "$prompt" '{parts:[{type:"text",text:$t}]}')
+  [[ -n "$agent" ]] && body=$(echo "$body" | jq --arg a "$agent" '.agent=$a')
+  if [[ -n "$model" ]]; then
+    local p="${model%%/*}" m="${model#*/}"
+    body=$(echo "$body" | jq --arg p "$p" --arg m "$m" '.model={providerID:$p,modelID:$m}')
+  fi
+  api POST "/session/$sid/prompt_async" "$body" "$q" | jq .
+}
+cmd_abort() { local sid="$1" dir="${2:-}"; local q=""; [[ -n "$dir" ]] && q="?directory=$(printf %s "$dir" | jq -sRr @uri)"; api POST "/session/$sid/abort" "" "$q" | jq .; }
+cmd_fork()  { local sid="$1"; api POST "/session/$sid/fork" "{}" | jq .; }
+cmd_rename(){ local sid="$1" title="$2"; api PATCH "/session/$sid" "$(jq -n --arg t "$title" '{title:$t}')" | jq .; }
+cmd_delete(){ local sid="$1"; api DELETE "/session/$sid" | jq .; }
+cmd_perm()  { local id="$1" dec="$2"; api POST "/permission/$id/reply" "$(jq -n --arg r "$dec" '{reply:$r}')" | jq .; }
+cmd_qreply(){ local id="$1" ans="$2"; # ans is json array like '[["yes"]]' 
+  api POST "/question/$id/reply" "$(jq -n --argjson a "$ans" '{answers:$a}')" | jq .; }
+
+usage() {
+cat <<'USAGE'
+jarvis-opencode — Termux tool (single brain for GUI + agent)
+
+Usage:
+  jarvis-opencode status
+  jarvis-opencode start [port]          # web -> serve fallback, cors *, saves config
+  jarvis-opencode projects
+  jarvis-opencode sessions [directory]
+  jarvis-opencode create <directory> [title]
+  jarvis-opencode send <sessionId> "<prompt>" [agent] [model] [directory]
+  jarvis-opencode abort <sessionId>
+  jarvis-opencode fork <sessionId>
+  jarvis-opencode rename <sessionId> "<title>"
+  jarvis-opencode delete <sessionId>
+  jarvis-opencode perm <requestId> <once|always|reject>
+  jarvis-opencode qreply <requestId> '[["answer"]]'
+  jarvis-opencode events                # pending perms/questions
+  jarvis-opencode connect <baseUrl>     # save baseUrl to config
+  jarvis-opencode health                # alias for status
+  jarvis-opencode log                   # tail server log
+
+Env:
+  OPENCODE_SERVER_USERNAME / OPENCODE_SERVER_PASSWORD  (or saved in ~/.config/jarvis-opencode/config.json)
+
+Examples:
+  jarvis-opencode start 4096
+  jarvis-opencode create /data/data/com.termux/files/home/myproj "fix bug"
+  jarvis-opencode send ses_xxx "explain this file" build anthropic/claude-sonnet-4
+USAGE
+}
+
+case "${1:-help}" in
+  start)    cmd_start "${2:-}" "${3:-}" "${4:-}" ;;
+  status|health) cmd_status ;;
+  projects) cmd_projects ;;
+  sessions) cmd_sessions "${2:-}" ;;
+  create)   cmd_create "${2:?directory required}" "${3:-}" ;;
+  send)     cmd_send "${2:?sessionId}" "${3:?prompt}" "${4:-}" "${5:-}" "${6:-}" ;;
+  abort)    cmd_abort "${2:?sessionId}" "${3:-}" ;;
+  fork)     cmd_fork "${2:?sessionId}" ;;
+  rename)   cmd_rename "${2:?sessionId}" "${3:?title}" ;;
+  delete)   cmd_delete "${2:?sessionId}" ;;
+  perm)     cmd_perm "${2:?requestId}" "${3:?once|always|reject}" ;;
+  qreply)   cmd_qreply "${2:?requestId}" "${3:?json array}" ;;
+  events)   api GET "/permission" | jq '{permissions:.}'; api GET "/question" | jq '{questions:.}' ;;
+  connect)  save_config "${2:?baseUrl}" "${3:-opencode}" "${4:-}"; echo "saved $2" ;;
+  log)      tail -n 80 /tmp/jarvis-opencode.log 2>/dev/null || echo "no log yet" ;;
+  *) usage ;;
+esac

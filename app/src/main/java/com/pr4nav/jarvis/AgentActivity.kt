@@ -54,10 +54,12 @@ class AgentActivity : AppCompatActivity() {
 
         when {
             lower == "help" -> out(
-                "Commands:\n" +
+                "Commands (relative paths resolve against shared cwd):\n" +
+                    "  pwd                show shared cwd\n" +
                     "  ls [path]          list directory\n" +
                     "  open <path>        set current folder\n" +
                     "  read <path>        read a text file\n" +
+                    "  edit <path>        open in JARVIS editor\n" +
                     "  write <path> <text> create/overwrite file\n" +
                     "  mkdir <path>       create folder\n" +
                     "  delete <path>      delete file/folder\n" +
@@ -66,11 +68,15 @@ class AgentActivity : AppCompatActivity() {
                     "  stat <path>        file info\n" +
                     "  run <cmd>          real shell command in Termux\n" +
                     "  opencode <prompt>  ask OpenCode (needs bootstrap+auth)\n" +
-                    "  projects           discover dev projects"
+                    "  projects           discover dev projects\n" +
+                    "  tools              list all agent tools (capabilities)\n" +
+                    "  tool <name> {json} invoke a tool, e.g. tool file.read {\"path\":\"~/notes.txt\"}"
             )
 
+            lower == "pwd" -> out("cwd: ${SessionState.dir}")
+
             lower.startsWith("ls") -> {
-                val p = arg.ifBlank { SessionState.dir }
+                val p = Fs.resolve(arg.ifBlank { "." })
                 val list = Fs.list(p)
                 out("backend=${Fs.backendFor(p).id} · ${list.size} items")
                 list.take(50).forEach { e ->
@@ -79,26 +85,35 @@ class AgentActivity : AppCompatActivity() {
             }
 
             lower.startsWith("open ") -> {
-                Fs.stat(arg).let { if (!it.isDir) out("⚠ not a folder, but noted") }
-                SessionState.dir = arg
-                out("cwd → $arg")
+                val p = Fs.resolve(arg)
+                Fs.stat(p).let { if (!it.isDir) out("⚠ not a folder, but noted") }
+                SessionState.dir = p
+                out("cwd → $p (shared with file manager)")
             }
 
             lower.startsWith("read ") -> {
-                val content = Fs.read(arg)
-                out("backend=${Fs.backendFor(arg).id} · ${content.length} chars")
+                val p = Fs.resolve(arg)
+                val content = Fs.read(p)
+                out("backend=${Fs.backendFor(p).id} · ${content.length} chars")
                 out(content.take(2000) + if (content.length > 2000) "\n…(truncated)" else "")
             }
 
+            lower.startsWith("edit ") -> {
+                val p = Fs.resolve(arg)
+                Fs.stat(p)
+                runOnUiThread { startActivity(android.content.Intent(this, EditorActivity::class.java).putExtra("path", p)) }
+                out("editor opened: $p")
+            }
+
             lower.startsWith("write ") -> {
-                val path = q.split(" ", limit = 3).getOrNull(1) ?: throw Fs.FsException("usage: write <path> <text>")
+                val path = Fs.resolve(q.split(" ", limit = 3).getOrNull(1) ?: throw Fs.FsException("usage: write <path> <text>"))
                 val text = q.split(" ", limit = 3).getOrNull(2) ?: ""
                 Fs.write(path, text)
                 out("✓ wrote ${text.length} chars → $path (backend=${Fs.backendFor(path).id})")
             }
 
-            lower.startsWith("mkdir ") -> { Fs.mkdir(arg); out("✓ mkdir $arg") }
-            lower.startsWith("delete ") -> { Fs.delete(arg); out("✓ deleted $arg") }
+            lower.startsWith("mkdir ") -> { val p = Fs.resolve(arg); Fs.mkdir(p); out("✓ mkdir $p") }
+            lower.startsWith("delete ") -> { val p = Fs.resolve(arg); Fs.delete(p); out("✓ deleted $p") }
 
             lower.startsWith("find ") -> {
                 val res = Fs.search(SessionState.dir, arg, 50)
@@ -113,11 +128,13 @@ class AgentActivity : AppCompatActivity() {
             }
 
             lower.startsWith("stat ") -> {
-                val e = Fs.stat(arg)
-                out("name=${e.name}\ndir=${e.isDir}\nsize=${e.size}\nmodified=${e.modified}\nbackend=${Fs.backendFor(arg).id}")
+                val p = Fs.resolve(arg)
+                val e = Fs.stat(p)
+                out("name=${e.name}\ndir=${e.isDir}\nsize=${e.size}\nmodified=${e.modified}\nbackend=${Fs.backendFor(p).id}")
             }
 
             lower.startsWith("run ") -> {
+                CmdGuard.check(arg)?.let { out("✗ $it"); return }
                 val r = Shell.termux(arg, 60_000)
                 out("rc=${r.rc} ${r.ms}ms via=${r.via}")
                 if (r.out.isNotBlank()) out(r.out.take(3000))
@@ -154,6 +171,21 @@ class AgentActivity : AppCompatActivity() {
                     } catch (_: Exception) {}
                 }
                 out("scan done (roots: ${roots.joinToString()})")
+            }
+
+            lower == "tools" -> {
+                com.pr4nav.jarvis.tools.JarvisToolRegistry.registerAll(this)
+                out("registered tools:\n${com.pr4nav.jarvis.tools.JarvisToolRegistry.catalog()}")
+            }
+
+            lower.startsWith("tool ") -> {
+                com.pr4nav.jarvis.tools.JarvisToolRegistry.registerAll(this)
+                val body = arg.trim()
+                val nameEnd = body.indexOfFirst { it == ' ' || it == '{' }.let { if (it < 0) body.length else it }
+                val toolName = body.take(nameEnd).trim()
+                val argsJson = body.drop(nameEnd).trim().ifBlank { null }
+                val result = com.pr4nav.jarvis.tools.JarvisToolRegistry.execute(toolName, argsJson)
+                out("tool $toolName → $result")
             }
 
             else -> out("unknown request — type 'help'")

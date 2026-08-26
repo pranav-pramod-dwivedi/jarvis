@@ -10,7 +10,7 @@ set -u
 
 J="$HOME/jarvis"
 STATE="$J/state"; LOGS="$J/logs"; MEM="$J/memory"; BK="$J/backup"
-mkdir -p "$J/bin" "$STATE" "$LOGS" "$MEM" "$BK"
+mkdir -p "$J/bin" "$STATE" "$LOGS" "$MEM" "$BK" "$J/run"
 EVENTS="$STATE/events.ndjson"
 LOG="$LOGS/bootstrap-$(date +%Y%m%d-%H%M%S).log"
 ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu"
@@ -78,15 +78,10 @@ runx(){ local st="$1"; shift; local out rc cat tries=0 fix
                 sleep $((tries*8)) ;;
       apt_lock) emit "$st" fixing "Package manager was interrupted — repairing…" ""
                 ub_repair_apt || true ;;
-      proot_busy) emit "$st" fixing "Ubuntu container busy — clearing stale proot processes…" ""
-                pkill -9 -f proot-distro 2>/dev/null
-                pkill -9 -f 'proot login' 2>/dev/null
-                sleep 2 ;;
-      proot_uninstall_stuck) emit "$st" fixing "Partial Ubuntu detected — removing cleanly…" ""
-                proot-distro remove ubuntu -f >/dev/null 2>&1
-                rm -rf "$ROOTFS" "$ROOTFS".tmp "$ROOTFS".old 2>/dev/null
-                rm -rf "$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu"* 2>/dev/null
-                sleep 2 ;;
+      proot_busy) emit "$st" fixing "Ubuntu install busy — waiting for installer to finish…" ""
+                sleep 4 ;;
+      proot_uninstall_stuck) emit "$st" fixing "Partial Ubuntu detected — will retry without deleting (verify only)…" ""
+                sleep 3 ;;
       fs)       emit "$st" fixing "Storage issue detected — checking space…" ""
                 df -h "$HOME" >>"$LOG" 2>&1; sleep 2 ;;
       *)        emit "$st" fixing "Issue ($cat) — diagnosing…" "$(printf '%s' "$out" | tail -1)"
@@ -136,35 +131,34 @@ termux_base(){
 
 # ---------- Stage: ubuntu ----------
 ubuntu_install(){
+  # CHECK → LOGIN IF THERE else INSTALL (user requested flow)
   if [ -d "$ROOTFS" ]; then
-    emit ubuntu fixing "Partial Ubuntu found — removing before fresh install…"
-    proot-distro remove ubuntu -f >/dev/null 2>&1
-    rm -rf "$ROOTFS" "$ROOTFS".tmp "$ROOTFS".old 2>/dev/null
+    if proot-distro login ubuntu -- true >/dev/null 2>&1; then
+      emit ubuntu done "Ubuntu already installed and login works"
+      return 0
+    fi
+    emit ubuntu fixing "Ubuntu found but login failed — verify only, no deletion…"
     sleep 1
+  fi
+  emit ubuntu running "Checking Ubuntu installation…"
+  if proot-distro login ubuntu -- true >/dev/null 2>&1; then
+    emit ubuntu done "Ubuntu login works"
+    return 0
   fi
   emit ubuntu running "Downloading Ubuntu (one-time, few hundred MB)…"
   runx ubuntu proot-distro install ubuntu || {
-    emit ubuntu fixing "Install interrupted — cleaning and resuming…"
-    rm -rf "$ROOTFS" "$ROOTFS".tmp "$ROOTFS".old 2>/dev/null
-    rm -rf "$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu"* 2>/dev/null
+    emit ubuntu fixing "Install interrupted — will retry without deleting…"
     sleep 2
-    runx ubuntu proot-distro install ubuntu || die ubuntu "Ubuntu install failed after cleanup" "$(tail -2 "$LOG")"
+    runx ubuntu proot-distro install ubuntu || die ubuntu "Ubuntu install failed — verify network/storage, no deletion performed" "$(tail -2 "$LOG")"
   }
   [ -d "$ROOTFS" ] && emit ubuntu done "Ubuntu installed" || die ubuntu "Ubuntu rootfs missing after install"
 }
 ubuntu_login(){
-  if ub_run 'true' >/dev/null 2>&1; then emit login done "Ubuntu starts cleanly"; return 0; fi
-  emit login fixing "Ubuntu not starting — diagnosing…" ""
+  if ub_run 'true' >/dev/null 2>&1; then emit login done "Ubuntu login works"; return 0; fi
+  emit login fixing "Ubuntu login failed — verify only, no deletion…" ""
   df -h "$HOME" >>"$LOG" 2>&1
-  if [ -d "$ROOTFS" ]; then
-    emit login fixing "Backing up Ubuntu home, then repairing container…"
-    tar -czf "$BK/ubuntu-home-$(date +%s).tgz" -C "$ROOTFS/root" . 2>>"$LOG"
-    runx login proot-distro remove ubuntu -f || true
-    runx login proot-distro install ubuntu || die login "Ubuntu reinstall failed" "$(tail -2 "$LOG")"
-  else
-    ubuntu_install
-  fi
-  ub_run 'true' >/dev/null 2>&1 && emit login done "Ubuntu repaired" || die login "Ubuntu cannot start even after repair" ""
+  emit login fixing "Will check installation without deleting…" ""
+  ub_run 'true' >/dev/null 2>&1 && emit login done "Ubuntu login works" || die login "Ubuntu login failed — verify proot-distro and storage, no files deleted" ""
 }
 
 # ---------- Stage: ubuntu packages ----------
@@ -227,6 +221,16 @@ V="$(opencode --version 2>/dev/null || "$OC" --version 2>/dev/null)"
 EOF
 ) ; log "opencode: $out"; forward "$out"
   case "$out" in *@JARVIS*failed*) die opencode "OpenCode setup failed" "$(printf '%s' "$out" | tail -1)";; esac
+  # Create Termux wrapper so `opencode` works directly in Termux terminal
+  if ub_run 'test -x ~/.local/bin/opencode' >/dev/null 2>&1; then
+    mkdir -p "$PREFIX/bin"
+    cat > "$PREFIX/bin/opencode" <<'WRAP'
+#!/data/data/com.termux/files/usr/bin/bash
+exec proot-distro login ubuntu -- opencode "$@"
+WRAP
+    chmod +x "$PREFIX/bin/opencode"
+    log "Created Termux opencode wrapper at $PREFIX/bin/opencode"
+  fi
 }
 
 # ---------- Stage: auth (detect only — never handles the key) ----------

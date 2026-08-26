@@ -2,6 +2,8 @@ package com.pr4nav.jarvis
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import com.pr4nav.jarvis.capabilities.Capabilities
+import com.pr4nav.jarvis.capabilities.RootCapability
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -46,6 +48,8 @@ class MainActivity : AppCompatActivity() {
 
         TermuxBridge.init(this)
         Fs.init(this)
+        Capabilities.init(this)
+        Thread { RootCapability.detect() }.start()
 
         statusView = findViewById(R.id.status_view)
         outputView = findViewById(R.id.output_view)
@@ -59,6 +63,17 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.btn_nav_agent).setOnClickListener {
             startActivity(Intent(this, AgentActivity::class.java))
+        }
+        try {
+            findViewById<Button>(R.id.btn_open_opencode)?.setOnClickListener {
+                startActivity(Intent(this, OpenCodeActivity::class.java))
+            }
+        } catch (_: Exception) {}
+        findViewById<Button>(R.id.btn_nav_commander).setOnClickListener {
+            startActivity(Intent(this, CommanderActivity::class.java))
+        }
+        findViewById<Button>(R.id.btn_nav_terminal).setOnClickListener {
+            startActivity(Intent(this, TerminalActivity::class.java))
         }
         findViewById<Button>(R.id.btn_nav_status).setOnClickListener {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
@@ -84,6 +99,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         pendingAuto = intent.getStringExtra("auto")
         maybeRunAuto()
     }
@@ -129,7 +145,17 @@ class MainActivity : AppCompatActivity() {
         when (auto) {
             "bootstrap" -> launchBootstrap()
             "auth" -> openAuthSession()
+            "term" -> startActivity(Intent(this, TerminalActivity::class.java).putExtra("autotest", true))
             "selftest" -> SelfTest.run(this) { line -> runOnUiThread { append(line) } }
+            "shell" -> {
+                val cmd = intent.getStringExtra("shell_cmd") ?: intent.getStringExtra("cmd") ?: ""
+                Thread {
+                    val r = Shell.termux(cmd, 60_000)
+                    Log.i(TAG, "SHELL_DIAG cmd=$cmd")
+                    Log.i(TAG, "SHELL_DIAG stdout=${r.out.take(8000)}")
+                    Log.i(TAG, "SHELL_DIAG stderr=${r.err.take(2000)} rc=${r.rc} via=${r.via} ms=${r.ms}")
+                }.start()
+            }
         }
     }
 

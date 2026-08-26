@@ -191,3 +191,32 @@ object Shell {
 object SessionState {
     @Volatile var dir: String = "/storage/emulated/0"
 }
+
+/**
+ * Safety guard for user-facing consoles (Commander/Terminal/agent `run`).
+ * VERIFY/OPEN only: destructive operations are refused with a real reason.
+ * Internal bootstrap commands do NOT pass through this guard (they are
+ * owned, audited, and idempotent — not arbitrary user input).
+ */
+object CmdGuard {
+    private val patterns = listOf(
+        Regex("""\brm\b"""), Regex("""\brmdir\b"""), Regex("""\bunlink\b"""),
+        Regex("""\bshred\b"""), Regex("""\bdd\b"""), Regex("""\bmkfs"""), Regex("""\btruncate\b"""),
+        Regex("""-delete\b"""), Regex("""\bkill\b"""), Regex("""\bpkill\b"""), Regex("""\bkillall\b"""),
+        Regex("""\breboot\b"""), Regex("""\bshutdown\b"""), Regex("""\bpoweroff\b"""),
+        Regex("""proot-distro\s+remove"""), Regex("""\bapt(-get)?\s+(remove|purge|autoremove)\b"""),
+        Regex("""\bpkg\s+uninstall\b"""), Regex("""\bpip3?\s+uninstall\b"""), Regex("""\bnpm\s+(uninstall|rm)\b"""),
+        Regex("""\bchmod\s+(-[Rf]+\s+)*0?0?0\s"""), Regex("""\bchown\s+(-R\b)"""),
+        Regex("""git\s+push\s+[^;|]*--force"""), Regex("""\b(parted|fdisk|mkswap)\b"""),
+        Regex(""">\s*/dev/"""), Regex("""\bof=/dev/""")
+    )
+
+    /** Returns a refusal reason if the command is destructive, null if allowed. */
+    fun check(command: String): String? {
+        val reason = patterns.firstOrNull { it.containsMatchIn(command) }?.pattern
+            ?: return null
+        return "Blocked: matches destructive pattern /$reason/\n" +
+            "This console is VERIFY/OPEN only — no deletion, no process kills, no package removal.\n" +
+            "Use the Termux app directly for administrative work."
+    }
+}

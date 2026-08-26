@@ -1,0 +1,30 @@
+{
+  "name": "jarvis-opencode",
+  "version": "1.0.0",
+  "description": "Jarvis OpenCode bridge — one brain for Android GUI + agent + Termux. Works with `opencode serve` or `opencode web` (same API, web is HTML at /).",
+  "keywords": ["opencode", "jarvis", "termux", "android", "ai-agent", "coding-agent"],
+  "author": "Pranav Pramod Dwivedi <pranav@jarvis>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pranav-pramod-dwivedi/jarvis.git",
+    "directory": "termux-tool"
+  },
+  "homepage": "https://github.com/pranav-pramod-dwivedi/jarvis#jarvis-opencode-termux-tool",
+  "bugs": "https://github.com/pranav-pramod-dwivedi/jarvis/issues",
+  "bin": {
+    "jarvis-opencode": "./jarvis-opencode"
+  },
+  "files": [
+    "jarvis-opencode",
+    "install.sh",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=14"
+  },
+  "preferGlobal": true,
+  "publishConfig": {
+    "access": "public"
+  }
+}

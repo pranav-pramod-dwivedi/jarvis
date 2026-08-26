@@ -44,6 +44,16 @@
             android:textSize="16sp"
             android:textStyle="bold" />
 
+        <Button
+            android:id="@+id/btn_open_opencode"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="#238636"
+            android:text="OPENCODE CONSOLE"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -55,13 +65,31 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:textSize="11sp"
                 android:text="Agent" />
+
+            <Button
+                android:id="@+id/btn_nav_commander"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="11sp"
+                android:text="Commander" />
+
+            <Button
+                android:id="@+id/btn_nav_terminal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="11sp"
+                android:text="Terminal" />
 
             <Button
                 android:id="@+id/btn_nav_status"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:textSize="11sp"
                 android:text="Status" />
         </LinearLayout>
 

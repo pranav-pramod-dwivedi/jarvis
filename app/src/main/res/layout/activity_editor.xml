@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="10dp">
+
+    <TextView
+        android:id="@+id/editor_path"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="start"
+        android:singleLine="true"
+        android:fontFamily="monospace"
+        android:textColor="#6E8CA0"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/editor_state"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#4FD1C5"
+        android:textSize="12sp"
+        android:text="saved" />
+
+    <EditText
+        android:id="@+id/editor_text"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="6dp"
+        android:layout_weight="1"
+        android:background="#0A0F14"
+        android:fontFamily="monospace"
+        android:gravity="top"
+        android:inputType="textMultiLine|textNoSuggestions"
+        android:padding="10dp"
+        android:textColor="#DCEFFF"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/editor_save"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="SAVE" />
+
+        <Button
+            android:id="@+id/editor_saveas"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="SAVE AS" />
+
+        <Button
+            android:id="@+id/editor_reload"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="RELOAD" />
+
+        <Button
+            android:id="@+id/editor_discard"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="DISCARD" />
+    </LinearLayout>
+</LinearLayout>

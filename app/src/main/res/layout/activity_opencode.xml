@@ -1,0 +1,440 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0D1117"
+    android:orientation="vertical">
+
+    <!-- Top bar: server status -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#161B22"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/oc_server_dot"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:background="@drawable/bg_dot"
+                android:layout_marginEnd="6dp" />
+
+            <TextView
+                android:id="@+id/oc_server_label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="middle"
+                android:singleLine="true"
+                android:text="Detecting server…"
+                android:textColor="#8B949E"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/oc_version_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#484F58"
+                android:textSize="10sp" />
+
+            <Button
+                android:id="@+id/btn_oc_reconnect"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minHeight="0dp"
+                android:text="Reconnect"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/input_server_url"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:background="#0D1117"
+                android:hint="http://127.0.0.1:4096"
+                android:inputType="textUri"
+                android:padding="6dp"
+                android:textColor="#C9D1D9"
+                android:textColorHint="#484F58"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btn_oc_connect"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="6dp"
+                android:text="Connect"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Project row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Project"
+                android:textColor="#8B949E"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/oc_project_label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:ellipsize="middle"
+                android:singleLine="true"
+                android:text="—"
+                android:textColor="#C9D1D9"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btn_oc_projects"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:text="Browse"
+                android:textSize="10sp" />
+
+            <Button
+                android:id="@+id/btn_oc_refresh_projects"
+                android:layout_width="32dp"
+                android:layout_height="28dp"
+                android:layout_marginStart="4dp"
+                android:text="↻"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btn_oc_open_web"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:layout_marginStart="4dp"
+                android:text="Web UI ↗"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Controls row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#0D1117"
+        android:orientation="horizontal"
+        android:padding="6dp">
+
+        <Button
+            android:id="@+id/btn_oc_new_session"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_weight="1"
+            android:text="+ New"
+            android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/btn_oc_abort"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:text="Abort"
+            android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/btn_oc_fork"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:text="Fork"
+            android:textSize="11sp" />
+
+        <Spinner
+            android:id="@+id/spinner_oc_agent"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1.2" />
+
+        <Spinner
+            android:id="@+id/spinner_oc_model"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1.6" />
+    </LinearLayout>
+
+    <!-- Session bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#161B22"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="6dp">
+
+        <TextView
+            android:id="@+id/oc_session_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="No session"
+            android:textColor="#F0F6FC"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/oc_session_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:background="#21262D"
+            android:padding="3dp"
+            android:text="idle"
+            android:textColor="#8B949E"
+            android:textSize="10sp" />
+
+        <Button
+            android:id="@+id/btn_oc_rename"
+            android:layout_width="wrap_content"
+            android:layout_height="26dp"
+            android:layout_marginStart="6dp"
+            android:text="Rename"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <!-- Permission / question banner -->
+    <LinearLayout
+        android:id="@+id/oc_permission_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#f85149"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/oc_permission_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_perm_once"
+                android:layout_width="0dp"
+                android:layout_height="30dp"
+                android:layout_weight="1"
+                android:text="Allow once"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btn_perm_always"
+                android:layout_width="0dp"
+                android:layout_height="30dp"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:text="Always"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btn_perm_reject"
+                android:layout_width="0dp"
+                android:layout_height="30dp"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:text="Reject"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/oc_question_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#1F6FEB"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/oc_question_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:id="@+id/oc_question_options"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical" />
+    </LinearLayout>
+
+    <!-- Main split: sessions list + transcript -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <!-- Sessions pane -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.38"
+            android:background="#0D1117"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#21262D"
+                android:padding="6dp"
+                android:text="Sessions"
+                android:textColor="#8B949E"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <ListView
+                android:id="@+id/list_oc_sessions"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:divider="#21262D"
+                android:dividerHeight="1dp" />
+
+            <Button
+                android:id="@+id/btn_oc_refresh_sessions"
+                android:layout_width="match_parent"
+                android:layout_height="30dp"
+                android:text="Refresh sessions"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:background="#30363D" />
+
+        <!-- Transcript + tools -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.62"
+            android:orientation="vertical">
+
+            <ListView
+                android:id="@+id/list_oc_messages"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:divider="#21262D"
+                android:dividerHeight="6dp"
+                android:padding="4dp" />
+
+            <TextView
+                android:id="@+id/oc_tools_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#21262D"
+                android:padding="4dp"
+                android:text="Tools — idle"
+                android:textColor="#8B949E"
+                android:textSize="10sp" />
+
+            <ListView
+                android:id="@+id/list_oc_tools"
+                android:layout_width="match_parent"
+                android:layout_height="90dp"
+                android:background="#010409"
+                android:divider="#21262D"
+                android:dividerHeight="1dp" />
+
+            <TextView
+                android:id="@+id/oc_diff_view"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:background="#0D1117"
+                android:ellipsize="end"
+                android:fontFamily="monospace"
+                android:maxLines="3"
+                android:padding="4dp"
+                android:textColor="#7EE787"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Input bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#161B22"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="6dp">
+
+        <EditText
+            android:id="@+id/input_oc_prompt"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="#0D1117"
+            android:hint="Ask OpenCode…"
+            android:inputType="textMultiLine|textCapSentences"
+            android:maxLines="4"
+            android:minHeight="40dp"
+            android:padding="8dp"
+            android:textColor="#C9D1D9"
+            android:textColorHint="#484F58"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btn_oc_send"
+            android:layout_width="64dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:text="Send"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/oc_queue_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:background="#F0883E"
+            android:padding="3dp"
+            android:textColor="#FFFFFF"
+            android:textSize="10sp"
+            android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>

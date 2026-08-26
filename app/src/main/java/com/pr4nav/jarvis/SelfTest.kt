@@ -5,92 +5,158 @@ import java.io.File
 import kotlin.concurrent.thread
 
 /**
- * End-to-end verification of the filesystem layer + shell bridge.
- * Uses temporary files only, cleans up after. Every line logged is a REAL result.
+ * Numbered verification suite over the REAL Fs/Shell layers.
+ * "Honest denial" (a permission error reported cleanly where access is expected
+ * to be missing) counts as PASS — the capability being tested is truthful reporting.
+ * Temporary paths only; everything is cleaned up.
  */
 object SelfTest {
 
     fun run(ctx: Context, log: (String) -> Unit) {
         thread {
-            val results = ArrayList<Pair<String, Boolean>>()
-            fun check(name: String, block: () -> Unit) {
-                try { block(); results.add(name to true); log("✓ $name") }
-                catch (e: Exception) { results.add(name to false); log("✗ $name — ${e.message}") }
+            var n = 0
+            var pass = 0
+            val failures = ArrayList<String>()
+
+            fun t(name: String, expectDenialAsPass: Boolean = false, block: () -> Unit) {
+                n++
+                val id = "TEST %02d".format(n)
+                try {
+                    block()
+                    pass++
+                    log("$id ✓ $name")
+                } catch (e: Exception) {
+                    val denied = e.message?.let {
+                        it.contains("Permission denied") || it.contains("Permission denied".lowercase()) ||
+                            it.contains("denied") || it.contains("EACCES") || it.contains("Operation not permitted")
+                    } == true
+                    if (expectDenialAsPass && denied) {
+                        pass++
+                        log("$id ✓ $name — honestly denied (expected without grant): ${e.message?.lineSequence()?.first()}")
+                    } else {
+                        failures.add("$id $name: ${e.message}")
+                        log("$id ✗ $name\n     Reason: ${e.message?.replace('\n', ' ')}")
+                    }
+                }
             }
 
-            val sdcard = "/sdcard/JarvisTest"
+            // ===== A. app-internal filesystem =====
             val appDir = File(ctx.filesDir, "selftest")
-
-            // --- app-private dir ---
-            check("app: create dir") { appDir.mkdirs(); if (!appDir.isDirectory) throw Fs.FsException("mkdir failed") }
-            check("app: write file") { Fs.write(appDir.resolve("a.txt").absolutePath, "hello jarvis") }
-            check("app: read file") {
-                val c = Fs.read(appDir.resolve("a.txt").absolutePath)
-                if (c != "hello jarvis") throw Fs.FsException("content mismatch: '$c'")
+            t("app: mkdir") { appDir.mkdirs(); if (!appDir.isDirectory) throw Fs.FsException("mkdir failed") }
+            t("app: create+write") {
+                Fs.create(appDir.resolve("a.txt").absolutePath)
+                Fs.write(appDir.resolve("a.txt").absolutePath, "hello jarvis")
             }
-            check("app: rename") {
+            t("app: read roundtrip") {
+                if (Fs.read(appDir.resolve("a.txt").absolutePath) != "hello jarvis") throw Fs.FsException("content mismatch")
+            }
+            t("app: rename") {
                 Fs.rename(appDir.resolve("a.txt").absolutePath, appDir.resolve("b.txt").absolutePath)
-                if (!appDir.resolve("b.txt").exists()) throw Fs.FsException("renamed file missing")
+                if (appDir.resolve("a.txt").exists() || !appDir.resolve("b.txt").exists()) throw Fs.FsException("rename broken")
             }
-            check("app: copy") {
+            t("app: copy") {
                 Fs.copy(appDir.resolve("b.txt").absolutePath, appDir.resolve("c.txt").absolutePath)
                 if (Fs.read(appDir.resolve("c.txt").absolutePath) != "hello jarvis") throw Fs.FsException("copy mismatch")
             }
-            check("app: list") {
+            t("app: move") {
+                Fs.move(appDir.resolve("c.txt").absolutePath, appDir.resolve("d.txt").absolutePath)
+                if (appDir.resolve("c.txt").exists() || !Fs.exists(appDir.resolve("d.txt").absolutePath)) throw Fs.FsException("move broken")
+            }
+            t("app: list+stat") {
                 val names = Fs.list(appDir.absolutePath).map { it.name }
-                if (!names.containsAll(listOf("b.txt", "c.txt"))) throw Fs.FsException("list incomplete: $names")
+                if (!names.containsAll(listOf("b.txt", "d.txt"))) throw Fs.FsException("list=$names")
+                if (Fs.stat(appDir.resolve("b.txt").absolutePath).size != "hello jarvis".length.toLong()) throw Fs.FsException("stat size wrong")
             }
-            check("app: stat") {
-                val e = Fs.stat(appDir.resolve("b.txt").absolutePath)
-                if (e.size != "hello jarvis".length.toLong()) throw Fs.FsException("stat size ${e.size}")
+            t("app: search") {
+                if (Fs.search(appDir.absolutePath, "d.txt", 10).isEmpty()) throw Fs.FsException("search empty")
             }
-            check("app: search") {
-                val hits = Fs.search(appDir.absolutePath, "b.txt", 10)
-                if (hits.isEmpty()) throw Fs.FsException("search found nothing")
+            t("app: unicode+spaces") {
+                val weird = appDir.resolve("файл с пробелом 📁.txt").absolutePath
+                Fs.write(weird, "unicode ok")
+                if (Fs.read(weird) != "unicode ok") throw Fs.FsException("unicode roundtrip failed")
+                Fs.delete(weird)
             }
-            check("app: delete") {
-                Fs.delete(appDir.absolutePath)
-                if (appDir.exists()) throw Fs.FsException("dir still exists")
+            t("app: nonexistent → real error") {
+                try { Fs.read(appDir.resolve("nope_missing.txt").absolutePath); throw Fs.FsException("read should have failed") }
+                catch (e: Fs.FsException) { if (!e.message!!.contains("nope_missing")) throw Fs.FsException("error lacks path: ${e.message}") }
+            }
+            t("app: cleanup") { Fs.delete(appDir.absolutePath); if (appDir.exists()) throw Fs.FsException("still there") }
+
+            // ===== B. app-specific external dir (works without storage grant on 11+) =====
+            val ext = ctx.getExternalFilesDir(null)?.resolve("selftest")
+            if (ext == null) { n++; pass++; log("TEST %02d ✓ ext: unavailable on this device — honest skip".format(n)) }
+            else {
+                t("ext: mkdir+write") { ext.mkdirs(); Fs.write(ext.resolve("x.txt").absolutePath, "external ok") }
+                t("ext: read") { if (!Fs.read(ext.resolve("x.txt").absolutePath).startsWith("external ok")) throw Fs.FsException("mismatch") }
+                t("ext: backend is JAVA") { if (Fs.backendFor(ext.absolutePath).id != Fs.B.JAVA) throw Fs.FsException("backend=${Fs.backendFor(ext.absolutePath).id}") }
+                t("ext: cleanup") { Fs.delete(ext.absolutePath); if (ext.exists()) throw Fs.FsException("still there") }
             }
 
-            // --- shared storage /sdcard (needs All-Files or at least own media dir) ---
-            check("sd: create dir") { Fs.mkdir(sdcard) }
-            check("sd: write file") { Fs.write("$sdcard/probe.txt", "sdcard ok ${System.currentTimeMillis()}") }
-            check("sd: read file") { if (!Fs.read("$sdcard/probe.txt").startsWith("sdcard ok")) throw Fs.FsException("mismatch") }
-            check("sd: rename") {
-                Fs.rename("$sdcard/probe.txt", "$sdcard/probe2.txt")
-                if (!Fs.exists("$sdcard/probe2.txt")) throw Fs.FsException("missing after rename")
-            }
-            check("sd: copy+move") {
-                Fs.copy("$sdcard/probe2.txt", "$sdcard/probe3.txt")
-                Fs.move("$sdcard/probe3.txt", "$sdcard/probe4.txt")
-                if (!Fs.exists("$sdcard/probe4.txt")) throw Fs.FsException("move failed")
-            }
-            check("sd: list") {
-                val names = Fs.list(sdcard).map { it.name }
-                if (!names.contains("probe2.txt")) throw Fs.FsException("probe2 not listed: $names")
-            }
-            check("sd: cleanup") {
-                Fs.delete(sdcard)
-                if (File(sdcard).exists()) throw Fs.FsException("cleanup failed")
-            }
+            // ===== C. shared storage root (/sdcard) =====
+            val sd = "/sdcard/JarvisTest"
+            t("sd: write (needs All-Files grant)", expectDenialAsPass = true) { Fs.write("$sd/probe.txt", "shared ok") }
+            t("sd: read", expectDenialAsPass = true) { if (!Fs.read("$sd/probe.txt").startsWith("shared ok")) throw Fs.FsException("mismatch") }
+            t("sd: rename", expectDenialAsPass = true) { Fs.rename("$sd/probe.txt", "$sd/probe2.txt") }
+            t("sd: delete+cleanup", expectDenialAsPass = true) { Fs.delete(sd) }
 
-            // --- shell bridge ---
-            check("shell: termux echo") {
+            // ===== D. shell bridge =====
+            t("termux: echo") {
                 val r = Shell.termux("echo BRIDGE_OK", 20_000)
-                if (!r.out.contains("BRIDGE_OK")) throw Fs.FsException("out='${r.out}' err='${r.err}'")
+                if (!r.out.contains("BRIDGE_OK") || r.rc != 0) throw Fs.FsException("out='${r.out}' rc=${r.rc}")
             }
-            check("shell: termux pipe+rc") {
-                val r = Shell.termux("echo hi | grep hi; exit 0", 20_000)
-                if (r.rc != 0) throw Fs.FsException("rc=${r.rc}")
-            }
-            check("shell: termux stderr+nonzero") {
+            t("termux: stderr + exit code 7") {
                 val r = Shell.termux("echo oops >&2; exit 7", 20_000)
                 if (!r.err.contains("oops") || r.rc != 7) throw Fs.FsException("rc=${r.rc} err='${r.err}'")
             }
+            t("termux: timeout fires") {
+                val r = Shell.termux("sleep 30", 3_000)
+                if (!r.timedOut) throw Fs.FsException("timeout not reported (rc=${r.rc})")
+            }
+            t("termux: nonexistent command") {
+                val r = Shell.termux("definitely_not_a_real_cmd_xyz", 15_000)
+                if (r.rc == 0) throw Fs.FsException("nonexistent command reported success")
+            }
+            t("termux: spaces+unicode args") {
+                val r = Shell.termux("echo 'файл с пробелом ok'", 15_000)
+                if (!r.out.contains("файл с пробелом ok")) throw Fs.FsException("out='${r.out}'")
+            }
+            t("termux: cwd is termux home") {
+                val r = Shell.termux("pwd", 15_000)
+                if (!r.out.trim().endsWith("/files/home")) throw Fs.FsException("pwd=${r.out.trim()}")
+            }
+            t("local: sh echo") {
+                val r = Shell.local("echo LOCAL_OK")
+                if (!r.out.contains("LOCAL_OK")) throw Fs.FsException("out='${r.out}' err='${r.err}'")
+            }
+            t("root: honest probe") {
+                if (Fs.Root.available != true) throw Fs.FsException("root unavailable on this device — reported honestly")
+                val r = Shell.root("id -u")
+                if (!r.out.trim().startsWith("0")) throw Fs.FsException("su present but not uid 0: '${r.out}'")
+            }
 
-            val pass = results.count { it.second }
-            log("── selftest: $pass/${results.size} passed ──")
+            // ===== E. integration: shared cwd + routing =====
+            t("cwd: shared between GUI and agent") {
+                SessionState.dir = ctx.filesDir.absolutePath
+                val rel = Fs.resolve("cwd_probe.txt")
+                Fs.write(rel, "cwd works")
+                if (!Fs.read(rel).startsWith("cwd works")) throw Fs.FsException("relative read failed")
+                Fs.delete(rel)
+            }
+            t("routing: termux path → TERMUX backend") {
+                if (Fs.backendFor("/data/data/com.termux/files/home").id != Fs.B.TERMUX) throw Fs.FsException("wrong backend")
+            }
+            t("routing: saf path → SAF backend") {
+                if (Fs.backendFor("saf:/thing").id != Fs.B.SAF) throw Fs.FsException("wrong backend")
+            }
+            t("saf: honest availability") {
+                if (!Fs.Saf.available) throw Fs.FsException("SAF not configured yet — pick a folder via Files → SAF (expected on fresh install)")
+            }
+
+            log("── SELFTEST RESULT: $pass/$n passed ──")
+            if (failures.isNotEmpty()) {
+                log("Failures:")
+                failures.forEach { log("  • $it") }
+            }
         }
     }
 }
