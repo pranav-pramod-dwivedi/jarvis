@@ -7,9 +7,18 @@ echo "[*] jarvis-opencode installer"
 if ! command -v curl >/dev/null 2>&1; then echo "[*] Installing curl..."; pkg install -y curl 2>&1 | tail -5; fi
 if ! command -v jq >/dev/null 2>&1; then echo "[*] Installing jq..."; pkg install -y jq 2>&1 | tail -5; fi
 if ! command -v opencode >/dev/null 2>&1; then
-  echo "[!] opencode not found (optional, but needed to run). Install via:"
-  echo "    npm i -g opencode   # needs nodejs (pkg install nodejs)"
-  echo "    — or wait, the Android app can start the server for you."
+  echo "[*] opencode not found — installing..."
+  if ! command -v node >/dev/null 2>&1; then pkg install -y nodejs 2>&1 | tail -5; fi
+  # Try npm first (works on Termux), fallback to official install script
+  if npm i -g opencode 2>&1 | tail -10; then echo "[✓] opencode installed via npm"; else
+    echo "[*] npm install failed, trying opencode.ai/install ..."
+    curl -fsSL https://opencode.ai/install | bash 2>&1 | tail -10 || echo "[!] manual: npm i -g opencode"
+  fi
+  # proot is NOT needed — native Termux opencode is used
+  hash -r 2>/dev/null || true
+fi
+if ! command -v opencode >/dev/null 2>&1; then
+  echo "[!] opencode still not found. After install, restart Termux and re-run this."
 fi
 PREFIX_BIN="${PREFIX:-/data/data/com.termux/files/usr}/bin"
 DST="$PREFIX_BIN/jarvis-opencode"
