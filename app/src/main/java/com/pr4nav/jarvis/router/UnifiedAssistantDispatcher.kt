@@ -47,6 +47,8 @@ object UnifiedAssistantDispatcher {
     fun execute(
         context: Context,
         rawQuery: String,
+        onStatus: ((String) -> Unit)? = null,
+        onChunk: ((String) -> Unit)? = null,
         onResult: (UnifiedExecutionResult) -> Unit
     ) {
         val t0 = System.currentTimeMillis()
@@ -81,10 +83,13 @@ object UnifiedAssistantDispatcher {
 
         // If not a pure conversational greeting, check if Qwen can execute on-device
         if (!isConversationalOrInformational) {
+            onStatus?.invoke("⚡ Evaluating deterministic tools & Needle 2...")
+
             // Check deterministic fast-path if exact match
             val normalized = LanguageNormalizer.normalize(trimmed)
             if (normalized != null && normalized.confidence >= 0.90f) {
                 try {
+                    onStatus?.invoke("⚡ Executing canonical tool [${normalized.tool}]...")
                     val toolRes = CanonicalToolRegistry.execute(context, normalized.tool, normalized.args)
                     com.pr4nav.jarvis.context.ConversationalContext.updateContext(normalized.tool, normalized.args)
                     val summary = if (toolRes.success) {
@@ -96,6 +101,7 @@ object UnifiedAssistantDispatcher {
                     val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: High-confidence deterministic rule matched\n• Model: Needle 2 Engine\n• Action: Executed canonical tool [${normalized.tool}]\n• Args: ${normalized.args}\n</think>"
 
                     Log.i(TAG, "Tier 1: Needle deterministic match [${normalized.tool}] in ${latency}ms")
+                    onChunk?.invoke(summary)
                     onResult(
                         UnifiedExecutionResult(
                             handled = true,
@@ -117,6 +123,7 @@ object UnifiedAssistantDispatcher {
             // Query Qwen3.5-2B on-device SLM
             try {
                 Log.i(TAG, "Step 1: Asking 🟢 Local Qwen3.5-2B if it can handle: \"$trimmed\"...")
+                onStatus?.invoke("🟢 Asking Local Qwen3.5-2B on-device model...")
                 val future = qwen.generate(trimmed, timeoutMs = 4_000L)
                 val llmRes = future.get(4_000L, TimeUnit.MILLISECONDS)
 
@@ -126,6 +133,7 @@ object UnifiedAssistantDispatcher {
                     llmRes.confidence >= 0.75f &&
                     CanonicalToolRegistry.get(llmRes.toolCall) != null
                 ) {
+                    onStatus?.invoke("🟢 Executing [${llmRes.toolCall}] via Qwen3.5-2B...")
                     val args = llmRes.args ?: JSONObject()
                     val toolDef = CanonicalToolRegistry.get(llmRes.toolCall)
                     if (toolDef != null) {
@@ -139,6 +147,7 @@ object UnifiedAssistantDispatcher {
                         val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Evaluator: 🟢 Local Qwen3.5-2B\n• Decision: Valid on-device capability found [${llmRes.toolCall}]\n• Confidence: ${(llmRes.confidence * 100).toInt()}%\n• Execution: Success\n</think>"
 
                         Log.i(TAG, "Step 1: 🟢 Local Qwen3.5-2B handled [${llmRes.toolCall}] in ${latency}ms")
+                        onChunk?.invoke(summary)
                         onResult(
                             UnifiedExecutionResult(
                                 handled = true,
@@ -165,6 +174,7 @@ object UnifiedAssistantDispatcher {
         // Step 2: Escalate to Cloud LLM (Google Gemini 2.0 Flash / AGY Server)
         // =========================================================================
         Log.i(TAG, "Step 2: Escalating to Cloud LLM (Gemini 2.0 Flash)...")
+        onStatus?.invoke("☁️ Querying Google Gemini 2.0 Flash (Cloud)...")
         val historyContext = com.pr4nav.jarvis.context.ConversationalContext.getRecentHistory(4)
         val fullPromptWithHistory = if (historyContext.isNotBlank()) {
             "$historyContext\nUser: $trimmed\nJarvis:"
@@ -178,6 +188,10 @@ object UnifiedAssistantDispatcher {
         GeminiCloudLLM.generate(
             context = context,
             prompt = fullPromptWithHistory,
+            onChunk = { chunk ->
+                onStatus?.invoke("✍️ Writing response...")
+                onChunk?.invoke(chunk)
+            },
             onSuccess = { cloudSpeech ->
                 val latency = System.currentTimeMillis() - t0
                 com.pr4nav.jarvis.context.ConversationalContext.recordTurn(trimmed, cloudSpeech)
@@ -218,6 +232,7 @@ object UnifiedAssistantDispatcher {
                 }
 
                 val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Route: Cloud unavailable ($errMsg)\n• Fallback: Native system conversational handler\n</think>"
+                onChunk?.invoke(helpfulFallback)
 
                 onResult(
                     UnifiedExecutionResult(

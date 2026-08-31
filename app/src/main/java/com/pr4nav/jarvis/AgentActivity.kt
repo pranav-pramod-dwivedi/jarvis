@@ -500,11 +500,111 @@ class AgentActivity : AppCompatActivity() {
         voiceEngine?.speak(finalSummary, interrupt = false)
     }
 
+    private fun createStreamingCard(initialTitle: String): (String, String, List<String>?, Boolean?) -> Unit {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.bg_chat_agent)
+            setPadding(36, 32, 36, 32)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.START
+                topMargin = 20
+                marginEnd = 40
+            }
+            layoutParams = lp
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val dot = View(this).apply {
+            val size = (10 * resources.displayMetrics.density).toInt()
+            layoutParams = LinearLayout.LayoutParams(size, size).apply { marginEnd = 16 }
+            setBackgroundResource(R.drawable.bg_round_glow)
+        }
+        val tvTitle = TextView(this).apply {
+            this.text = initialTitle
+            setTextColor(Color.parseColor("#38BDF8"))
+            textSize = 13f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+        header.addView(dot)
+        header.addView(tvTitle)
+        card.addView(header)
+
+        val stepsBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        card.addView(stepsBox)
+
+        val outcome = TextView(this).apply {
+            this.text = "Thinking…"
+            setTextColor(Color.parseColor("#F8FAFC"))
+            textSize = 13.5f
+            setBackgroundResource(R.drawable.bg_step_progress)
+            setPadding(24, 20, 24, 20)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 16 }
+            layoutParams = lp
+        }
+        card.addView(outcome)
+
+        messagesContainer.addView(card)
+        scrollToBottom()
+
+        val textBuffer = StringBuilder()
+
+        return { title: String, chunk: String, steps: List<String>?, isDone: Boolean? ->
+            runOnUiThread {
+                if (title.isNotEmpty()) {
+                    tvTitle.text = title
+                }
+                if (chunk.isNotEmpty()) {
+                    if (outcome.text == "Thinking…" || outcome.text == "Writing response…") {
+                        textBuffer.clear()
+                    }
+                    textBuffer.append(chunk)
+                    outcome.text = textBuffer.toString()
+                }
+                if (steps != null) {
+                    stepsBox.removeAllViews()
+                    for (step in steps) {
+                        val stepRow = TextView(this).apply {
+                            this.text = "• $step"
+                            setTextColor(Color.parseColor("#94A3B8"))
+                            textSize = 12f
+                            val lp = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            ).apply { topMargin = 6 }
+                            layoutParams = lp
+                        }
+                        stepsBox.addView(stepRow)
+                    }
+                }
+                if (isDone == true) {
+                    dot.setBackgroundResource(R.drawable.bg_dot)
+                    tvTitle.setTextColor(Color.parseColor("#10B981"))
+                    outcome.setBackgroundResource(R.drawable.bg_step_success)
+                }
+                scrollToBottom()
+            }
+        }
+    }
+
     private fun submit(q: String) {
         if (q.isEmpty()) return
         input.setText("")
         addUserMessage(q)
-        showThinking("Analyzing intent…", "Evaluating deterministic tools & SLM")
 
         thread {
             try {
@@ -530,7 +630,6 @@ class AgentActivity : AppCompatActivity() {
         // Built-in Developer Utilities
         when {
             lower == "help" -> runOnUiThread {
-                hideThinking()
                 addExecutionStepCard(
                     title = "⚙️ JARVIS Developer & Command Reference",
                     steps = listOf(
@@ -545,7 +644,6 @@ class AgentActivity : AppCompatActivity() {
             }
 
             lower == "pwd" -> runOnUiThread {
-                hideThinking()
                 addExecutionStepCard(
                     title = "📁 Current Working Directory",
                     steps = listOf("Resolved from SessionState"),
@@ -559,7 +657,6 @@ class AgentActivity : AppCompatActivity() {
                 val list = Fs.list(p)
                 val items = list.take(10).map { (if (it.isDir) "📁 " else "📄 ") + it.name }
                 runOnUiThread {
-                    hideThinking()
                     addExecutionStepCard(
                         title = "📁 Directory Listing: $p",
                         steps = items,
@@ -594,7 +691,6 @@ class AgentActivity : AppCompatActivity() {
                 com.pr4nav.jarvis.tools.JarvisToolRegistry.registerAll(this)
                 val cat = com.pr4nav.jarvis.tools.JarvisToolRegistry.catalog()
                 runOnUiThread {
-                    hideThinking()
                     addExecutionStepCard(
                         title = "🛠️ Registered Canonical Tools",
                         steps = cat.lines().take(12),
@@ -605,37 +701,60 @@ class AgentActivity : AppCompatActivity() {
             }
 
             else -> {
-                // Unified Model Routing: Qwen3.5-2B Local SLM Check -> Cloud Gemini 2.0 Flash / Needle Escalation
+                // Live Streaming Model Card with Dynamic Statuses (Thinking, Executing, Writing)
+                var streamCardUpdater: ((String, String, List<String>?, Boolean?) -> Unit)? = null
                 runOnUiThread {
-                    showThinking("Evaluating intent…", "Asking 🟢 Local Qwen3.5-2B first...")
+                    streamCardUpdater = createStreamingCard("🧠 Thinking…")
                 }
-                com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(this, q) { res ->
-                    runOnUiThread {
-                        hideThinking()
-                        val steps = mutableListOf<String>()
-                        if (res.thinkingTrace.isNotBlank()) {
-                            val traceLines = res.thinkingTrace
-                                .replace("<think>", "")
-                                .replace("</think>", "")
-                                .trim()
-                                .lines()
-                                .map { it.trim() }
-                                .filter { it.isNotEmpty() }
-                            steps.addAll(traceLines)
-                        } else {
-                            steps.add("• Model: ${res.modelName}")
-                            steps.add("• Latency: ${res.latencyMs}ms")
-                        }
 
-                        addExecutionStepCard(
-                            title = res.source.badge,
-                            steps = steps,
-                            isSuccess = res.handled,
-                            finalSummary = res.speechResponse
-                        )
-                        updateCtx()
+                com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(
+                    context = this,
+                    rawQuery = q,
+                    onStatus = { status ->
+                        streamCardUpdater?.invoke(status, "", null, false)
+                    },
+                    onChunk = { chunk ->
+                        streamCardUpdater?.invoke("", chunk, null, false)
+                    },
+                    onResult = { res ->
+                        runOnUiThread {
+                            val steps = mutableListOf<String>()
+                            if (res.thinkingTrace.isNotBlank()) {
+                                val traceLines = res.thinkingTrace
+                                    .replace("<think>", "")
+                                    .replace("</think>", "")
+                                    .trim()
+                                    .lines()
+                                    .map { it.trim() }
+                                    .filter { it.isNotEmpty() }
+                                steps.addAll(traceLines)
+                            } else {
+                                steps.add("• Model: ${res.modelName}")
+                                steps.add("• Latency: ${res.latencyMs}ms")
+                            }
+
+                            streamCardUpdater?.invoke(res.source.badge, res.speechResponse, steps, true)
+
+                            // Persist to active session
+                            if (::currentSession.isInitialized) {
+                                com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+                                    this,
+                                    currentSession,
+                                    com.pr4nav.jarvis.session.SessionMessage(
+                                        sender = "agent",
+                                        text = "${res.source.badge}\n${res.speechResponse}",
+                                        steps = steps,
+                                        isSuccess = res.handled
+                                    )
+                                )
+                            }
+
+                            // Speak response via Kokoro-82M TTS
+                            voiceEngine?.speak(res.speechResponse, interrupt = false)
+                            updateCtx()
+                        }
                     }
-                }
+                )
             }
         }
     }

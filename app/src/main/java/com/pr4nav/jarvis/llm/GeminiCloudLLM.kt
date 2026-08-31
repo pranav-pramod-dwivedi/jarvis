@@ -59,6 +59,7 @@ object GeminiCloudLLM {
         context: Context,
         prompt: String,
         systemInstruction: String = "You are JARVIS, a helpful, intelligent personal AI companion. Keep answers clear, direct, and concise (under 3-4 sentences when possible), suitable for natural spoken voice dialogue. Do not use Markdown formatting or symbols like asterisks in your responses.",
+        onChunk: ((String) -> Unit)? = null,
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -72,6 +73,13 @@ object GeminiCloudLLM {
                 if (directResult.isSuccess) {
                     val rawText = directResult.getOrNull() ?: ""
                     val cleaned = cleanForSpeech(rawText)
+                    if (onChunk != null) {
+                        val words = cleaned.split(" ")
+                        for (w in words) {
+                            onChunk("$w ")
+                            try { Thread.sleep(12) } catch (_: Exception) {}
+                        }
+                    }
                     onSuccess(cleaned)
                     return@execute
                 } else {
@@ -81,9 +89,16 @@ object GeminiCloudLLM {
 
             // Fallback / Autonomous Mode: Execute via AGY CLI directly (no API key required)
             Log.i(TAG, "Executing via AGY CLI in Ubuntu proot...")
-            val agyRes = com.pr4nav.jarvis.Shell.agy(prompt, timeoutMs = 35_000)
+            val agyRes = com.pr4nav.jarvis.Shell.agy(prompt, timeoutMs = 45_000)
             if (agyRes.rc == 0 && agyRes.out.isNotBlank()) {
                 val cleaned = cleanForSpeech(agyRes.out)
+                if (onChunk != null) {
+                    val words = cleaned.split(" ")
+                    for (w in words) {
+                        onChunk("$w ")
+                        try { Thread.sleep(12) } catch (_: Exception) {}
+                    }
+                }
                 onSuccess(cleaned)
                 return@execute
             }
@@ -91,11 +106,27 @@ object GeminiCloudLLM {
             // Secondary Fallback: Check if AGY daemon is active on port 5050
             queryAgyFallback(prompt,
                 onSuccess = { agyResponse ->
-                    onSuccess(cleanForSpeech(agyResponse))
+                    val cleaned = cleanForSpeech(agyResponse)
+                    if (onChunk != null) {
+                        val words = cleaned.split(" ")
+                        for (w in words) {
+                            onChunk("$w ")
+                            try { Thread.sleep(12) } catch (_: Exception) {}
+                        }
+                    }
+                    onSuccess(cleaned)
                 },
                 onError = { agyErr ->
                     if (agyRes.out.isNotBlank()) {
-                        onSuccess(cleanForSpeech(agyRes.out))
+                        val cleaned = cleanForSpeech(agyRes.out)
+                        if (onChunk != null) {
+                            val words = cleaned.split(" ")
+                            for (w in words) {
+                                onChunk("$w ")
+                                try { Thread.sleep(12) } catch (_: Exception) {}
+                            }
+                        }
+                        onSuccess(cleaned)
                     } else {
                         val finalErr = if (agyRes.err.isNotBlank()) agyRes.err else agyErr
                         onError("AGY intelligence engine unavailable: $finalErr")

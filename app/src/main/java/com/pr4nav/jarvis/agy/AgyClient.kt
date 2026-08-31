@@ -2,6 +2,7 @@ package com.pr4nav.jarvis.agy
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -95,67 +96,88 @@ class AgyClient(private val config: AgyConfig = AgyConfig()) {
                 OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
 
                 val code = conn.responseCode
-                if (code !in 200..299) {
-                    val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $code"
-                    if (!cancelled) mainHandler.post { onError(err) }
-                    return@submit
-                }
+                if (code in 200..299) {
+                    val reader = BufferedReader(InputStreamReader(conn.inputStream))
+                    var line: String? = null
+                    while (!cancelled && reader.readLine().also { line = it } != null) {
+                        val l = line?.trim() ?: continue
+                        if (!l.startsWith("data: ")) continue
+                        val payload = l.substring(6).trim()
+                        if (payload.isEmpty() || payload == "[DONE]") continue
 
-                val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                var line: String? = null
-                while (!cancelled && reader.readLine().also { line = it } != null) {
-                    val l = line?.trim() ?: continue
-                    if (!l.startsWith("data: ")) continue
-                    val payload = l.substring(6).trim()
-                    if (payload.isEmpty() || payload == "[DONE]") continue
-
-                    try {
-                        val json = JSONObject(payload)
-                        val ev = json.optString("event")
-                        if (ev == "step_update") {
-                            val su = json.optJSONObject("step_update")
-                            if (su != null) {
-                                val delta = su.optString("text_delta")
-                                if (delta.isNotEmpty()) {
-                                    fullText.append(delta)
-                                    mainHandler.post { onToken(delta) }
+                        try {
+                            val json = JSONObject(payload)
+                            val ev = json.optString("event")
+                            if (ev == "step_update") {
+                                val su = json.optJSONObject("step_update")
+                                if (su != null) {
+                                    val delta = su.optString("text_delta")
+                                    if (delta.isNotEmpty()) {
+                                        fullText.append(delta)
+                                        mainHandler.post { onToken(delta) }
+                                    }
+                                    val st = su.optString("step_type")
+                                    val state = su.optString("state")
+                                    if (st.isNotEmpty() && state.isNotEmpty()) {
+                                        mainHandler.post { onStep("[$st: $state]") }
+                                    }
                                 }
-                                val st = su.optString("step_type")
-                                val state = su.optString("state")
-                                if (st.isNotEmpty() && state.isNotEmpty()) {
-                                    mainHandler.post { onStep("[$st: $state]") }
+                            } else if (ev == "result") {
+                                val res = json.optJSONObject("result")
+                                val finalResp = res?.optString("response")
+                                if (!finalResp.isNullOrEmpty() && fullText.isEmpty()) {
+                                    fullText.append(finalResp)
+                                    mainHandler.post { onToken(finalResp) }
                                 }
+                            } else if (ev == "error") {
+                                val err = json.optString("error")
+                                mainHandler.post { onError(err) }
                             }
-                        } else if (ev == "result") {
-                            val res = json.optJSONObject("result")
-                            val finalResp = res?.optString("response")
-                            if (!finalResp.isNullOrEmpty() && fullText.isEmpty()) {
-                                fullText.append(finalResp)
-                                mainHandler.post { onToken(finalResp) }
+                        } catch (_: Exception) {
+                            if (payload.isNotEmpty()) {
+                                fullText.append(payload)
+                                mainHandler.post { onToken(payload) }
                             }
-                        } else if (ev == "error") {
-                            val err = json.optString("error")
-                            mainHandler.post { onError(err) }
-                        }
-                    } catch (_: Exception) {
-                        // Plain text fallback
-                        if (payload.isNotEmpty()) {
-                            fullText.append(payload)
-                            mainHandler.post { onToken(payload) }
                         }
                     }
                 }
 
                 if (!cancelled) {
                     if (fullText.isEmpty()) {
-                        mainHandler.post { onError("Server on ${config.port} returned no SSE tokens (Hub WebUI active)") }
+                        Log.i("AgyClient", "SSE port ${config.port} returned no tokens, executing via PRoot AGY CLI directly...")
+                        mainHandler.post { onStep("[⚡ PRoot Linux AGY Engine]") }
+                        val agyRes = com.pr4nav.jarvis.Shell.agy(prompt, timeoutMs = 60_000)
+                        if (agyRes.out.isNotBlank()) {
+                            val words = agyRes.out.split(" ")
+                            for (w in words) {
+                                if (cancelled) break
+                                mainHandler.post { onToken("$w ") }
+                                try { Thread.sleep(15) } catch (_: Exception) {}
+                            }
+                            mainHandler.post { onComplete(agyRes.out) }
+                        } else {
+                            mainHandler.post { onError(if (agyRes.err.isNotBlank()) agyRes.err else "AGY daemon unavailable") }
+                        }
                     } else {
                         mainHandler.post { onComplete(fullText.toString()) }
                     }
                 }
             } catch (e: Exception) {
                 if (!cancelled) {
-                    mainHandler.post { onError(e.message ?: "Stream failure") }
+                    Log.i("AgyClient", "Port ${config.port} connection error (${e.message}), executing via PRoot AGY CLI directly...")
+                    mainHandler.post { onStep("[⚡ PRoot Linux AGY Engine]") }
+                    val agyRes = com.pr4nav.jarvis.Shell.agy(prompt, timeoutMs = 60_000)
+                    if (agyRes.out.isNotBlank()) {
+                        val words = agyRes.out.split(" ")
+                        for (w in words) {
+                            if (cancelled) break
+                            mainHandler.post { onToken("$w ") }
+                            try { Thread.sleep(15) } catch (_: Exception) {}
+                        }
+                        mainHandler.post { onComplete(agyRes.out) }
+                    } else {
+                        mainHandler.post { onError(if (agyRes.err.isNotBlank()) agyRes.err else (e.message ?: "Stream failure")) }
+                    }
                 }
             } finally {
                 activeConn = null
