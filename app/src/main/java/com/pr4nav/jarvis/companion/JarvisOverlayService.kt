@@ -353,8 +353,9 @@ class JarvisOverlayService : Service() {
                 txtStatusBadge?.text = res.modelName.uppercase()
                 txtStatusBadge?.setTextColor(
                     when (res.source) {
-                        com.pr4nav.jarvis.router.ExecutionSource.CLOUD_LLM -> Color.parseColor("#38BDF8")
-                        com.pr4nav.jarvis.router.ExecutionSource.LOCAL_LLM -> Color.parseColor("#A855F7")
+                        com.pr4nav.jarvis.router.ExecutionSource.AGY_AGENT -> Color.parseColor("#38BDF8")
+                        com.pr4nav.jarvis.router.ExecutionSource.CLOUD_LLM -> Color.parseColor("#60A5FA")
+                        com.pr4nav.jarvis.router.ExecutionSource.LOCAL_LLM -> Color.parseColor("#10B981")
                         com.pr4nav.jarvis.router.ExecutionSource.DETERMINISTIC_NEEDLE -> Color.parseColor("#F59E0B")
                         com.pr4nav.jarvis.router.ExecutionSource.FALLBACK -> Color.parseColor("#94A3B8")
                     }

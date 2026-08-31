@@ -71,6 +71,9 @@ class KokoroTtsEngine(private val context: Context) {
 
     init {
         executor.execute {
+            try {
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
+            } catch (_: Exception) {}
             initialize()
         }
     }
@@ -97,8 +100,9 @@ class KokoroTtsEngine(private val context: Context) {
             val t0 = System.currentTimeMillis()
 
             ortEnv = OrtEnvironment.getEnvironment()
+            val cpuCores = Runtime.getRuntime().availableProcessors()
             val sessionOpts = OrtSession.SessionOptions().apply {
-                setIntraOpNumThreads(4)
+                setIntraOpNumThreads(maxOf(2, minOf(cpuCores, 4)))
                 setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             }
             ortSession = ortEnv?.createSession(modelFile.absolutePath, sessionOpts)
@@ -417,28 +421,18 @@ class KokoroTtsEngine(private val context: Context) {
             currentAudioTrack = track
             track.play()
 
-            // Stream normalized floats in small sub-buffers
-            val chunkSize = 2400 // 100ms chunks at 24kHz
-            var offset = 0
-            while (offset < normalized.size && !shouldInterrupt.get()) {
-                val toWrite = minOf(chunkSize, normalized.size - offset)
-                val written = track.write(normalized, offset, toWrite, AudioTrack.WRITE_BLOCKING)
-                if (written > 0) {
-                    offset += written
-                } else {
-                    break
-                }
-            }
+            // Stream normalized floats directly to hardware with zero artificial sleep delays
+            track.write(normalized, 0, normalized.size, AudioTrack.WRITE_BLOCKING)
 
-            // Wait for audio hardware buffer to completely finish playing before closing track
+            // Let the tail finish playing
             val totalDurationMs = (normalized.size * 1000L) / SAMPLE_RATE
             val startWait = System.currentTimeMillis()
             while (track.playState == AudioTrack.PLAYSTATE_PLAYING && !shouldInterrupt.get()) {
                 val playedFrames = track.playbackHeadPosition
-                if (playedFrames >= normalized.size || (System.currentTimeMillis() - startWait) > totalDurationMs + 200) {
+                if (playedFrames >= normalized.size || (System.currentTimeMillis() - startWait) > totalDurationMs + 50) {
                     break
                 }
-                Thread.sleep(15)
+                try { Thread.sleep(5) } catch (_: Exception) {}
             }
         } catch (e: Exception) {
             Log.w(TAG, "AudioTrack playback error: ${e.message}")
