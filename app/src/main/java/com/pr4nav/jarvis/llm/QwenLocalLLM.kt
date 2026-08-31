@@ -80,81 +80,41 @@ class QwenLocalLLM(
 
         Thread {
             try {
-                // Check fast normalizer first
-                val norm = LanguageNormalizer.normalize(prompt)
-                if (norm != null && norm.confidence >= 0.90f) {
-                    val latency = System.currentTimeMillis() - t0
-                    currentState = LLMState.READY
-                    f.complete(
-                        LLMResult(
-                            rawText = JSONObject().apply {
-                                put("intent", norm.tool)
-                                put("confidence", norm.confidence)
-                                put("args", norm.args)
-                            }.toString(),
-                            toolCall = norm.tool,
-                            args = norm.args,
-                            confidence = norm.confidence,
-                            latencyMs = latency
-                        )
-                    )
-                    return@Thread
-                }
-
-                // Check Needle intent extraction
-                val envelope = NeedleRuntime.complete(prompt)
-                val latency = System.currentTimeMillis() - t0
+                val engine = com.pr4nav.jarvis.engine.QwenLocalInferenceEngine(context)
+                val res = engine.generateToolIntent(prompt)
                 currentState = LLMState.READY
 
-                if (envelope != null && envelope.functionCalls.isNotEmpty()) {
-                    val firstCall = envelope.functionCalls[0]
-                    val argsObj = JSONObject(firstCall.arguments)
+                if (res.success) {
                     f.complete(
                         LLMResult(
-                            rawText = envelope.rawJson.toString(),
-                            toolCall = firstCall.name,
-                            args = argsObj,
-                            confidence = envelope.confidence.toFloat(),
-                            latencyMs = latency
+                            rawText = res.rawOutput,
+                            toolCall = res.intent,
+                            args = res.arguments,
+                            confidence = res.confidence,
+                            latencyMs = res.latencyMs
                         )
                     )
                 } else {
-                    // Check if ambiguous
-                    val isAmbiguous = prompt.contains("that one", ignoreCase = true) ||
-                            prompt.contains("the other one", ignoreCase = true) ||
-                            prompt.contains("yesterday", ignoreCase = true)
-
-                    val fallbackJson = JSONObject().apply {
-                        put("intent", if (isAmbiguous) "AMBIGUOUS" else "UNKNOWN")
-                        put("confidence", if (isAmbiguous) 0.50 else 0.20)
-                    }
-
                     f.complete(
                         LLMResult(
-                            rawText = fallbackJson.toString(),
-                            toolCall = if (isAmbiguous) "AMBIGUOUS" else null,
-                            confidence = if (isAmbiguous) 0.50f else 0.20f,
-                            parseError = if (isAmbiguous) "Ambiguous request requires context" else "UNKNOWN intent",
-                            latencyMs = latency
+                            rawText = "",
+                            toolCall = null,
+                            confidence = 0.0f,
+                            parseError = res.error ?: "QWEN_INFERENCE_FAILED",
+                            latencyMs = res.latencyMs
                         )
                     )
                 }
-            } catch (e: TimeoutException) {
-                currentState = LLMState.ERROR
-                f.complete(
-                    LLMResult(
-                        rawText = "",
-                        parseError = "Local LLM timed out after ${timeoutMs}ms",
-                        latencyMs = System.currentTimeMillis() - t0
-                    )
-                )
             } catch (e: Exception) {
+                val latency = System.currentTimeMillis() - t0
                 currentState = LLMState.READY
                 f.complete(
                     LLMResult(
                         rawText = "",
-                        parseError = e.message ?: "Execution failed",
-                        latencyMs = System.currentTimeMillis() - t0
+                        toolCall = null,
+                        confidence = 0.0f,
+                        parseError = "Qwen inference exception: ${e.message}",
+                        latencyMs = latency
                     )
                 )
             }

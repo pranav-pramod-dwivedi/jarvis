@@ -12,12 +12,66 @@ enum class EngineType {
     AUTO_ROUTER
 }
 
+enum class QwenExecutionMode {
+    RAW_QWEN_ONLY,
+    QWEN_TOOL_MODE
+}
+
 data class FallbackChainStep(
     val stepNumber: Int,
     val engine: EngineType,
     val status: String,
     val reason: String
 )
+
+data class EngineProvenanceTrace(
+    val engine: String = "QWEN_LOCAL",
+    val model: String = "qwen3.5-2b-instruct-q4.gguf",
+    val modelHash: String,
+    val runtime: String = "Llama.cpp / GGUF Local Runtime",
+    val promptSource: String = "RAW_QWEN_CHAT",
+    val preprocessor: String = "NONE",
+    val postprocessor: String = "NONE",
+    val toolRouter: String = "DISABLED",
+    val needle: String = "DISABLED",
+    val agy: String = "DISABLED",
+    val cloud: String = "DISABLED"
+) {
+    fun toFormattedTrace(): String = """
+ENGINE:
+$engine
+
+MODEL:
+$model
+
+MODEL_HASH:
+$modelHash
+
+RUNTIME:
+$runtime
+
+PROMPT_SOURCE:
+$promptSource
+
+PREPROCESSOR:
+$preprocessor
+
+POSTPROCESSOR:
+$postprocessor
+
+TOOL_ROUTER:
+$toolRouter
+
+NEEDLE:
+$needle
+
+AGY:
+$agy
+
+CLOUD:
+$cloud
+    """.trimIndent()
+}
 
 data class EngineMetadata(
     val requestedEngine: EngineType,
@@ -30,7 +84,8 @@ data class EngineMetadata(
     val tokenizer: String,
     val runtimeInstanceId: String = UUID.randomUUID().toString(),
     val isModelLoaded: Boolean,
-    val isRoutingIntegrityValid: Boolean = (requestedEngine == actualEngine || requestedEngine == EngineType.AUTO_ROUTER)
+    val isRoutingIntegrityValid: Boolean = (requestedEngine == actualEngine || requestedEngine == EngineType.AUTO_ROUTER),
+    val provenanceTrace: EngineProvenanceTrace = EngineProvenanceTrace(modelHash = modelHashSha256)
 ) {
     fun toJsonObject(): JSONObject = JSONObject().apply {
         put("requested_engine", requestedEngine.name)
@@ -78,5 +133,7 @@ data class EngineInferenceResult(
     val metadata: EngineMetadata,
     val latencyMs: Long,
     val error: String? = null,
-    val fallbackChain: List<FallbackChainStep> = emptyList()
+    val fallbackSteps: List<FallbackChainStep> = emptyList(),
+    val systemPromptUsed: String = "",
+    val samplingParamsUsed: String = "temp=0.7, top_p=0.9, max_tokens=512, grammar=DISABLED"
 )

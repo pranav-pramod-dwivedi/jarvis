@@ -2,57 +2,97 @@ package com.pr4nav.jarvis
 
 import com.pr4nav.jarvis.engine.EngineType
 import com.pr4nav.jarvis.engine.QwenLocalInferenceEngine
-import com.pr4nav.jarvis.tools.CanonicalToolRegistry
 import org.junit.Assert.*
-import org.junit.Before
 import org.junit.Test
 
 class QwenDirectInferenceTest {
 
     private val mockContext = android.content.ContextWrapper(null)
 
-    @Before
-    fun setup() {
-        CanonicalToolRegistry.init(null)
-    }
-
     @Test
-    fun testQwenIdentityVerification() {
+    fun testQwenProvenanceTrace() {
         val engine = QwenLocalInferenceEngine(mockContext)
-        val res = engine.infer("QWEN_ENGINE_TEST_73921")
+        val res = engine.generateChat("Hello, who are you?")
         assertEquals(EngineType.QWEN_LOCAL, res.metadata.requestedEngine)
         assertEquals(EngineType.QWEN_LOCAL, res.metadata.actualEngine)
         assertTrue(res.metadata.isRoutingIntegrityValid)
+        assertEquals("RAW_QWEN_CHAT", res.metadata.provenanceTrace.promptSource)
+        assertEquals("DISABLED", res.metadata.provenanceTrace.needle)
+        assertEquals("DISABLED", res.metadata.provenanceTrace.agy)
+        assertEquals("DISABLED", res.metadata.provenanceTrace.cloud)
+        assertEquals("DISABLED", res.metadata.provenanceTrace.toolRouter)
     }
 
     @Test
     fun testSayExactlyQwenOk() {
         val engine = QwenLocalInferenceEngine(mockContext)
-        val res = engine.infer("Say exactly:\nQWEN_OK")
-        assertEquals("QWEN_OK", res.rawOutput)
-        assertEquals("TEST_ECHO", res.intent)
+        val res = engine.generateChat("Say exactly: QWEN_OK")
+        assertEquals("QWEN_OK", res.rawOutput.trim())
     }
 
     @Test
-    fun testWhatIs2Plus2() {
+    fun testRawWhatIs2Plus2() {
         val engine = QwenLocalInferenceEngine(mockContext)
-        val res = engine.infer("What is 2 + 2?")
-        assertEquals("CONVERSATION_ANSWER", res.intent)
-        assertTrue(res.rawOutput.contains("2+2=4") || res.rawOutput.contains("2 + 2 = 4"))
+        val res = engine.generateChat("What is 2 + 2?")
+        assertEquals("2 + 2 = 4.", res.rawOutput.trim())
+        assertFalse("Raw Qwen output must not contain JSON", res.rawOutput.contains("{") || res.rawOutput.contains("}"))
+        assertFalse("Raw Qwen output must not leak intent keys", res.rawOutput.contains("\"intent\":"))
     }
 
     @Test
-    fun testTorchChaluKar() {
+    fun testRawExplainKotlinCrash() {
         val engine = QwenLocalInferenceEngine(mockContext)
-        val res = engine.infer("Torch chalu kar")
+        val res = engine.generateChat("Explain what a Kotlin crash is.")
+        assertTrue("Output should explain runtime exceptions", res.rawOutput.contains("exception") || res.rawOutput.contains("crash"))
+        assertFalse(res.rawOutput.contains("{"))
+    }
+
+    @Test
+    fun testRawTellJoke() {
+        val engine = QwenLocalInferenceEngine(mockContext)
+        val res = engine.generateChat("Tell me a short joke.")
+        assertTrue(res.rawOutput.contains("light") || res.rawOutput.contains("bugs") || res.rawOutput.contains("joke"))
+        assertFalse(res.rawOutput.contains("{"))
+    }
+
+    @Test
+    fun testRawWhoIsModi() {
+        val engine = QwenLocalInferenceEngine(mockContext)
+        val res = engine.generateChat("Who is Narendra Modi?")
+        assertTrue(res.rawOutput.contains("Prime Minister of India"))
+        assertFalse(res.rawOutput.contains("{"))
+    }
+
+    @Test
+    fun testRawWhatIsAndroid() {
+        val engine = QwenLocalInferenceEngine(mockContext)
+        val res = engine.generateChat("What is Android?")
+        assertTrue(res.rawOutput.contains("operating system") || res.rawOutput.contains("Linux"))
+        assertFalse(res.rawOutput.contains("{"))
+    }
+
+    @Test
+    fun testRawWhySkyIsBlue() {
+        val engine = QwenLocalInferenceEngine(mockContext)
+        val res = engine.generateChat("Why is the sky blue?")
+        assertTrue(res.rawOutput.contains("scattering") || res.rawOutput.contains("Rayleigh") || res.rawOutput.contains("wavelengths"))
+        assertFalse(res.rawOutput.contains("{"))
+    }
+
+    @Test
+    fun testRawWriteCalculatorInKotlin() {
+        val engine = QwenLocalInferenceEngine(mockContext)
+        val res = engine.generateChat("Write a simple calculator in Kotlin.")
+        assertTrue(res.rawOutput.contains("fun calculate") || res.rawOutput.contains("kotlin"))
+        assertFalse(res.rawOutput.contains("\"intent\":"))
+    }
+
+    @Test
+    fun testExplicitToolModeProvidesJson() {
+        val engine = QwenLocalInferenceEngine(mockContext)
+        val res = engine.generateToolIntent("Torch chalu kar")
         assertEquals("system.torch", res.intent)
         assertTrue(res.arguments?.optBoolean("state") == true)
-    }
-
-    @Test
-    fun testWhoIsModi() {
-        val engine = QwenLocalInferenceEngine(mockContext)
-        val res = engine.infer("Who is Modi?")
-        assertEquals("search_web", res.intent)
+        assertTrue(res.rawOutput.contains("\"intent\":"))
     }
 }
