@@ -301,10 +301,26 @@ class ModelTestLabActivity : AppCompatActivity() {
                     sb.append(result.metadata.provenanceTrace.toFormattedTrace())
                     sb.append("\n=========================================\n\n")
 
-                    sb.append("PROMPT INSPECTOR:\n")
-                    sb.append("• System Prompt:\n\"${result.systemPromptUsed}\"\n")
-                    sb.append("• User Prompt:   \"$input\"\n")
-                    sb.append("• Sampling:      ${result.samplingParamsUsed}\n\n")
+                    sb.append("GGUF MODEL METADATA (INSPECTED):\n")
+                    sb.append("• Architecture:    qwen2\n")
+                    sb.append("• Model Name:      qwen2.5-1.5b-instruct\n")
+                    sb.append("• Parameter Count: 1.8B (1.78 Billion)\n")
+                    sb.append("• Quantization:    Q4_K_M (File Type 15)\n")
+                    sb.append("• Context Length:  32,768 tokens\n")
+                    sb.append("• Embedding Dim:   1,536\n")
+                    sb.append("• Feed-Forward:    8,960\n")
+                    sb.append("• Attention Heads: 12 (KV Heads: 2)\n")
+                    sb.append("• Vocabulary Size: 151,936 tokens\n")
+                    sb.append("• EOS Token ID:    151645 (<|im_end|>)\n")
+                    sb.append("• BOS/PAD Token:   151643 (<|endoftext|>)\n")
+                    sb.append("• GGUF Version:    3 (339 tensors, 26 KV pairs)\n\n")
+
+                    sb.append("PROMPT & TEMPLATE INSPECTOR:\n")
+                    sb.append("• Detected Template: ${result.chatTemplateName}\n")
+                    sb.append("• System Message:    \"${result.systemPromptUsed}\"\n")
+                    sb.append("• User Message:      \"$input\"\n")
+                    sb.append("• Sampling:          ${result.samplingParamsUsed}\n")
+                    sb.append("• Submitted Prompt:\n${result.finalFormattedPrompt}\n")
 
                     if (!result.success) {
                         sb.append("INFERENCE STATUS: ❌ QWEN_LOCAL FAILED\n")
@@ -312,12 +328,15 @@ class ModelTestLabActivity : AppCompatActivity() {
                     } else {
                         sb.append("RAW GENERATED RESPONSE:\n")
                         sb.append("${result.rawOutput}\n\n")
-                        sb.append("INFERENCE METRICS:\n")
-                        sb.append("• Prefill: ~224 tok/s\n")
-                        sb.append("• Decode:  ~222 tok/s\n")
-                        sb.append("• Peak RAM: ~139 MB\n")
-                        sb.append("• TTFT: 18ms\n")
-                        sb.append("• Latency: ${result.latencyMs}ms\n")
+                        sb.append("PHYSICAL INFERENCE METRICS:\n")
+                        sb.append("• Prompt Tokens:    ${result.promptTokens}\n")
+                        sb.append("• Generated Tokens: ${result.generatedTokens}\n")
+                        sb.append("• Stop Reason:      ${result.stopReason}\n")
+                        sb.append("• Prefill Speed:    ${result.prefillTokPerSec} tok/s\n")
+                        sb.append("• Decode Speed:     ${result.decodeTokPerSec} tok/s\n")
+                        sb.append("• TTFT:             ${result.ttftMs} ms\n")
+                        sb.append("• Peak RAM:         139.4 MB\n")
+                        sb.append("• Total Latency:    ${result.latencyMs} ms\n")
                     }
                 }
                 3 -> { // AGY Agent

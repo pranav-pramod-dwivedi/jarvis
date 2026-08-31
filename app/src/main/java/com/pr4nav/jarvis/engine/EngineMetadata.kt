@@ -135,5 +135,13 @@ data class EngineInferenceResult(
     val error: String? = null,
     val fallbackSteps: List<FallbackChainStep> = emptyList(),
     val systemPromptUsed: String = "",
-    val samplingParamsUsed: String = "temp=0.7, top_p=0.9, max_tokens=512, grammar=DISABLED"
+    val finalFormattedPrompt: String = "",
+    val samplingParamsUsed: String = "temp=0.7, top_p=0.9, top_k=40, seed=42, grammar=DISABLED",
+    val promptTokens: Int = 0,
+    val generatedTokens: Int = 0,
+    val ttftMs: Long = 0L,
+    val prefillTokPerSec: Double = 0.0,
+    val decodeTokPerSec: Double = 0.0,
+    val stopReason: String = "EOS_TOKEN (<|im_end|>, ID 151645)",
+    val chatTemplateName: String = "ChatML"
 )

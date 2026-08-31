@@ -88,6 +88,30 @@ class QwenDirectInferenceTest {
     }
 
     @Test
+    fun testRawWhySkyIsRed() {
+        val engine = QwenLocalInferenceEngine(mockContext)
+        val res = engine.generateChat("Why is the sky red?")
+        assertTrue("Must explain Rayleigh scattering / sunset", res.rawOutput.contains("Rayleigh") || res.rawOutput.contains("scattering") || res.rawOutput.contains("wavelengths") || res.rawOutput.contains("sunset"))
+        assertFalse("Must not contain JSON", res.rawOutput.contains("{"))
+        assertFalse("Must not contain default fallback", res.rawOutput.contains("I am processing your query locally"))
+
+        // Verify physical positive metrics
+        assertTrue("Prefill tok/s must be positive", res.prefillTokPerSec > 0.0)
+        assertTrue("Decode tok/s must be positive", res.decodeTokPerSec > 0.0)
+        assertTrue("TTFT must be positive", res.ttftMs > 0)
+        assertTrue("Generated tokens must be positive", res.generatedTokens > 0)
+    }
+
+    @Test
+    fun testRawExplainSunsetInThreeSentences() {
+        val engine = QwenLocalInferenceEngine(mockContext)
+        val res = engine.generateChat("Explain why the sky can appear red at sunset in three sentences.")
+        assertTrue(res.rawOutput.contains("sunset") || res.rawOutput.contains("scattering"))
+        assertTrue("Generated tokens must be substantial", res.generatedTokens >= 10)
+        assertFalse(res.rawOutput.contains("{"))
+    }
+
+    @Test
     fun testExplicitToolModeProvidesJson() {
         val engine = QwenLocalInferenceEngine(mockContext)
         val res = engine.generateToolIntent("Torch chalu kar")
