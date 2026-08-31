@@ -180,4 +180,11 @@ class StabilizationArchitectureTest {
         val metaMismatched = meta.copy(actualEngine = com.pr4nav.jarvis.engine.EngineType.NEEDLE_REFLEX, isRoutingIntegrityValid = false)
         assertFalse(metaMismatched.isRoutingIntegrityValid)
     }
+
+    @Test
+    fun testModelIntegrityCheckOnNonExistentFile() {
+        val nonExistent = java.io.File("/tmp/non_existent_model_test_${System.currentTimeMillis()}.gguf")
+        val sha256 = com.pr4nav.jarvis.engine.EngineMetadata.computeFileSha256(nonExistent)
+        assertEquals("FILE_NOT_FOUND", sha256)
+    }
 }

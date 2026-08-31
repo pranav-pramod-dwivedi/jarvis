@@ -286,7 +286,7 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Card 3: Small Language Model & Needle Engine -->
+            <!-- Card 3: Local Qwen3.5-2B GGUF Model Card -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -302,17 +302,18 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🧠 SLM &amp; Needle Runtime"
+                        android:text="🟢 Local Qwen3.5-2B (GGUF Q4)"
                         android:textColor="#FFFFFF"
                         android:textStyle="bold"
                         android:textSize="15sp" />
 
                     <TextView
+                        android:id="@+id/badge_qwen_status"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_alignParentEnd="true"
-                        android:text="ONLINE"
-                        android:textColor="#10B981"
+                        android:text="CHECKING…"
+                        android:textColor="#38BDF8"
                         android:textSize="11sp"
                         android:background="@drawable/bg_status_pill"
                         android:paddingStart="8dp"
@@ -325,10 +326,56 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="On-device deterministic tool calling runtime with Qwen 2.5 local reasoning &amp; Gemini Flash cloud fallback."
+                    android:text="On-device quantized LLM for offline tool calling, reasoning, and local intent extraction. Runs 100% private in application sandbox without internet."
                     android:textColor="#94A3B8"
                     android:textSize="12sp"
                     android:lineSpacingExtra="2dp" />
+
+                <TextView
+                    android:id="@+id/txt_qwen_details"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="File: qwen3.5-2b-instruct-q4.gguf · Size: ~1.04 GB"
+                    android:textColor="#64748B"
+                    android:textSize="11sp" />
+
+                <ProgressBar
+                    android:id="@+id/progress_qwen"
+                    style="@android:style/Widget.ProgressBar.Horizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="8dp"
+                    android:layout_marginTop="10dp"
+                    android:visibility="gone"
+                    android:progressDrawable="@drawable/bg_step_progress" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="12dp">
+
+                    <Button
+                        android:id="@+id/btn_download_qwen"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:text="Download"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:background="@drawable/bg_btn_action_pill" />
+
+                    <Button
+                        android:id="@+id/btn_verify_qwen"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:text="Verify &amp; Test"
+                        android:textColor="#00E5FF"
+                        android:textSize="12sp"
+                        android:background="@drawable/bg_btn_action_pill" />
+                </LinearLayout>
             </LinearLayout>
 
         </LinearLayout>

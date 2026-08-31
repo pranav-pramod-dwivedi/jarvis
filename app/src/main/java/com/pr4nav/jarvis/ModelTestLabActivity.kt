@@ -104,8 +104,13 @@ class ModelTestLabActivity : AppCompatActivity() {
             val needleLoaded = com.pr4nav.jarvis.needle.NeedleRuntime.isModelLoaded
             val needleStatusText = if (needleLoaded) "READY (Active & Loaded)" else "READY (Deterministic Grammar)"
 
-            val qwenInstalled = qwenEngine.isModelInstalled()
-            val qwenText = if (qwenInstalled) "READY (qwen3.5-2b.gguf · Loaded)" else "NOT LOADED (Missing GGUF file in /files/models)"
+            val activeModelId = com.pr4nav.jarvis.llm.LocalModelManager.getActiveModelId(this@ModelTestLabActivity)
+            val qwenIntegrity = com.pr4nav.jarvis.llm.LocalModelManager.checkFileIntegrity(this@ModelTestLabActivity, activeModelId)
+            val qwenText = if (qwenIntegrity.isReady) {
+                "READY (${qwenIntegrity.sizeBytes / 1024 / 1024} MB · GGUF Valid)"
+            } else {
+                "NOT LOADED (${qwenIntegrity.statusText})"
+            }
 
             val agyRep = AgyManager.checkStatus(4_000)
             val agyText = if (agyRep.isBinaryInstalled) "State: ${agyRep.state.name} | Port 5050: ${if (agyRep.isPortListening) "OPEN" else "STANDBY"} | Model: ${agyRep.activeModel}" else "NOT INSTALLED in PRoot"
@@ -201,6 +206,7 @@ class ModelTestLabActivity : AppCompatActivity() {
 
         thread {
             val t0 = System.currentTimeMillis()
+            CanonicalToolRegistry.init(this@ModelTestLabActivity)
             val sb = StringBuilder()
             sb.append("=========================================\n")
             sb.append("         INSPECTOR PIPELINE TRACE        \n")
@@ -210,7 +216,6 @@ class ModelTestLabActivity : AppCompatActivity() {
             when (selectedPos) {
                 0 -> { // Auto Router
                     sb.append("SELECTED ENGINE: ⚡ Auto Router\n\n")
-                    CanonicalToolRegistry.init(this@ModelTestLabActivity)
                     val classified = IntentClassifier.classify(input)
                     sb.append("INTENT CLASSIFICATION:\n")
                     sb.append("• Category: ${classified.category}\n")

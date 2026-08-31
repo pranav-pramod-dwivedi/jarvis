@@ -43,9 +43,9 @@ object LocalModelManager {
             displayName = "🟢 Local Qwen3.5-2B (2B Instruct - High Reasoning)",
             parameterSize = "2.0 Billion",
             quantFormat = "GGUF Q4_K_M",
-            downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
-            estimatedSizeBytes = 1_280_000_000L, // ~1.28 GB
-            minRamBytes = 2_500_000_000L,      // 2.5 GB free RAM
+            downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            estimatedSizeBytes = 1_117_320_736L, // ~1.04 GB
+            minRamBytes = 2_000_000_000L,      // 2.0 GB free RAM
             recommendedTps = 28.0
         ),
         ModelSpec(
@@ -53,14 +53,24 @@ object LocalModelManager {
             displayName = "🟢 Local Qwen3.5-2B Coder (Autonomous Coding)",
             parameterSize = "2.0 Billion",
             quantFormat = "GGUF Q4_K_M",
-            downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf",
-            estimatedSizeBytes = 1_320_000_000L, // ~1.32 GB
-            minRamBytes = 2_500_000_000L,      // 2.5 GB free RAM
+            downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
+            estimatedSizeBytes = 1_117_320_736L, // ~1.04 GB
+            minRamBytes = 2_000_000_000L,      // 2.0 GB free RAM
             recommendedTps = 26.5
         )
     )
 
     private val isDownloading = AtomicBoolean(false)
+
+    data class ModelIntegrityStatus(
+        val exists: Boolean,
+        val isReadable: Boolean,
+        val sizeBytes: Long,
+        val hasValidGgufHeader: Boolean,
+        val sha256: String,
+        val isReady: Boolean,
+        val statusText: String
+    )
 
     fun getModelsDir(context: Context): File {
         val dir = File(context.filesDir, "models")
@@ -74,9 +84,69 @@ object LocalModelManager {
         return File(getModelsDir(context), fileName)
     }
 
-    fun isModelInstalled(context: Context, modelId: String): Boolean {
+    fun checkFileIntegrity(context: Context, modelId: String): ModelIntegrityStatus {
         val f = getModelFile(context, modelId)
-        return f.exists() && f.length() >= 50_000_000L // Minimal valid GGUF file size
+        if (!f.exists()) {
+            return ModelIntegrityStatus(
+                exists = false,
+                isReadable = false,
+                sizeBytes = 0L,
+                hasValidGgufHeader = false,
+                sha256 = "FILE_NOT_FOUND",
+                isReady = false,
+                statusText = "NOT INSTALLED (File not found)"
+            )
+        }
+
+        val size = f.length()
+        val readable = f.canRead()
+        if (size < 50_000_000L || !readable) {
+            return ModelIntegrityStatus(
+                exists = true,
+                isReadable = readable,
+                sizeBytes = size,
+                hasValidGgufHeader = false,
+                sha256 = "INCOMPLETE_FILE",
+                isReady = false,
+                statusText = "CORRUPT OR INCOMPLETE (${size / 1024 / 1024} MB)"
+            )
+        }
+
+        var validHeader = false
+        try {
+            f.inputStream().use { stream ->
+                val magic = ByteArray(4)
+                if (stream.read(magic) == 4) {
+                    val magicStr = String(magic, Charsets.US_ASCII)
+                    validHeader = magicStr == "GGUF"
+                }
+            }
+        } catch (_: Exception) {}
+
+        val sha256 = com.pr4nav.jarvis.engine.EngineMetadata.computeFileSha256(f)
+        val isReady = validHeader && size >= 500_000_000L
+
+        val statusText = if (isReady) {
+            "READY (${size / 1024 / 1024} MB · GGUF Valid)"
+        } else if (validHeader) {
+            "PARTIAL (${size / 1024 / 1024} MB)"
+        } else {
+            "INVALID_HEADER"
+        }
+
+        return ModelIntegrityStatus(
+            exists = true,
+            isReadable = readable,
+            sizeBytes = size,
+            hasValidGgufHeader = validHeader,
+            sha256 = sha256,
+            isReady = isReady,
+            statusText = statusText
+        )
+    }
+
+    fun isModelInstalled(context: Context, modelId: String): Boolean {
+        return checkFileIntegrity(context, modelId).isReady
     }
 
     fun getActiveModelId(context: Context): String {

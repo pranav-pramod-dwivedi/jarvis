@@ -29,6 +29,11 @@ class ModelHubActivity : AppCompatActivity() {
     private lateinit var btnDownloadKokoro: Button
     private lateinit var btnTestKokoro: Button
 
+    private lateinit var badgeQwen: TextView
+    private lateinit var txtQwenDetails: TextView
+    private lateinit var progressQwen: ProgressBar
+    private lateinit var btnDownloadQwen: Button
+    private lateinit var btnVerifyQwen: Button
     private lateinit var btnDownloadAll: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,6 +56,12 @@ class ModelHubActivity : AppCompatActivity() {
         btnDownloadKokoro = findViewById(R.id.btn_download_kokoro)
         btnTestKokoro = findViewById(R.id.btn_test_kokoro)
 
+        badgeQwen = findViewById(R.id.badge_qwen_status)
+        txtQwenDetails = findViewById(R.id.txt_qwen_details)
+        progressQwen = findViewById(R.id.progress_qwen)
+        btnDownloadQwen = findViewById(R.id.btn_download_qwen)
+        btnVerifyQwen = findViewById(R.id.btn_verify_qwen)
+
         btnDownloadAll = findViewById(R.id.btn_download_all)
 
         setupListeners()
@@ -66,9 +77,19 @@ class ModelHubActivity : AppCompatActivity() {
             startDownload(ModelDownloadManager.MODEL_KOKORO_TTS)
         }
 
+        btnDownloadQwen.setOnClickListener {
+            startQwenDownload()
+        }
+
+        btnVerifyQwen.setOnClickListener {
+            verifyAndTestQwen()
+        }
+
         btnDownloadAll.setOnClickListener {
             startDownload(ModelDownloadManager.MODEL_WAKEWORD) {
-                startDownload(ModelDownloadManager.MODEL_KOKORO_TTS)
+                startDownload(ModelDownloadManager.MODEL_KOKORO_TTS) {
+                    startQwenDownload()
+                }
             }
         }
 
@@ -79,6 +100,64 @@ class ModelHubActivity : AppCompatActivity() {
 
         btnTestWakeWord.setOnClickListener {
             Toast.makeText(this, "Say 'Hey Jarvis' to test wake word detection", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun startQwenDownload() {
+        val activeModelId = com.pr4nav.jarvis.llm.LocalModelManager.getActiveModelId(this)
+        progressQwen.visibility = View.VISIBLE
+        progressQwen.progress = 0
+        btnDownloadQwen.isEnabled = false
+        badgeQwen.text = "DOWNLOADING…"
+        badgeQwen.setTextColor(Color.parseColor("#F59E0B"))
+
+        com.pr4nav.jarvis.llm.LocalModelManager.startDownload(
+            this,
+            activeModelId,
+            onProgress = { pct, downloaded, total ->
+                mainHandler.post {
+                    progressQwen.progress = pct
+                    badgeQwen.text = "$pct%"
+                    txtQwenDetails.text = "Downloading: %.1f MB / %.1f MB".format(
+                        downloaded / (1024.0 * 1024.0),
+                        total / (1024.0 * 1024.0)
+                    )
+                }
+            },
+            onComplete = { success, error ->
+                mainHandler.post {
+                    progressQwen.visibility = View.GONE
+                    btnDownloadQwen.isEnabled = true
+                    refreshStatus()
+                    if (success) {
+                        Toast.makeText(this, "Qwen GGUF model downloaded and verified!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "Download failed: $error", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        )
+    }
+
+    private fun verifyAndTestQwen() {
+        badgeQwen.text = "VERIFYING…"
+        badgeQwen.setTextColor(Color.parseColor("#38BDF8"))
+        kotlin.concurrent.thread {
+            val activeModelId = com.pr4nav.jarvis.llm.LocalModelManager.getActiveModelId(this)
+            val integrity = com.pr4nav.jarvis.llm.LocalModelManager.checkFileIntegrity(this, activeModelId)
+            mainHandler.post {
+                if (integrity.isReady) {
+                    badgeQwen.text = "READY ✓"
+                    badgeQwen.setTextColor(Color.parseColor("#10B981"))
+                    txtQwenDetails.text = "Path: ${integrity.statusText}\nSHA256: ${integrity.sha256.take(16)}..."
+                    Toast.makeText(this, "GGUF integrity verified! Ready for on-device inference.", Toast.LENGTH_SHORT).show()
+                } else {
+                    badgeQwen.text = "NOT READY"
+                    badgeQwen.setTextColor(Color.parseColor("#EF4444"))
+                    txtQwenDetails.text = "Status: ${integrity.statusText}"
+                    Toast.makeText(this, "Model not ready: ${integrity.statusText}", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -153,6 +232,21 @@ class ModelHubActivity : AppCompatActivity() {
             badgeKokoro.setTextColor(Color.parseColor("#EF4444"))
             btnDownloadKokoro.text = "Download"
             txtKokoroSize.text = "Required size: ~98 MB"
+        }
+
+        // Qwen GGUF status
+        val activeModelId = com.pr4nav.jarvis.llm.LocalModelManager.getActiveModelId(this)
+        val qwenIntegrity = com.pr4nav.jarvis.llm.LocalModelManager.checkFileIntegrity(this, activeModelId)
+        if (qwenIntegrity.isReady) {
+            badgeQwen.text = "INSTALLED ✓"
+            badgeQwen.setTextColor(Color.parseColor("#10B981"))
+            btnDownloadQwen.text = "Reinstall"
+            txtQwenDetails.text = "File: $activeModelId.gguf · Size: %.1f MB".format(qwenIntegrity.sizeBytes / (1024.0 * 1024.0))
+        } else {
+            badgeQwen.text = "NOT INSTALLED"
+            badgeQwen.setTextColor(Color.parseColor("#EF4444"))
+            btnDownloadQwen.text = "Download"
+            txtQwenDetails.text = "Status: ${qwenIntegrity.statusText}"
         }
     }
 
