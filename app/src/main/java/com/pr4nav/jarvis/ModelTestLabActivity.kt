@@ -231,6 +231,16 @@ class ModelTestLabActivity : AppCompatActivity() {
                     } else {
                         val norm = LanguageNormalizer.normalize(input)
                         if (norm != null) {
+                            if (norm.trace != null) {
+                                sb.append("LANGUAGE NORMALIZATION TRACE:\n")
+                                sb.append("• Detected Language: ${norm.trace.detectedLanguage}\n")
+                                sb.append("• Normalized: ${norm.trace.normalizedText}\n")
+                                sb.append("• Matched Object: ${norm.trace.matchedObject}\n")
+                                sb.append("• Matched Action: ${norm.trace.matchedAction}\n")
+                                sb.append("• Qwen: SKIPPED (Deterministic priority)\n")
+                                sb.append("• AGY: SKIPPED\n\n")
+                            }
+
                             val validation = ToolValidator.validate(this@ModelTestLabActivity, norm.tool, norm.args, input)
                             sb.append("SYSTEM VALIDATION:\n")
                             sb.append("• Tool Proposed: [${norm.tool}]\n")

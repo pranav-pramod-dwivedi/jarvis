@@ -60,6 +60,50 @@ class RoutingRegressionSuiteTest {
     }
 
     @Test
+    fun testMultilingualTorchDirectMatches() {
+        val enablePrompts = listOf(
+            "Torch chalu kar",
+            "Torch jala do",
+            "Torch on kar",
+            "Flashlight chalu kar",
+            "Phone torch on karo",
+            "Mobile torch jala do",
+            "Turn on flashlight",
+            "Turn on torch",
+            "Flashlight on kar"
+        )
+
+        for (p in enablePrompts) {
+            val res = LanguageNormalizer.normalize(p)
+            assertNotNull("Prompt '$p' must match deterministically", res)
+            assertEquals("Prompt '$p' must map to system.torch", "system.torch", res?.tool)
+            assertTrue("Prompt '$p' must have state=true", res?.args?.getBoolean("state") == true)
+            assertEquals("Prompt '$p' must have confidence 1.0", 1.0f, res?.confidence ?: 0f, 0.01f)
+        }
+
+        val disablePrompts = listOf(
+            "Torch band kar",
+            "Torch bujha do",
+            "Torch off kar",
+            "Flashlight band kar",
+            "Phone torch band karo",
+            "Mobile torch bujha do",
+            "Turn off flashlight",
+            "Turn off torch",
+            "Flashlight off kar",
+            "Torch bandh kar yaar"
+        )
+
+        for (p in disablePrompts) {
+            val res = LanguageNormalizer.normalize(p)
+            assertNotNull("Prompt '$p' must match deterministically", res)
+            assertEquals("Prompt '$p' must map to system.torch", "system.torch", res?.tool)
+            assertFalse("Prompt '$p' must have state=false", res?.args?.getBoolean("state") == true)
+            assertEquals("Prompt '$p' must have confidence 1.0", 1.0f, res?.confidence ?: 0f, 0.01f)
+        }
+    }
+
+    @Test
     fun testInformationQueryRejectsMediaPlay() {
         val query = "Who is Narendra Modi"
         val classified = IntentClassifier.classify(query)

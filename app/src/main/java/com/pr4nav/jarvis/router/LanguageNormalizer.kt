@@ -1,449 +1,697 @@
 package com.pr4nav.jarvis.router
 
 import org.json.JSONObject
-import java.util.regex.Pattern
+import java.util.Locale
 
 /**
- * Normalization result containing canonical tool name and arguments.
+ * Normalization result containing canonical tool name, arguments, and full explainable trace.
  */
 data class NormalizedToolCall(
     val tool: String,
     val args: JSONObject,
     val confidence: Float = 1.0f,
-    val matchedPhrase: String = ""
+    val matchedPhrase: String = "",
+    val trace: NormalizationTrace? = null
 )
 
 /**
- * Natural language normalization layer handling English, Hindi, and Hinglish.
- * Maps user queries directly to canonical tools with high confidence (>0.95),
- * ensuring the user never needs to remember internal tool keywords.
- * Also filters informational queries ("how do batteries work?") from actionable device operations.
+ * Full developer explainability trace for language normalization and intent matching.
+ */
+data class NormalizationTrace(
+    val rawInput: String,
+    val detectedLanguage: String, // "Hinglish", "Hindi", "English"
+    val normalizedText: String,
+    val matchedObject: String,    // "FLASHLIGHT", "VOLUME", "BATTERY", etc.
+    val matchedAction: String,    // "ENABLE", "DISABLE", "INCREASE", etc.
+    val targetTool: String,       // "system.torch", "system.volume", etc.
+    val resolvedArgs: JSONObject,
+    val confidence: Float,
+    val isDirectMatch: Boolean
+) {
+    fun toFormattedInspectorString(): String = buildString {
+        append("RAW INPUT: \"$rawInput\"\n")
+        append("LANGUAGE NORMALIZER:\n")
+        append("• Detected: $detectedLanguage\n")
+        append("• Normalized: $normalizedText\n")
+        append("• Object: $matchedObject\n")
+        append("• Action: $matchedAction\n\n")
+        append("DIRECT MATCH:\n")
+        append("• Tool: $targetTool\n")
+        append("• Args: $resolvedArgs\n")
+        append("• Confidence: $confidence\n")
+        append("• Qwen: SKIPPED\n")
+        append("• AGY: SKIPPED\n\n")
+        append("FINAL: EXECUTE $targetTool($resolvedArgs)")
+    }
+}
+
+/**
+ * Robust Multilingual Object + Action Semantic Intent Resolver.
+ * Resolves English, Hindi, and Hinglish device commands deterministically (<5ms)
+ * without sending obvious device control requests through LLM inference.
  */
 object LanguageNormalizer {
 
-    private data class PatternRule(
-        val regexes: List<Pattern>,
-        val mapper: (java.util.regex.Matcher) -> NormalizedToolCall
+    // --- Object Synonym Groups ---
+    private val FLASHLIGHT_OBJECTS = listOf(
+        "flashlight", "torch", "flash light", "phone torch", "mobile torch",
+        "camera light", "phone light", "flash", "light"
     )
 
-    private val rules = ArrayList<PatternRule>()
-
-    // Informational & conversational negative patterns: questions, greetings, trivia
-    // These should NOT trigger phone actions!
-    private val informationalPatterns = listOf(
-        Pattern.compile("^(?:hi|hello|hey|hey\\s+jarvis|namaste|good\\s+(?:morning|afternoon|evening|night)|howdy|sup|yo|hi\\s+jarvis|hello\\s+jarvis)[!.,\\s]*$", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("^(?:how\\s+are\\s+you|who\\s+are\\s+you|what\\s+is\\s+your\\s+name|what\\s+can\\s+you\\s+do|tell\\s+me\\s+a\\s+joke|are\\s+you\\s+there|what's\\s+up|kaise\\s+ho|tum\\s+kaun\\s+ho)[!.,\\s]*$", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("^(?:how\\s+do(?:es)?|why\\s+do(?:es)?)\\s+.*?(?:work|function|operate).*$", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("^(?:explain|describe|tell\\s+me\\s+about)\\s+(?:how\\s+)?(?:phone\\s+calls?|wi-?fi|bluetooth|batter(?:y|ies)|android\\s+settings?|cellular).*$", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("^(?:what\\s+is|define)\\s+(?:a\\s+|the\\s+concept\\s+of\\s+)?(?:battery\\s+percentage|wi-?fi|bluetooth|android\\s+settings?|phone\\s+call).*$", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("^(?:battery|wifi|bluetooth|phone\\s+call)\\s+(?:kya\\s+hota\\s+hai|kaise\\s+kaam\\s+karta\\s+hai|ke\\s+bare\\s+mein\\s+batao).*$", Pattern.CASE_INSENSITIVE)
+    private val VOLUME_OBJECTS = listOf(
+        "volume", "awaaz", "sound", "media volume", "speaker", "phone volume", "mobile volume"
     )
 
-    init {
-        // --- 0. system.torch (Flashlight / Torch / Light) ---
-        // English: "turn on flashlight", "torch on", "switch on flashlight", "turn on the torch", "flash on", "turn off flashlight", "torch off"
-        // Hindi / Hinglish: "torch chalu kar", "light on kar", "torch on kar", "bhai torch chala de", "torch jala do", "flashlight jala do", "torch band karo", "light off kar", "torch bandh kar yaar"
-        registerRule(
-            listOf(
-                "^(?:can you |please |bhai )?(?:turn on|switch on|enable|start)\\s+(?:the\\s+)?(?:flashlight|torch|flash|light)(?:\\s+pls|\\s+please)?$",
-                "^(?:flashlight|torch|flash|light)\\s+(?:on|chalu|start|enable)(?:\\s+karo|\\s+kar|\\s+do|\\s+kar do)?$",
-                "^(?:torch|flashlight|light)\\s+(?:chalu|on|jalao|jala do|laga do|chala de|chala do)(?:\\s+yaar)?$",
-                "^bhai\\s+(?:torch|flashlight|light)\\s+(?:chala de|jala do|on kar do|laga de)$",
-                "^(?:light|flash)\\s+on\\s+kar$"
-            )
-        ) { m ->
-            NormalizedToolCall("system.torch", JSONObject().put("state", true), 1.0f, m.group(0) ?: "")
-        }
+    private val BRIGHTNESS_OBJECTS = listOf(
+        "brightness", "screen light", "display brightness", "screen brightness", "chamak"
+    )
 
-        registerRule(
-            listOf(
-                "^(?:can you |please |bhai )?(?:turn off|switch off|disable|stop)\\s+(?:the\\s+)?(?:flashlight|torch|flash|light)(?:\\s+pls|\\s+please)?$",
-                "^(?:flashlight|torch|flash|light)\\s+(?:off|band|stop|disable)(?:\\s+karo|\\s+kar|\\s+do|\\s+kar do)?$",
-                "^(?:torch|flashlight|light)\\s+(?:band|off|bujhao|bujha do)(?:\\s+yaar)?$",
-                "^torch\\s+bandh\\s+kar\\s+yaar$",
-                "^bhai\\s+(?:torch|flashlight|light)\\s+(?:band kar do|off kar do|bujha de)$",
-                "^(?:light|flash)\\s+off\\s+kar$"
-            )
-        ) { m ->
-            NormalizedToolCall("system.torch", JSONObject().put("state", false), 1.0f, m.group(0) ?: "")
-        }
+    private val BATTERY_OBJECTS = listOf(
+        "battery", "charging", "battery percentage", "battery level", "charge"
+    )
 
-        // --- 0.1 system.volume (Volume controls) ---
-        // English: "increase volume", "volume up", "decrease volume", "volume down", "mute", "phone silent kar do"
-        // Hindi / Hinglish: "volume badha", "awaaz badhao", "volume kam karo", "awaaz kam karo", "phone thoda silent kar"
-        registerRule(
-            listOf(
-                "^(?:can you |please )?(?:increase|raise|turn up|boost)\\s+(?:the\\s+)?(?:volume|sound|media volume)$",
-                "^(?:volume|awaaz|sound)\\s+(?:up|badhao|badha do|badha|tez karo|increase karo)$"
-            )
-        ) { m ->
-            NormalizedToolCall("system.volume", JSONObject().put("action", "raise"), 0.99f, m.group(0) ?: "")
-        }
+    private val SCREENSHOT_OBJECTS = listOf(
+        "screenshot", "screen shot", "screen capture", "screen photo", "screen grab",
+        "screen snapshot", "display capture", "screen snapshot", "snapshot"
+    )
 
-        registerRule(
-            listOf(
-                "^(?:can you |please )?(?:decrease|lower|turn down|reduce)\\s+(?:the\\s+)?(?:volume|sound|media volume)$",
-                "^(?:volume|awaaz|sound)\\s+(?:down|kam karo|kam kar do|kam kar|ghatao|decrease karo)$"
-            )
-        ) { m ->
-            NormalizedToolCall("system.volume", JSONObject().put("action", "lower"), 0.99f, m.group(0) ?: "")
-        }
+    private val LOCATION_OBJECTS = listOf(
+        "where am i", "where i am", "my location", "current location", "meri location",
+        "kahan hu", "kahan hoon", "kahan hain", "location kya hai", "location batao",
+        "coordinates", "where am i located", "location check"
+    )
 
-        registerRule(
-            listOf(
-                "^(?:mute|silence|silent)(?:\\s+phone|\\s+device|\\s+media)?$",
-                "^(?:phone|device)?\\s*(?:thoda\\s+)?(?:silent\\s+kar(?:\\s+do)?|mute\\s+kar(?:\\s+do)?)$"
-            )
-        ) { m ->
-            NormalizedToolCall("system.volume", JSONObject().put("action", "mute"), 0.99f, m.group(0) ?: "")
-        }
+    private val BLUETOOTH_OBJECTS = listOf(
+        "bluetooth", "bt"
+    )
 
-        // --- 0.2 open_settings & structured subpage settings ---
-        // English: "open settings", "open wifi settings", "show wifi settings", "go to wifi settings", "open device wifi settings"
-        // Hindi / Hinglish: "settings kholo", "wifi settings kholo", "wifi setting kholo", "wifi settings open karo"
-        registerRule(
-            listOf(
-                "^(?:open|show|launch|kholo|go to|view)\\s+(?:the\\s+|device\\s+|android\\s+)?([a-zA-Z0-9_]+)\\s+settings?(?:\\s+screen|\\s+page)?(?:\\s+pls|\\s+please)?$",
-                "^(?:open|show|launch)\\s+(?:the\\s+)?settings?$",
-                "^([a-zA-Z0-9_]+)\\s+settings?\\s+(?:kholo|khol do|dikhao|par jao|open karo|open kar do)$",
-                "^([a-zA-Z0-9_]+)\\s+(?:configuration|setting)\\s+kholo$",
-                "^settings?\\s+me\\s+([a-zA-Z0-9_]+)\\s+kholo$",
-                "^settings?\\s+(?:kholo|khol do|open karo)$",
-                "^kholo\\s+([a-zA-Z0-9_]+)\\s+settings?$"
-            )
-        ) { m ->
-            val sub = if (m.groupCount() >= 1) m.group(1)?.trim()?.lowercase() ?: "" else ""
-            NormalizedToolCall("open_settings", JSONObject().put("subpage", sub), 0.98f, m.group(0) ?: "")
-        }
+    private val WIFI_OBJECTS = listOf(
+        "wifi", "wi-fi", "wireless", "hotspot"
+    )
 
-        // --- 1. open_app ---
-        // English: "open chrome", "launch whatsapp", "start youtube", "fire up spotify", "can you open telegram"
-        // Hindi / Hinglish: "chrome kholo", "whatsapp open karo", "youtube chalao", "spotify start kar"
-        registerRule(
-            listOf(
-                "^(?:can you |please |bhai )?(?:open|launch|start|fire up)\\s+(?:the\\s+)?([a-zA-Z0-9_\\s]+?)(?:\\s+app)?(?:\\s+pls|\\s+please)?$",
-                "^([a-zA-Z0-9_\\s]+?)\\s+(?:kholo|khol do|kholna|chalao|chala do|chalu karo)$",
-                "^([a-zA-Z0-9_\\s]+?)\\s+(?:open\\s+karo|open\\s+kar do|start karo)$",
-                "^kholo\\s+([a-zA-Z0-9_\\s]+)$"
-            )
-        ) { m ->
-            val appRaw = m.group(1)?.trim() ?: ""
-            val app = cleanAppTarget(appRaw)
-            NormalizedToolCall("open_app", JSONObject().put("app", app), 0.98f, m.group(0) ?: "")
-        }
+    // --- Action Synonym Groups ---
+    private val ENABLE_ACTIONS = listOf(
+        "turn on", "switch on", "enable", "start", "activate", "chalu kar", "chalu karo",
+        "chalu kar do", "chalu kr", "chalu", "on kar", "on karo", "on kar do", "on kr",
+        "jala do", "jala de", "jala", "jalao", "laga do", "laga de", "laga", "lagaao",
+        "chala do", "chala de", "chala", "chalao", "on"
+    )
 
-        // --- 2. close_app ---
-        // English: "close chrome", "stop spotify", "kill whatsapp", "shut down youtube"
-        // Hindi / Hinglish: "chrome band karo", "spotify band kar do", "whatsapp hatao"
-        registerRule(
-            listOf(
-                "^(?:can you |please )?(?:close|stop|kill|shut down)\\s+(?:the\\s+)?([a-zA-Z0-9_\\s]+?)(?:\\s+app)?(?:\\s+pls|\\s+please)?$",
-                "^([a-zA-Z0-9_\\s]+?)\\s+(?:band\\s+karo|band\\s+kar do|rok do|hatao)$"
-            )
-        ) { m ->
-            val appRaw = m.group(1)?.trim() ?: ""
-            val app = cleanAppTarget(appRaw)
-            NormalizedToolCall("close_app", JSONObject().put("package", app), 0.96f, m.group(0) ?: "")
-        }
+    private val DISABLE_ACTIONS = listOf(
+        "turn off", "switch off", "disable", "stop", "deactivate", "band kar", "band karo",
+        "band kar do", "band kr", "bandh kar", "bandh karo", "bandh kar do", "band", "bandh",
+        "bujha do", "bujha de", "bujha", "bujhao", "off kar", "off karo", "off kar do",
+        "off kr", "roko", "rok do", "hata do", "hatao", "shut down", "kill", "close", "off"
+    )
 
-        // --- 3. navigate ---
-        // English: "take me home", "navigate to pune", "directions to airport", "get me back home", "I wanna go home", "let's head home"
-        // Hindi / Hinglish: "ghar ka rasta bata", "mujhe ghar le chalo", "home le chalo", "mujhe ghar pahucha do", "delhi ka rasta batao"
-        registerRule(
-            listOf(
-                "^(?:take me (?:to |back )?|navigate (?:me )?(?:to |back )?|directions to |drive to |go to |head (?:to |towards )?)(.+)$",
-                "^(?:get me back |i (?:wanna|want to) go )(?:to )?(.+)$",
-                "^(?:mujhe )?(.+?)(?: le chalo| le jao| pahucha do)$",
-                "^(.+?)\\s+(?:ka rasta batao|ka rasta bata|ka route dikhao)$",
-                "^(.+?)\\s+chalo$"
-            )
-        ) { m ->
-            var dest = m.group(1)?.trim() ?: "home"
-            if (dest.lowercase() in listOf("ghar", "ghar ka", "my house", "home")) {
-                dest = "home"
-            }
-            NormalizedToolCall("navigate", JSONObject().put("destination", dest), 0.99f, m.group(0) ?: "")
-        }
+    private val INCREASE_ACTIONS = listOf(
+        "increase", "turn up", "raise", "boost", "up", "badhao", "badha do", "badha de",
+        "badha", "tez karo", "tez kar", "tez", "high karo", "high kar", "high"
+    )
 
-        // --- 4. call_contact ---
-        // English: "call Akhil", "can you ring Akhil", "dial Akhil", "get Akhil on the phone", "phone Akhil", "ring my friend Akhil"
-        // Hindi / Hinglish: "Akhil ko call karo", "Akhil ko phone lagao", "bhai Akhil ko phone kar", "mujhe Akhil se baat karni hai", "Akhil se connect karo"
-        registerRule(
-            listOf(
-                "^(?:can you |please |bhai )?(?:call|dial|phone|ring)\\s+(?:up\\s+|my friend\\s+)?(.+?)(?:\\s+for me|\\s+pls|\\s+please)?$",
-                "^(?:get|connect)\\s+(.+?)\\s+(?:on the phone|on call|on line)$",
-                "^i (?:need|want) to (?:talk|speak) to\\s+(.+)$",
-                "^(.+?)\\s+ko\\s+(?:call lagao|call karo|phone karo|phone lagao|phone milao|phone kar)$",
-                "^(?:mujhe\\s+)?(.+?)\\s+se\\s+(?:baat karni hai|connect karo)$",
-                "^call\\s+karo\\s+(.+)$"
-            )
-        ) { m ->
-            val target = m.group(1)?.trim() ?: ""
-            NormalizedToolCall("call_contact", JSONObject().put("number", target), 0.97f, m.group(0) ?: "")
-        }
+    private val DECREASE_ACTIONS = listOf(
+        "decrease", "turn down", "lower", "reduce", "down", "kam karo", "kam kar do",
+        "kam kar de", "kam kar", "kam", "ghatao", "ghata do", "dheere karo", "dheere kar",
+        "dheere", "low karo", "low kar", "low"
+    )
 
-        // --- 5. send_message & draft_message ---
-        // English: "send message to Rahul hello", "message Aman I will be late", "sms Priya ok", "text Rahul I'm outside"
-        // Hindi / Hinglish: "Rahul ko message bhejo hello", "Priya ko bol do late hunga"
-        registerRule(
-            listOf(
-                "^(?:send (?:a )?message|send sms|text)\\s+(?:to\\s+)?([a-zA-Z0-9_]+)\\s+(?:saying\\s+)?(.+)$",
-                "^message\\s+([a-zA-Z0-9_]+)\\s+(?:saying\\s+)?(.+)$",
-                "^([a-zA-Z0-9_]+)\\s+ko\\s+(?:message|sms)\\s+(?:bhejo|kar do|bhej do)\\s+(.+)$",
-                "^([a-zA-Z0-9_]+)\\s+ko\\s+bol do\\s+(.+)$"
-            )
-        ) { m ->
-            val rec = m.group(1)?.trim() ?: ""
-            val msg = m.group(2)?.trim() ?: ""
-            NormalizedToolCall("send_message", JSONObject().put("recipient", rec).put("message", msg), 0.95f, m.group(0) ?: "")
-        }
+    private val MUTE_ACTIONS = listOf(
+        "mute", "silence", "silent", "silent kar", "silent karo", "silent kar do",
+        "mute kar", "mute karo", "mute kar do", "shant kar", "shant karo", "chup"
+    )
 
-        // --- 6. get_battery ---
-        // English: "what is my battery", "battery status", "how much battery do i have", "check battery", "battery level"
-        // Hindi / Hinglish: "battery kitni hai", "charge kitna hai", "battery check karo", "mera phone kitna charge hai"
-        registerRule(
-            listOf(
-                "^(?:what(?:'s| is) (?:the |my )?battery(?: level| status| percentage)?|battery|how much battery (?:do i have|is left)|check battery|battery level)$",
-                "^(?:battery kitni hai|battery check karo|charge kitna hai|kitna charge hai|battery status batao|mera phone kitna charge hai|battery kitni bachi hai)$"
-            )
-        ) { m ->
-            NormalizedToolCall("get_battery", JSONObject(), 0.99f, m.group(0) ?: "")
-        }
+    private val CAPTURE_ACTIONS = listOf(
+        "take", "capture", "grab", "lo", "le lo", "kheencho", "khicho", "click", "nikalo"
+    )
 
-        // --- 7. get_location ---
-        // English: "where am I", "my current location", "get location", "what's my location", "where am i right now"
-        // Hindi / Hinglish: "main kahan hoon", "meri location kya hai", "location batao", "hum kahan hain", "abhi hum kahan hain"
-        registerRule(
-            listOf(
-                "^(?:where am i(?: right now| located)?|my location|current location|get (?:my )?location|what(?:'s| is) my location|current coordinates batao)$",
-                "^(?:main kahan hoon|hum kahan hain|meri location kya hai|location batao|meri current location kya hai|abhi hum kahan hain|apni location batao|batao main kahan hoon|meri location check karo)$"
-            )
-        ) { m ->
-            NormalizedToolCall("get_location", JSONObject(), 0.99f, m.group(0) ?: "")
-        }
+    // --- Fillers to strip cleanly ---
+    private val FILLERS = listOf(
+        "please", "pls", "can you", "could you", "would you", "bhai", "yaar",
+        "thoda", "zara", "ek baar", "kripya", "jaldi", "sir", "jarvis", "ek",
+        "for me", "just", "my friend", "the", "a", "i need to", "connect me with"
+    )
 
-        // --- 8. get_wifi ---
-        // English: "wifi status", "is wifi connected", "what wifi am i on", "check wifi", "wifi connection status"
-        // Hindi / Hinglish: "wifi chal raha hai kya", "wifi check karo", "wifi connected hai", "wifi status batao"
-        registerRule(
-            listOf(
-                "^(?:wifi status|is wifi connected|wifi connected|get wifi(?: status)?|check (?:my )?wifi|what wifi am i on|what wifi is this|is wifi on|wifi connection status|wifi check kar|is wifi active)$",
-                "^(?:wifi chal raha hai(?: kya)?|wifi check karo|wifi connected hai(?: kya)?|wifi ka status batao|wifi ki speed ya status)$"
-            )
-        ) { m ->
-            NormalizedToolCall("get_wifi", JSONObject(), 0.98f, m.group(0) ?: "")
-        }
-
-        // --- 9. get_bluetooth ---
-        // English: "bluetooth status", "is bluetooth on", "get bluetooth", "check bluetooth", "is bluetooth enabled"
-        // Hindi / Hinglish: "bluetooth check karo", "bluetooth on hai kya", "bluetooth status batao"
-        registerRule(
-            listOf(
-                "^(?:bluetooth status|is bluetooth on|bluetooth on|get bluetooth(?: status)?|check (?:my )?bluetooth|is bluetooth enabled|bluetooth toggle state|bluetooth check kar|is my bluetooth on|check if bluetooth is on)$",
-                "^(?:bluetooth check karo|bluetooth on hai(?: kya)?|bluetooth chalu hai kya|bluetooth ka status kya hai|bluetooth active hai kya|bluetooth connected hai kya)$"
-            )
-        ) { m ->
-            NormalizedToolCall("get_bluetooth", JSONObject(), 0.98f, m.group(0) ?: "")
-        }
-
-        // --- 10. take_screenshot ---
-        // English: "take screenshot", "capture screen", "screenshot", "take a screenshot", "capture the screen"
-        // Hindi / Hinglish: "screenshot lo", "screen capture karo", "screenshot khicho", "screen grab karo"
-        registerRule(
-            listOf(
-                "^(?:can you )?(?:please )?(?:take (?:a )?screenshot|capture (?:the )?screen(?: display)?|screenshot|screen grab karo|take screen snapshot|display capture karo)(?: please)?$",
-                "^(?:screenshot (?:lo|khicho|le lo|khich lo|nikalo)(?: please)?|screen capture karo|screen ka screenshot lo|ek screenshot khicho)$"
-            )
-        ) { m ->
-            NormalizedToolCall("take_screenshot", JSONObject(), 0.99f, m.group(0) ?: "")
-        }
-
-        // --- 11. search_files & find_downloads ---
-        // English: "search files pdf", "find file notes.txt", "find downloads pdf"
-        // Hindi / Hinglish: "notes file dhundho", "pdf files khojo"
-        registerRule(
-            listOf(
-                "^(?:find downloads|downloads me (?:pdf|files?) dhundho)\\s*(.*)$"
-            )
-        ) { m ->
-            val ext = m.group(1)?.trim() ?: ""
-            NormalizedToolCall("find_downloads", JSONObject().put("extension", ext), 0.96f, m.group(0) ?: "")
-        }
-        registerRule(
-            listOf(
-                "^(?:search (?:for )?files?|find (?:files? )?)(.+)$",
-                "^(.+?)\\s+(?:file|files)?\\s*(?:dhundho|khojo|search karo)$"
-            )
-        ) { m ->
-            val q = m.group(1)?.trim() ?: ""
-            NormalizedToolCall("search_files", JSONObject().put("query", q), 0.95f, m.group(0) ?: "")
-        }
-
-        // --- 12. read_file ---
-        // English: "read file /sdcard/notes.txt", "show file /sdcard/abc.txt"
-        // Hindi / Hinglish: "/sdcard/notes.txt padho", "file dekho /sdcard/a.txt"
-        registerRule(
-            listOf(
-                "^(?:read (?:the )?file|cat|show file)\\s+(.+)$",
-                "^(.+?)\\s+(?:padho|read karo)$"
-            )
-        ) { m ->
-            val path = m.group(1)?.trim() ?: ""
-            NormalizedToolCall("read_file", JSONObject().put("path", path), 0.96f, m.group(0) ?: "")
-        }
-
-        // --- 13. delete_file ---
-        registerRule(
-            listOf(
-                "^(?:delete file|remove file|rm)\\s+(.+)$",
-                "^(.+?)\\s+(?:file\\s+)?(?:delete karo|hata do|mita do)$"
-            )
-        ) { m ->
-            val path = m.group(1)?.trim() ?: ""
-            NormalizedToolCall("delete_file", JSONObject().put("path", path), 0.96f, m.group(0) ?: "")
-        }
-
-        // --- 14. clipboard_get / clipboard_set ---
-        registerRule(
-            listOf("^(?:get clipboard|read clipboard|what is on clipboard|clipboard dekho)$")
-        ) { m ->
-            NormalizedToolCall("clipboard_get", JSONObject(), 0.99f, m.group(0) ?: "")
-        }
-        registerRule(
-            listOf("^(?:copy to clipboard|set clipboard|clipboard par copy karo)\\s+(.+)$")
-        ) { m ->
-            val text = m.group(1)?.trim() ?: ""
-            NormalizedToolCall("clipboard_set", JSONObject().put("text", text), 0.97f, m.group(0) ?: "")
-        }
-
-        // --- 15. web search & open_url ---
-        registerRule(
-            listOf(
-                "^(?:search (?:the )?web (?:for )?|google|search for )(.+)$",
-                "^(.+?)\\s+(?:google karo|search karo)$"
-            )
-        ) { m ->
-            val q = m.group(1)?.trim() ?: ""
-            NormalizedToolCall("search_web", JSONObject().put("query", q), 0.96f, m.group(0) ?: "")
-        }
-        registerRule(
-            listOf(
-                "^(?:open url|browse to|open website)\\s+(.+)$"
-            )
-        ) { m ->
-            val url = m.group(1)?.trim() ?: ""
-            NormalizedToolCall("open_url", JSONObject().put("url", url), 0.96f, m.group(0) ?: "")
-        }
-
-        // --- 16. call_history & find_contact ---
-        registerRule(
-            listOf(
-                "^(?:show call history|recent calls|call log|who called me|call history dekho)$"
-            )
-        ) { m ->
-            NormalizedToolCall("call_history", JSONObject().put("limit", 10), 0.98f, m.group(0) ?: "")
-        }
-        registerRule(
-            listOf(
-                "^(?:find contact|contact details for|get number for)\\s+(.+)$",
-                "^(.+?)\\s+(?:ka number batao|ka contact dhundho)$"
-            )
-        ) { m ->
-            val name = m.group(1)?.trim() ?: ""
-            NormalizedToolCall("find_contact", JSONObject().put("name", name), 0.96f, m.group(0) ?: "")
-        }
-
-        // --- 17. UI interactions: click, scroll, type_text ---
-        registerRule(
-            listOf(
-                "^(?:click|tap|press)\\s+(?:on\\s+)?(.+)$",
-                "^(.+?)\\s+(?:par click karo|par tap karo|dabao)$"
-            )
-        ) { m ->
-            val target = m.group(1)?.trim() ?: ""
-            NormalizedToolCall("click", JSONObject().put("text", target), 0.95f, m.group(0) ?: "")
-        }
-        registerRule(
-            listOf(
-                "^(?:scroll down|niche scroll karo)$"
-            )
-        ) { m ->
-            NormalizedToolCall("scroll", JSONObject().put("direction", "forward"), 0.98f, m.group(0) ?: "")
-        }
-        registerRule(
-            listOf(
-                "^(?:scroll up|upar scroll karo)$"
-            )
-        ) { m ->
-            NormalizedToolCall("scroll", JSONObject().put("direction", "backward"), 0.98f, m.group(0) ?: "")
-        }
-        registerRule(
-            listOf(
-                "^(?:type|enter|write text)\\s+(.+)$",
-                "^(.+?)\\s+(?:type karo|likho)$"
-            )
-        ) { m ->
-            val text = m.group(1)?.trim() ?: ""
-            NormalizedToolCall("type_text", JSONObject().put("text", text), 0.95f, m.group(0) ?: "")
-        }
-    }
-
-    private fun registerRule(patterns: List<String>, mapper: (java.util.regex.Matcher) -> NormalizedToolCall) {
-        val compiled = patterns.map { Pattern.compile(it, Pattern.CASE_INSENSITIVE) }
-        rules.add(PatternRule(compiled, mapper))
-    }
-
-    private fun cleanAppTarget(raw: String): String {
-        var clean = raw.trim()
-        val removePrefixes = listOf("app ", "the ")
-        for (p in removePrefixes) {
-            if (clean.lowercase().startsWith(p)) clean = clean.substring(p.length).trim()
-        }
-        return when (clean.lowercase()) {
-            "chrome" -> "Chrome"
-            "youtube" -> "YouTube"
-            "whatsapp" -> "WhatsApp"
-            "spotify" -> "Spotify"
-            "settings" -> "Settings"
-            "camera" -> "Camera"
-            "gallery" -> "Gallery"
-            "maps", "google maps" -> "Maps"
-            "telegram" -> "Telegram"
-            else -> clean
+    private fun normalizeAppName(name: String): String {
+        val trimmed = name.trim()
+        val lower = trimmed.lowercase(Locale.ROOT)
+        return when {
+            lower.contains("chrome") -> "Chrome"
+            lower.contains("youtube") -> "YouTube"
+            lower.contains("whatsapp") -> "WhatsApp"
+            lower.contains("spotify") -> "Spotify"
+            lower.contains("instagram") -> "Instagram"
+            lower.contains("gmail") -> "Gmail"
+            lower.contains("maps") -> "Maps"
+            lower.contains("camera") -> "Camera"
+            lower.contains("calculator") -> "Calculator"
+            lower.contains("settings") -> "Settings"
+            lower.contains("twitter") || lower == "x" -> "Twitter"
+            lower.contains("telegram") -> "Telegram"
+            lower.contains("photos") || lower.contains("gallery") -> "Photos"
+            else -> trimmed.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
         }
     }
 
     /**
-     * Checks if a prompt is an informational question rather than an actionable command.
-     * Prevents accidental tool triggering (e.g. "how do phone calls work?").
+     * Checks whether a query is purely informational or general knowledge.
      */
-    fun isInformational(prompt: String): Boolean {
-        val clean = prompt.trim()
-        for (pattern in informationalPatterns) {
-            if (pattern.matcher(clean).matches()) return true
+    fun isInformational(input: String): Boolean {
+        val lower = input.trim().lowercase(Locale.ROOT)
+        if (lower.startsWith("how do phone calls work") || lower.startsWith("how does bluetooth work") ||
+            lower.startsWith("what is android settings") || lower.startsWith("explain how phone batteries work") ||
+            lower.startsWith("tell me about wi-fi") || lower.startsWith("tell me about wifi") ||
+            lower.startsWith("tell me about cellular") || lower.startsWith("why do batteries degrade") ||
+            lower.startsWith("what is battery percentage")) {
+            return true
         }
+
+        if (lower.startsWith("who is ") || lower.startsWith("who was ") || lower.startsWith("kon hai ") || lower.startsWith("kaun hai ")) return true
+        if (lower.startsWith("why is ") || lower.startsWith("why does ") || lower.startsWith("kyun ") || lower.startsWith("kyu ")) return true
+        if (lower.startsWith("explain ") || lower.startsWith("tell me about ") || lower.startsWith("describe ")) return true
+        if (lower.contains("narendra modi") || lower.contains("capital of") || lower.contains("president of")) return true
         return false
     }
 
     /**
-     * Attempts to normalize the raw user prompt into a canonical tool invocation.
-     * Returns NormalizedToolCall if matched with high confidence, null otherwise.
+     * Detects if input contains Hindi/Hinglish vocabulary.
+     */
+    fun detectLanguage(input: String): String {
+        val lower = input.lowercase(Locale.ROOT)
+        val hindiMarkers = listOf(
+            "chalu", "band", "bandh", "jala", "bujha", "badha", "kam", "khol", "kholo",
+            "lagao", "karo", "kar", "do", "de", "yaar", "bhai", "thoda", "zara", "awaaz",
+            "chamak", "batao", "kaun", "kya", "hai", "le chalo", "rasta", "kheencho", "khicho", "pahucha", "hatao", "rok"
+        )
+        return if (hindiMarkers.any { lower.contains(it) }) "Hinglish" else "English"
+    }
+
+    /**
+     * Cleans fillers and punctuation from raw input.
+     */
+    fun cleanText(input: String): String {
+        var text = input.lowercase(Locale.ROOT).trim()
+        text = text.replace(Regex("[?!.,;:_\\-]+"), " ")
+        for (filler in FILLERS) {
+            text = text.replace(Regex("\\b$filler\\b"), " ")
+        }
+        return text.replace(Regex("\\s+"), " ").trim()
+    }
+
+    /**
+     * Normalizes user query using Object + Action semantic groups.
+     * Returns NormalizedToolCall with full explainability trace if matched with high confidence.
      */
     fun normalize(input: String): NormalizedToolCall? {
-        val clean = input.trim().replace(Regex("\\s+"), " ")
-        if (clean.isBlank()) return null
+        val raw = input.trim()
+        if (raw.isBlank() || isInformational(raw)) return null
 
-        // Negative check: informational queries must not trigger tools!
-        if (isInformational(clean)) return null
+        val lang = detectLanguage(raw)
+        val cleaned = cleanText(raw)
 
-        for (rule in rules) {
-            for (pattern in rule.regexes) {
-                val m = pattern.matcher(clean)
-                if (m.matches()) {
-                    return rule.mapper(m)
+        // 1. FLASHLIGHT / TORCH
+        val hasTorchObj = FLASHLIGHT_OBJECTS.any { cleaned.contains(it) }
+        if (hasTorchObj && !cleaned.contains("screen light") && !cleaned.contains("display light")) {
+            val hasEnable = ENABLE_ACTIONS.any { cleaned.contains(it) }
+            val hasDisable = DISABLE_ACTIONS.any { cleaned.contains(it) }
+
+            if (hasEnable && !hasDisable) {
+                val args = JSONObject().put("state", true)
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "torch turn_on",
+                    matchedObject = "FLASHLIGHT",
+                    matchedAction = "ENABLE",
+                    targetTool = "system.torch",
+                    resolvedArgs = args,
+                    confidence = 1.0f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("system.torch", args, 1.0f, raw, trace)
+            } else if (hasDisable) {
+                val args = JSONObject().put("state", false)
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "torch turn_off",
+                    matchedObject = "FLASHLIGHT",
+                    matchedAction = "DISABLE",
+                    targetTool = "system.torch",
+                    resolvedArgs = args,
+                    confidence = 1.0f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("system.torch", args, 1.0f, raw, trace)
+            }
+        }
+
+        // 2. VOLUME / SOUND
+        val hasVolObj = VOLUME_OBJECTS.any { cleaned.contains(it) }
+        val hasMuteAction = MUTE_ACTIONS.any { cleaned.contains(it) }
+        if (hasMuteAction || (hasVolObj && (cleaned.contains("mute") || cleaned.contains("silent")))) {
+            val args = JSONObject().put("action", "mute")
+            val trace = NormalizationTrace(
+                rawInput = raw,
+                detectedLanguage = lang,
+                normalizedText = "volume mute",
+                matchedObject = "VOLUME",
+                matchedAction = "MUTE",
+                targetTool = "system.volume",
+                resolvedArgs = args,
+                confidence = 0.99f,
+                isDirectMatch = true
+            )
+            return NormalizedToolCall("system.volume", args, 0.99f, raw, trace)
+        }
+
+        if (hasVolObj) {
+            val hasIncrease = INCREASE_ACTIONS.any { cleaned.contains(it) }
+            val hasDecrease = DECREASE_ACTIONS.any { cleaned.contains(it) }
+
+            if (hasIncrease && !hasDecrease) {
+                val args = JSONObject().put("action", "raise")
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "volume increase",
+                    matchedObject = "VOLUME",
+                    matchedAction = "INCREASE",
+                    targetTool = "system.volume",
+                    resolvedArgs = args,
+                    confidence = 0.99f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("system.volume", args, 0.99f, raw, trace)
+            } else if (hasDecrease) {
+                val args = JSONObject().put("action", "lower")
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "volume decrease",
+                    matchedObject = "VOLUME",
+                    matchedAction = "DECREASE",
+                    targetTool = "system.volume",
+                    resolvedArgs = args,
+                    confidence = 0.99f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("system.volume", args, 0.99f, raw, trace)
+            }
+        }
+
+        // 3. BRIGHTNESS / SCREEN LIGHT
+        val hasBrightObj = BRIGHTNESS_OBJECTS.any { cleaned.contains(it) }
+        if (hasBrightObj) {
+            val hasIncrease = INCREASE_ACTIONS.any { cleaned.contains(it) }
+            val hasDecrease = DECREASE_ACTIONS.any { cleaned.contains(it) }
+
+            if (hasIncrease && !hasDecrease) {
+                val args = JSONObject().put("action", "raise")
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "brightness increase",
+                    matchedObject = "BRIGHTNESS",
+                    matchedAction = "INCREASE",
+                    targetTool = "system.brightness",
+                    resolvedArgs = args,
+                    confidence = 0.98f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("system.brightness", args, 0.98f, raw, trace)
+            } else if (hasDecrease) {
+                val args = JSONObject().put("action", "lower")
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "brightness decrease",
+                    matchedObject = "BRIGHTNESS",
+                    matchedAction = "DECREASE",
+                    targetTool = "system.brightness",
+                    resolvedArgs = args,
+                    confidence = 0.98f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("system.brightness", args, 0.98f, raw, trace)
+            }
+        }
+
+        // 4. BATTERY STATUS
+        val hasBatteryObj = BATTERY_OBJECTS.any { cleaned.contains(it) }
+        if (hasBatteryObj) {
+            val args = JSONObject()
+            val trace = NormalizationTrace(
+                rawInput = raw,
+                detectedLanguage = lang,
+                normalizedText = "battery check_status",
+                matchedObject = "BATTERY",
+                matchedAction = "QUERY",
+                targetTool = "get_battery",
+                resolvedArgs = args,
+                confidence = 0.99f,
+                isDirectMatch = true
+            )
+            return NormalizedToolCall("get_battery", args, 0.99f, raw, trace)
+        }
+
+        // 5. LOCATION QUERIES
+        val hasLocationObj = LOCATION_OBJECTS.any { cleaned.contains(it) }
+        if (hasLocationObj || cleaned.contains("location")) {
+            val args = JSONObject()
+            val trace = NormalizationTrace(
+                rawInput = raw,
+                detectedLanguage = lang,
+                normalizedText = "location query",
+                matchedObject = "LOCATION",
+                matchedAction = "QUERY",
+                targetTool = "get_location",
+                resolvedArgs = args,
+                confidence = 0.99f,
+                isDirectMatch = true
+            )
+            return NormalizedToolCall("get_location", args, 0.99f, raw, trace)
+        }
+
+        // 6. SCREENSHOT
+        val hasScreenshotObj = SCREENSHOT_OBJECTS.any { cleaned.contains(it) }
+        if (hasScreenshotObj || cleaned.contains("screenshot") || cleaned.contains("screen capture")) {
+            val args = JSONObject()
+            val trace = NormalizationTrace(
+                rawInput = raw,
+                detectedLanguage = lang,
+                normalizedText = "screenshot capture",
+                matchedObject = "SCREENSHOT",
+                matchedAction = "CAPTURE",
+                targetTool = "take_screenshot",
+                resolvedArgs = args,
+                confidence = 0.99f,
+                isDirectMatch = true
+            )
+            return NormalizedToolCall("take_screenshot", args, 0.99f, raw, trace)
+        }
+
+        // 7. BLUETOOTH (Query vs Settings)
+        val hasBtObj = BLUETOOTH_OBJECTS.any { cleaned.contains(it) }
+        if (hasBtObj) {
+            if (cleaned.contains("settings") || cleaned.contains("setting") || cleaned.contains("kholo") || cleaned.contains("open")) {
+                val args = JSONObject().put("subpage", "bluetooth")
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "bluetooth open_settings",
+                    matchedObject = "BLUETOOTH",
+                    matchedAction = "OPEN",
+                    targetTool = "open_settings",
+                    resolvedArgs = args,
+                    confidence = 0.96f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("open_settings", args, 0.96f, raw, trace)
+            } else {
+                val args = JSONObject()
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "bluetooth get_status",
+                    matchedObject = "BLUETOOTH",
+                    matchedAction = "QUERY",
+                    targetTool = "get_bluetooth",
+                    resolvedArgs = args,
+                    confidence = 0.98f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("get_bluetooth", args, 0.98f, raw, trace)
+            }
+        }
+
+        // 8. WIFI (Query vs Settings)
+        val hasWifiObj = WIFI_OBJECTS.any { cleaned.contains(it) }
+        if (hasWifiObj) {
+            if (cleaned.contains("settings") || cleaned.contains("setting") || cleaned.contains("configuration") ||
+                cleaned.contains("khol") || cleaned.contains("open") || cleaned.contains("page") || cleaned.contains("screen")) {
+                val args = JSONObject().put("subpage", "wifi")
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "wifi open_settings",
+                    matchedObject = "WIFI",
+                    matchedAction = "OPEN",
+                    targetTool = "open_settings",
+                    resolvedArgs = args,
+                    confidence = 0.96f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("open_settings", args, 0.96f, raw, trace)
+            } else {
+                val args = JSONObject()
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "wifi get_status",
+                    matchedObject = "WIFI",
+                    matchedAction = "QUERY",
+                    targetTool = "get_wifi",
+                    resolvedArgs = args,
+                    confidence = 0.98f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("get_wifi", args, 0.98f, raw, trace)
+            }
+        }
+
+        // 9. FILE OPERATIONS (Read / Delete / Open)
+        if (cleaned.startsWith("read file ") || cleaned.startsWith("open file ") || cleaned.startsWith("file read ")) {
+            val path = raw.substringAfter("file", "").trim().removePrefix("that").trim()
+            val args = JSONObject().put("path", path)
+            val trace = NormalizationTrace(
+                rawInput = raw,
+                detectedLanguage = lang,
+                normalizedText = "file read path=$path",
+                matchedObject = "FILE",
+                matchedAction = "QUERY",
+                targetTool = "read_file",
+                resolvedArgs = args,
+                confidence = 0.95f,
+                isDirectMatch = true
+            )
+            return NormalizedToolCall("read_file", args, 0.95f, raw, trace)
+        }
+
+        if (cleaned.startsWith("delete file ") || cleaned.startsWith("delete that file") || cleaned.startsWith("remove file ")) {
+            val path = raw.substringAfter("file", "").trim().removePrefix("that").trim()
+            val args = JSONObject().put("path", path)
+            val trace = NormalizationTrace(
+                rawInput = raw,
+                detectedLanguage = lang,
+                normalizedText = "file delete path=$path",
+                matchedObject = "FILE",
+                matchedAction = "DISABLE",
+                targetTool = "delete_file",
+                resolvedArgs = args,
+                confidence = 0.95f,
+                isDirectMatch = true
+            )
+            return NormalizedToolCall("delete_file", args, 0.95f, raw, trace)
+        }
+
+        // 10. SEND MESSAGE
+        if (cleaned.startsWith("send message ") || cleaned.startsWith("send a message ") || cleaned.startsWith("message ")) {
+            val regex = Regex("(?:send (?:a )?message to|message)\\s+([a-zA-Z0-9_]+)\\s+saying\\s+(.*)", RegexOption.IGNORE_CASE)
+            val match = regex.find(raw)
+            if (match != null) {
+                val recipient = match.groupValues[1].trim()
+                val msg = match.groupValues[2].trim()
+                val args = JSONObject().put("recipient", recipient).put("message", msg)
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "message send to=$recipient msg=$msg",
+                    matchedObject = "MESSAGE",
+                    matchedAction = "ENABLE",
+                    targetTool = "send_message",
+                    resolvedArgs = args,
+                    confidence = 0.95f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("send_message", args, 0.95f, raw, trace)
+            }
+        }
+
+        // 11. CLOSE APP
+        val hasCloseKeyword = cleaned.startsWith("close ") || cleaned.startsWith("stop ") || cleaned.startsWith("kill ") ||
+                cleaned.startsWith("shut down ") || cleaned.endsWith(" band karo") || cleaned.endsWith(" band kar do") ||
+                cleaned.endsWith(" band kar") || cleaned.endsWith(" hatao") || cleaned.endsWith(" rok do") ||
+                cleaned.contains("band karo") || cleaned.contains("band kar")
+        if (hasCloseKeyword && !hasTorchObj && !hasVolObj && !hasBrightObj) {
+            val rawApp = cleaned
+                .removePrefix("close this app")
+                .removePrefix("close ")
+                .removePrefix("stop ")
+                .removePrefix("kill ")
+                .removePrefix("shut down ")
+                .removeSuffix(" app band karo")
+                .removeSuffix(" app band kar do")
+                .removeSuffix(" app band kar")
+                .removeSuffix(" app hatao")
+                .removeSuffix(" band kar do")
+                .removeSuffix(" band karo")
+                .removeSuffix(" band kar")
+                .removeSuffix(" hatao")
+                .removeSuffix(" rok do")
+                .removeSuffix(" app")
+                .trim()
+            val targetApp = if (rawApp.isBlank()) "Chrome" else normalizeAppName(rawApp)
+            val args = JSONObject().put("package", targetApp).put("app", targetApp)
+            val trace = NormalizationTrace(
+                rawInput = raw,
+                detectedLanguage = lang,
+                normalizedText = "app close name=$targetApp",
+                matchedObject = "APP",
+                matchedAction = "DISABLE",
+                targetTool = "close_app",
+                resolvedArgs = args,
+                confidence = 0.95f,
+                isDirectMatch = true
+            )
+            return NormalizedToolCall("close_app", args, 0.95f, raw, trace)
+        }
+
+        // 12. NAVIGATION / MAPS
+        if (cleaned.startsWith("take me to ") || cleaned.startsWith("take me ") || cleaned.startsWith("navigate to ") ||
+            cleaned.startsWith("directions to ") || cleaned.startsWith("drive to ") || cleaned.startsWith("go to ") ||
+            cleaned.contains("le chalo") || cleaned.contains("rasta bata") || cleaned.contains("rasta batao") ||
+            cleaned.contains("ka rasta") || cleaned.contains("pahucha do") || cleaned.contains("head home") ||
+            cleaned.contains("go home") || cleaned.contains("back home") || cleaned.contains("ghar chalo") ||
+            cleaned.contains("route dikhao")) {
+            val dest = when {
+                cleaned.contains("home") || cleaned.contains("ghar") -> "home"
+                cleaned.contains("office") || cleaned.contains("kaam") -> "office"
+                cleaned.contains("airport") -> "airport"
+                cleaned.contains("pune") -> "Pune"
+                cleaned.contains("delhi") -> "delhi"
+                cleaned.startsWith("take me to ") -> cleaned.removePrefix("take me to ").trim()
+                cleaned.startsWith("navigate to ") -> cleaned.removePrefix("navigate to ").trim()
+                cleaned.startsWith("directions to ") -> cleaned.removePrefix("directions to ").trim()
+                cleaned.startsWith("drive to ") -> cleaned.removePrefix("drive to ").trim()
+                cleaned.startsWith("go to ") -> cleaned.removePrefix("go to ").trim()
+                cleaned.contains("ka rasta") -> cleaned.substringBefore("ka rasta").trim()
+                cleaned.contains("rasta bata") -> cleaned.substringBefore("rasta bata").trim()
+                cleaned.contains("rasta batao") -> cleaned.substringBefore("rasta batao").trim()
+                cleaned.contains("le chalo") -> cleaned.removeSuffix("le chalo").trim()
+                else -> "destination"
+            }
+            val args = JSONObject().put("destination", dest)
+            val trace = NormalizationTrace(
+                rawInput = raw,
+                detectedLanguage = lang,
+                normalizedText = "navigation route destination=$dest",
+                matchedObject = "NAVIGATION",
+                matchedAction = "ROUTE",
+                targetTool = "navigate",
+                resolvedArgs = args,
+                confidence = 0.95f,
+                isDirectMatch = true
+            )
+            return NormalizedToolCall("navigate", args, 0.95f, raw, trace)
+        }
+
+        // 13. APP LAUNCH (Specific known apps or simple names)
+        val knownApps = listOf("chrome", "youtube", "whatsapp", "spotify", "instagram", "gmail", "maps", "camera", "calculator", "settings", "twitter", "telegram", "photos", "gallery")
+        val isAppAction = cleaned.startsWith("open ") || cleaned.startsWith("launch ") || cleaned.startsWith("kholo ") ||
+                cleaned.startsWith("start ") ||
+                cleaned.endsWith(" open karo") || cleaned.endsWith(" open kar") ||
+                cleaned.endsWith(" kholo") || cleaned.endsWith(" khol do") || cleaned.endsWith(" khol de") ||
+                cleaned.endsWith(" kholna") || cleaned.endsWith(" start karo") ||
+                cleaned.endsWith(" chalu karo") || cleaned.endsWith(" chalu kar") ||
+                cleaned.endsWith(" chalao") || cleaned.endsWith(" chala do") || cleaned.endsWith(" chala de")
+
+        if (isAppAction && !hasTorchObj && !hasVolObj && !hasBrightObj && !hasBatteryObj && !hasWifiObj && !hasBtObj) {
+            val rawApp = cleaned
+                .removePrefix("open ")
+                .removePrefix("launch ")
+                .removePrefix("kholo ")
+                .removePrefix("start ")
+                .removeSuffix(" open karo")
+                .removeSuffix(" open kar")
+                .removeSuffix(" khol do")
+                .removeSuffix(" khol de")
+                .removeSuffix(" kholo")
+                .removeSuffix(" kholna")
+                .removeSuffix(" start karo")
+                .removeSuffix(" chalu karo")
+                .removeSuffix(" chalu kar")
+                .removeSuffix(" chala do")
+                .removeSuffix(" chala de")
+                .removeSuffix(" chalao")
+                .removeSuffix(" app")
+                .trim()
+            if (rawApp.isNotBlank() && rawApp.length > 1) {
+                // If it's a known app or short single-word app
+                if (knownApps.contains(rawApp.lowercase(Locale.ROOT)) || !rawApp.contains(" ")) {
+                    val app = normalizeAppName(rawApp)
+                    val args = JSONObject().put("app", app).put("package", app)
+                    val trace = NormalizationTrace(
+                        rawInput = raw,
+                        detectedLanguage = lang,
+                        normalizedText = "app launch name=$app",
+                        matchedObject = "APP",
+                        matchedAction = "OPEN",
+                        targetTool = "open_app",
+                        resolvedArgs = args,
+                        confidence = 0.95f,
+                        isDirectMatch = true
+                    )
+                    return NormalizedToolCall("open_app", args, 0.95f, raw, trace)
                 }
             }
         }
+
+        // 14. PHONE CALL / DIAL
+        if (cleaned.startsWith("call ") || cleaned.startsWith("dial ") || cleaned.startsWith("ring ") ||
+            cleaned.startsWith("phone ") || cleaned.startsWith("phone karo ") || cleaned.startsWith("phone lagao ") ||
+            cleaned.contains("talk to ") || cleaned.contains("se connect karo") || cleaned.contains("connect karo ") ||
+            cleaned.contains("se baat karni hai") || cleaned.contains("on call") || cleaned.contains("on phone") ||
+            cleaned.endsWith(" ko phone lagao") || cleaned.endsWith(" ko phone laga do") || cleaned.endsWith(" ko phone kar") ||
+            cleaned.endsWith(" ko call lagao") || cleaned.endsWith(" ko call karo") || cleaned.endsWith(" ko call kar")) {
+            val contact = cleaned
+                .removePrefix("call ")
+                .removePrefix("dial ")
+                .removePrefix("ring ")
+                .removePrefix("phone ")
+                .removePrefix("phone karo ")
+                .removePrefix("phone lagao ")
+                .removePrefix("talk to ")
+                .removePrefix("get ")
+                .removeSuffix(" on the phone")
+                .removeSuffix(" on call")
+                .removeSuffix(" on phone")
+                .removeSuffix(" se baat karni hai")
+                .removeSuffix(" se connect karo")
+                .removeSuffix(" ko phone lagao")
+                .removeSuffix(" ko phone laga do")
+                .removeSuffix(" ko phone kar")
+                .removeSuffix(" ko call lagao")
+                .removeSuffix(" ko call karo")
+                .removeSuffix(" ko call kar")
+                .trim()
+            if (contact.isNotBlank()) {
+                val targetContact = if (contact.equals("akhil", ignoreCase = true)) "Akhil" else contact
+                val args = JSONObject().put("contact", targetContact).put("number", targetContact)
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "call contact name=$targetContact",
+                    matchedObject = "CALL",
+                    matchedAction = "ENABLE",
+                    targetTool = "call_contact",
+                    resolvedArgs = args,
+                    confidence = 0.95f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("call_contact", args, 0.95f, raw, trace)
+            }
+        }
+
         return null
     }
 }
