@@ -32,9 +32,24 @@ class DiagnosticsActivity : AppCompatActivity() {
     }
 
     private fun runChecks() {
-        view.text = "Checking…\n"
+        view.text = "Running System Self-Test…\n"
         thread {
             val sb = StringBuilder()
+
+            // Run Single Automated System Self-Test
+            val selfTest = com.pr4nav.jarvis.diagnostics.SystemSelfTest.runAll(this@DiagnosticsActivity)
+            sb.append("=========================================\n")
+            sb.append("      JARVIS SYSTEM SELF-TEST (${selfTest.passedCount}/${selfTest.totalTests} PASS)\n")
+            sb.append("=========================================\n")
+            for (res in selfTest.results) {
+                val symbol = if (res.passed) "✅" else "❌"
+                sb.append("$symbol ${res.name} (${res.latencyMs}ms)\n")
+                sb.append("   • ${res.message}\n")
+                if (!res.passed && res.suggestedFix != null) {
+                    sb.append("   ⚠️ Suggested Fix: ${res.suggestedFix}\n")
+                }
+            }
+            sb.append("=========================================\n\n")
 
             sb.append(line("✓", "Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.SUPPORTED_ABIS.firstOrNull()}"))
 

@@ -51,7 +51,7 @@ data class OrchestratorResult(
 object JarvisOrchestrator {
 
     private const val TAG = "JarvisOrchestrator"
-    private const val DEFAULT_AGY_MODEL = "Gemini 3.5 Flash (Low)"
+    private const val DEFAULT_AGY_MODEL = "Gemini 3.7 Flash (Low)"
     private val mainHandler = Handler(Looper.getMainLooper())
 
     fun processRequest(

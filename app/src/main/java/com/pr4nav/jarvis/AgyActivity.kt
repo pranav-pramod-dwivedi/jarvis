@@ -27,7 +27,7 @@ import java.util.Locale
 class AgyActivity : AppCompatActivity() {
 
     companion object {
-        const val DEFAULT_FAST_MODEL = "Gemini 3.5 Flash (Low)"
+        const val DEFAULT_FAST_MODEL = "Gemini 3.7 Flash (Low)"
     }
 
     private lateinit var dotStatus: View

@@ -173,13 +173,14 @@ object Shell {
 
     /**
      * Autonomous AGY CLI execution inside PRoot Ubuntu.
-     * Uses Gemini 3.5 Flash (Low) without requiring an API key.
+     * Uses Gemini 3.7 Flash (Low) without requiring an API key.
      * Appends < /dev/null to prevent proot terminal hangs and tries Termux first,
      * falling back smoothly to root su.
      */
-    fun agy(prompt: String, timeoutMs: Long = 45_000): Res {
+    fun agy(prompt: String, model: String? = null, timeoutMs: Long = 45_000): Res {
         val escapedPrompt = prompt.replace("\"", "\\\"").replace("'", "'\\''")
-        val agyCmd = "agy -p \"$escapedPrompt\" --dangerously-skip-permissions --model \"Gemini 3.5 Flash (Low)\""
+        val sanitizedModel = com.pr4nav.jarvis.agy.AgyManager.sanitizeModel(model)
+        val agyCmd = "agy -p \"$escapedPrompt\" --continue --dangerously-skip-permissions --model \"$sanitizedModel\""
         val wrapped = wrapUbuntu(agyCmd)
 
         // Try TermuxBridge IPC first

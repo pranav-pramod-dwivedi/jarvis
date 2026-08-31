@@ -125,27 +125,52 @@ data class ToolResult(
     }
 }
 
+enum class ToolBackend {
+    ANDROID_NATIVE,
+    TERMUX,
+    UBUNTU_PROOT,
+    OPENCODE_WORKSPACE,
+    HYBRID
+}
+
+enum class ToolState {
+    AVAILABLE,
+    UNAVAILABLE,
+    BROKEN
+}
+
 /**
  * Canonical Tool definition.
- * Holds name, description, JSON schema for arguments, required permissions, timeout,
- * and execution function.
+ * Holds name, description, backend, JSON schema for arguments, required permissions, timeout,
+ * execution function, and verification function.
  */
 data class CanonicalToolDef(
     val name: String,
     val description: String,
     val argumentSchema: JSONObject,
+    val backend: ToolBackend = ToolBackend.ANDROID_NATIVE,
     val requiredPermissions: List<String> = emptyList(),
     val defaultTimeoutMs: Long = 10_000L,
+    val checkAvailability: (context: Context) -> ToolState = { ToolState.AVAILABLE },
+    val verify: (context: Context, args: JSONObject, result: ToolResult) -> Boolean = { _, _, res -> res.success },
     val execute: (context: Context, args: JSONObject) -> ToolResult
 ) {
     /**
-     * Executes the tool with timeout enforcement.
+     * Executes the tool with timeout enforcement and verification.
      */
     fun executeWithTimeout(context: Context, args: JSONObject, timeoutOverrideMs: Long? = null): ToolResult {
         val timeout = timeoutOverrideMs ?: defaultTimeoutMs
         val t0 = System.currentTimeMillis()
 
-        // 1. Argument validation against schema (checks required fields)
+        // 1. Availability check
+        val state = checkAvailability(context)
+        if (state == ToolState.UNAVAILABLE) {
+            return ToolResult.failure("BACKEND_UNAVAILABLE", "Tool '$name' backend ($backend) is unavailable", 0L)
+        } else if (state == ToolState.BROKEN) {
+            return ToolResult.failure("BACKEND_BROKEN", "Tool '$name' backend ($backend) is broken or corrupted", 0L)
+        }
+
+        // 2. Argument validation against schema (checks required fields)
         val requiredFields = argumentSchema.optJSONArray("required")
         if (requiredFields != null) {
             for (i in 0 until requiredFields.length()) {
@@ -156,14 +181,14 @@ data class CanonicalToolDef(
             }
         }
 
-        // 2. Permission check (if context can check permissions)
+        // 3. Permission check (if context can check permissions)
         for (perm in requiredPermissions) {
             try {
                 if (context.checkCallingOrSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                     return ToolResult.permissionDenied(perm, System.currentTimeMillis() - t0)
                 }
             } catch (_: Throwable) {
-                // If checking permission throws in unit test environments without Android framework, proceed
+                // In test environments without Android framework, proceed
             }
         }
 
@@ -176,7 +201,19 @@ data class CanonicalToolDef(
             val res = future.get(timeout, TimeUnit.MILLISECONDS)
             executor.shutdownNow()
             val totalLatency = System.currentTimeMillis() - t0
-            res.copy(latencyMs = totalLatency)
+
+            // 4. Verification Check
+            val isVerified = if (res.success) verify(context, args, res) else false
+            if (res.success && !isVerified) {
+                ToolResult(
+                    success = false,
+                    status = ToolStatus.FAILED,
+                    error = ToolError("VERIFICATION_FAILED", "Tool reported success but post-execution verification failed"),
+                    latencyMs = totalLatency
+                )
+            } else {
+                res.copy(latencyMs = totalLatency)
+            }
         } catch (e: TimeoutException) {
             future.cancel(true)
             executor.shutdownNow()
