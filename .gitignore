@@ -21,4 +21,9 @@ build/
 *.xml
 !app/src/**/*.xml
 .idea/
+.idea/*
 GATES.md
+kokoro_model/
+release_assets/
+*.onnx
+*.bin

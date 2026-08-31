@@ -25,7 +25,7 @@ object VoiceAssistantPreferences {
     }
 
     fun isHandsFreeEnabled(context: Context): Boolean =
-        getPrefs(context).getBoolean(KEY_HANDS_FREE_ENABLED, false) // Default: OFF
+        getPrefs(context).getBoolean(KEY_HANDS_FREE_ENABLED, true) // Default: ON (Always Listen)
 
     fun setHandsFreeEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_HANDS_FREE_ENABLED, enabled).apply()

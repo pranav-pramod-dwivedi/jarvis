@@ -137,6 +137,27 @@
         <activity
             android:name=".voice.VoiceSettingsActivity"
             android:exported="true" />
+        <activity
+            android:name=".voice.ModelHubActivity"
+            android:exported="true" />
+
+        <!-- Siri & Stark Floating Companion Overlay Service -->
+        <service
+            android:name=".companion.JarvisOverlayService"
+            android:exported="true"
+            android:foregroundServiceType="microphone" />
+
+        <!-- Quick Settings Tile -->
+        <service
+            android:name=".voice.JarvisTileService"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="JARVIS"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <receiver
             android:name=".TermuxResultReceiver"

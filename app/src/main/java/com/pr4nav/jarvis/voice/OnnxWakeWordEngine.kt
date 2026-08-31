@@ -242,14 +242,25 @@ class OnnxWakeWordEngine : WakeWordEngine {
     }
 
     private fun copyAssetToFile(context: Context, assetName: String): File {
+        val downloadedFile = File(ModelDownloadManager.getWakeWordDir(context), assetName)
+        if (downloadedFile.exists() && downloadedFile.length() > 0L) {
+            return downloadedFile
+        }
+
         val outFile = File(context.filesDir, assetName)
-        if (!outFile.exists() || outFile.length() == 0L) {
+        if (outFile.exists() && outFile.length() > 0L) {
+            return outFile
+        }
+
+        try {
             context.assets.open(assetName).use { input ->
                 FileOutputStream(outFile).use { output ->
                     input.copyTo(output)
                 }
             }
+        } catch (_: Exception) {
+            Log.d(TAG, "Asset $assetName not in APK bundle, relying on downloaded model")
         }
-        return outFile
+        return if (downloadedFile.exists()) downloadedFile else outFile
     }
 }

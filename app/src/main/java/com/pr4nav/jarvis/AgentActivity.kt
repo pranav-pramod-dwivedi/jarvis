@@ -139,6 +139,9 @@ class AgentActivity : AppCompatActivity() {
 
     private fun showAllPagesDialog() {
         val pages = arrayOf(
+            "🧠 AI Model Hub & Weights",
+            "✨ Floating Companion HUD Overlay",
+            "🎙️ Voice & Assistant Settings",
             "📁 File Manager & Storage Browser",
             "⚡ Connected Services & Local AI",
             "🛠️ Canonical Tool Playground",
@@ -153,14 +156,17 @@ class AgentActivity : AppCompatActivity() {
             .setTitle("JARVIS Pages Hub")
             .setItems(pages) { _, which ->
                 when (which) {
-                    0 -> startActivity(Intent(this, BrowserActivity::class.java))
-                    1 -> startActivity(Intent(this, ConnectedServicesActivity::class.java))
-                    2 -> startActivity(Intent(this, ToolPlaygroundActivity::class.java))
-                    3 -> startActivity(Intent(this, CommanderActivity::class.java))
-                    4 -> startActivity(Intent(this, TerminalActivity::class.java))
-                    5 -> startActivity(Intent(this, DiagnosticsActivity::class.java))
-                    6 -> startActivity(Intent(this, AgyActivity::class.java))
-                    7 -> startActivity(Intent(this, PermissionsActivity::class.java))
+                    0 -> startActivity(Intent(this, com.pr4nav.jarvis.voice.ModelHubActivity::class.java))
+                    1 -> com.pr4nav.jarvis.companion.JarvisOverlayService.showHud(this)
+                    2 -> startActivity(Intent(this, com.pr4nav.jarvis.voice.VoiceSettingsActivity::class.java))
+                    3 -> startActivity(Intent(this, BrowserActivity::class.java))
+                    4 -> startActivity(Intent(this, ConnectedServicesActivity::class.java))
+                    5 -> startActivity(Intent(this, ToolPlaygroundActivity::class.java))
+                    6 -> startActivity(Intent(this, CommanderActivity::class.java))
+                    7 -> startActivity(Intent(this, TerminalActivity::class.java))
+                    8 -> startActivity(Intent(this, DiagnosticsActivity::class.java))
+                    9 -> startActivity(Intent(this, AgyActivity::class.java))
+                    10 -> startActivity(Intent(this, PermissionsActivity::class.java))
                 }
             }
             .setNegativeButton("Close", null)

@@ -210,7 +210,11 @@ class JarvisVoiceService : Service() {
             wakeWordEngine = wakeEngine,
             onWakeWordDetected = { wakeWord ->
                 mainHandler.post {
-                    if (currentState == VoiceState.IDLE) {
+                    if (currentState == VoiceState.SPEAKING || voiceEngine?.isSpeaking() == true) {
+                        Log.i(TAG, "Barge-in interrupt received: Stopping speech playback")
+                        voiceEngine?.stopSpeaking()
+                    }
+                    if (currentState == VoiceState.IDLE || currentState == VoiceState.SPEAKING) {
                         VoiceInstrumentation.onWakeWordConfirmed(wakeWord, currentState.name)
                         updateState(VoiceState.WAKE_DETECTED, "Wake word confirmed: $wakeWord")
 
@@ -420,9 +424,12 @@ class JarvisVoiceService : Service() {
 
     private fun speakResponse(text: String, openConversation: Boolean) {
         mainHandler.post {
-            // Lock out acoustic monitor / STT during SPEAKING to prevent self-TTS activation
             updateState(VoiceState.SPEAKING, text)
-            stopAcousticDetector()
+            if (VoiceAssistantPreferences.isBargeInEnabled(applicationContext)) {
+                startAcousticDetector() // Keep acoustic detector active so saying "Jarvis" or speaking halts TTS immediately
+            } else {
+                stopAcousticDetector()
+            }
 
             voiceEngine?.speak(text, interrupt = true) {
                 if (openConversation && VoiceAssistantPreferences.isConversationMode(applicationContext)) {

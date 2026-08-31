@@ -340,8 +340,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun showDeveloperHubMenu() {
         val options = arrayOf(
-            "Toggle Developer Inspect Drawer",
+            "🧠 AI Model Hub & Weights",
+            "✨ Launch Floating HUD Companion",
             "🎙️ Voice Assistant Settings (Hands-Free)",
+            "Toggle Developer Inspect Drawer",
             "Agent Chat Stream (Dribbble UI)",
             "Canonical Tool Playground",
             "Connected Services & Local AI",
@@ -357,17 +359,19 @@ class MainActivity : AppCompatActivity() {
             .setTitle("JARVIS Pages & Developer Hub")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> devModeSheet.visibility = if (devModeSheet.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-                    1 -> startActivity(Intent(this, com.pr4nav.jarvis.voice.VoiceSettingsActivity::class.java))
-                    2 -> startActivity(Intent(this, AgentActivity::class.java))
-                    3 -> startActivity(Intent(this, ToolPlaygroundActivity::class.java))
-                    4 -> startActivity(Intent(this, ConnectedServicesActivity::class.java))
-                    5 -> startActivity(Intent(this, BrowserActivity::class.java))
-                    6 -> startActivity(Intent(this, CommanderActivity::class.java))
-                    7 -> startActivity(Intent(this, TerminalActivity::class.java))
-                    8 -> startActivity(Intent(this, DiagnosticsActivity::class.java))
-                    9 -> startActivity(Intent(this, AgyActivity::class.java))
-                    10 -> startActivity(Intent(this, PermissionsActivity::class.java))
+                    0 -> startActivity(Intent(this, com.pr4nav.jarvis.voice.ModelHubActivity::class.java))
+                    1 -> com.pr4nav.jarvis.companion.JarvisOverlayService.showHud(this)
+                    2 -> startActivity(Intent(this, com.pr4nav.jarvis.voice.VoiceSettingsActivity::class.java))
+                    3 -> devModeSheet.visibility = if (devModeSheet.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                    4 -> startActivity(Intent(this, AgentActivity::class.java))
+                    5 -> startActivity(Intent(this, ToolPlaygroundActivity::class.java))
+                    6 -> startActivity(Intent(this, ConnectedServicesActivity::class.java))
+                    7 -> startActivity(Intent(this, BrowserActivity::class.java))
+                    8 -> startActivity(Intent(this, CommanderActivity::class.java))
+                    9 -> startActivity(Intent(this, TerminalActivity::class.java))
+                    10 -> startActivity(Intent(this, DiagnosticsActivity::class.java))
+                    11 -> startActivity(Intent(this, AgyActivity::class.java))
+                    12 -> startActivity(Intent(this, PermissionsActivity::class.java))
                 }
             }
             .setNegativeButton("Close", null)

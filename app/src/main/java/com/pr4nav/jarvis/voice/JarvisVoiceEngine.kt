@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -26,6 +28,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
     private var speechRecognizer: SpeechRecognizer? = null
+    private val kokoroTts: KokoroTtsEngine by lazy { KokoroTtsEngine.getInstance(context) }
     @Volatile var isListening = false
         private set
 
@@ -49,10 +52,21 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
     }
 
     fun speak(text: String, interrupt: Boolean = true, onDone: (() -> Unit)? = null) {
-        if (!isTtsReady || tts == null) return
-
         if (interrupt) {
             stopSpeaking()
+        }
+
+        // 1. Prioritize on-device Kokoro-82M INT8 ONNX TTS
+        if (kokoroTts.isReady()) {
+            Log.i(TAG, "Speaking via Kokoro-82M INT8 ONNX Engine: \"$text\"")
+            kokoroTts.speak(text, speed = 1.0f, interrupt = interrupt, onDone = onDone)
+            return
+        }
+
+        // 2. Fallback to Android System TextToSpeech
+        if (!isTtsReady || tts == null) {
+            onDone?.invoke()
+            return
         }
 
         val utteranceId = "JARVIS_TTS_${System.currentTimeMillis()}"
@@ -63,7 +77,9 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
                     if (id == utteranceId) onDone()
                 }
                 @Deprecated("Deprecated in Java")
-                override fun onError(id: String?) {}
+                override fun onError(id: String?) {
+                    if (id == utteranceId) onDone()
+                }
             })
         }
 
@@ -72,27 +88,24 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
 
     fun stopSpeaking() {
         try {
+            kokoroTts.stop()
             if (tts?.isSpeaking == true) {
                 tts?.stop()
             }
         } catch (_: Exception) {}
     }
 
-    fun isSpeaking(): Boolean = tts?.isSpeaking == true
+    fun isSpeaking(): Boolean = kokoroTts.isSpeakingNow() || (tts?.isSpeaking == true)
 
     fun startListening(
-        activity: Activity,
+        activity: Activity? = null,
         onPartial: ((String) -> Unit)? = null,
         onResult: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        if (activity.isFinishing || activity.isDestroyed) {
-            onError("Activity is destroyed or finishing")
-            return
-        }
-
+        val targetContext = activity ?: context
         val hasAudio = try {
-            activity.checkCallingOrSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+            targetContext.checkCallingOrSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
                     android.content.pm.PackageManager.PERMISSION_GRANTED
         } catch (_: Exception) { false }
 
@@ -101,24 +114,29 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
             return
         }
 
-        activity.runOnUiThread {
-            if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+        val handler = Handler(Looper.getMainLooper())
+        handler.post {
+            if (activity != null && (activity.isFinishing || activity.isDestroyed)) return@post
             try {
                 stopSpeaking() // Interrupt TTS before listening
 
-                if (!SpeechRecognizer.isRecognitionAvailable(activity)) {
-                    // Fallback to RecognizerIntent dialog
-                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Listening to JARVIS...")
+                if (!SpeechRecognizer.isRecognitionAvailable(targetContext)) {
+                    if (activity != null) {
+                        // Fallback to RecognizerIntent dialog
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Listening to JARVIS...")
+                        }
+                        try {
+                            activity.startActivityForResult(intent, 9091)
+                        } catch (e: Exception) {
+                            onError("Speech recognition dialog unavailable: ${e.message}")
+                        }
+                    } else {
+                        onError("SpeechRecognizer is not available on this device")
                     }
-                    try {
-                        activity.startActivityForResult(intent, 9091)
-                    } catch (e: Exception) {
-                        onError("Speech recognition dialog unavailable: ${e.message}")
-                    }
-                    return@runOnUiThread
+                    return@post
                 }
 
                 try {
@@ -127,12 +145,12 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
                 speechRecognizer = null
 
                 val recognizer = try {
-                    SpeechRecognizer.createSpeechRecognizer(activity.applicationContext)
+                    SpeechRecognizer.createSpeechRecognizer(targetContext.applicationContext)
                 } catch (e: Exception) {
                     null
                 } ?: run {
                     onError("Failed to create SpeechRecognizer on this device")
-                    return@runOnUiThread
+                    return@post
                 }
 
                 speechRecognizer = recognizer
@@ -205,6 +223,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
 
     fun destroy() {
         try {
+            kokoroTts.destroy()
             speechRecognizer?.destroy()
             speechRecognizer = null
             tts?.stop()

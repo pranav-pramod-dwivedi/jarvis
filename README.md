@@ -1,17 +1,49 @@
-# JARVIS — Neural On-Device Personal Voice Assistant
+# JARVIS — Neural On-Device Autonomous Voice Assistant
 
-JARVIS is an autonomous, on-device AI personal assistant built for Android. It combines offline neural wake-word verification, low-latency canonical tool routing, local on-device SLM natural language understanding (Qwen 2.5), zero-API-key AGY autonomous CLI execution via Ubuntu PRoot / Termux, and hands-free background operation.
+[![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-blue.svg)](https://android.com)
+[![Voice Model](https://img.shields.io/badge/Neural%20TTS-Kokoro--82M%20INT8-cyan.svg)](https://github.com/pranav-pramod-dwivedi/jarvis/releases/tag/v1.0.0-models)
+[![Wake Word](https://img.shields.io/badge/KWS-openWakeWord%20ONNX-green.svg)](https://github.com/pranav-pramod-dwivedi/jarvis/releases/tag/v1.0.0-models)
+[![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
 
-**Author**: Pranav Pramod Dwivedi (`pranav-pramod`)
+**JARVIS** is an autonomous, on-device AI personal assistant built for Android that rivals Siri and Google Assistant. It features high-fidelity neural speech synthesis, 100% offline keyword spotting, dynamic floating companion overlays, on-screen context awareness, and a 3-tier hybrid intelligence pipeline (Needle + Local SLM + Autonomous AGY CLI).
+
+**Author & Maintainer**: Pranav Pramod Dwivedi ([@pranav-pramod-dwivedi](https://github.com/pranav-pramod-dwivedi))
 
 ---
 
-## 3-Tier Intelligence Architecture
+## 🚀 Key Highlights & Next-Gen Capabilities
+
+- **🔊 Kokoro-82M INT8 Neural Speech Synthesis (ONNX)**:
+  - High-fidelity 24kHz float PCM audio streaming with George British voice styling.
+  - On-device phoneme lexicon with 88,000+ word mappings and custom Jarvis tokenizations.
+  - **Sub-5ms Barge-in Interruption**: Saying *"Stop"* or speaking immediately halts active speech playback.
+
+- **🎙️ openWakeWord "Hey Jarvis" Keyword Spotter (ONNX)**:
+  - 3-stage neural pipeline (Mel-spectrogram 32 bins $\to$ 96-dim Google Speech Embedding $\to$ Classifier).
+  - Runs continuous 16kHz background inference at $<1\%$ battery with zero continuous cloud recognition loops.
+
+- **✨ Siri-Style & Stark Holographic Floating Companion HUD**:
+  - System-wide interactive overlay (`JarvisOverlayService`) accessible over any app (YouTube, Chrome, games).
+  - Real-time animated audio waveform visualizer (`StarkWaveformView`), live transcription ticker, and draggable compact bubble mode.
+
+- **📱 Context-Aware On-Screen AI Assistant**:
+  - Analyzes the currently active screen (`ScreenContextReader` via Accessibility) to summarize articles, extract codes, and answer questions like *"What's on my screen?"*.
+
+- **📦 On-Demand Zero-Bloat Model Hub**:
+  - Keeps APK sizes featherlight ($<15\text{ MB}$).
+  - Automatically downloads model suites from [Official GitHub Releases](https://github.com/pranav-pramod-dwivedi/jarvis/releases/tag/v1.0.0-models) with background progress bars and hash validation.
+
+- **⚡ Android Quick Settings Tile**:
+  - Instant one-tap access to voice listening and floating HUD directly from the notification shade.
+
+---
+
+## 🧠 3-Tier Intelligence Architecture
 
 ```
-User Voice / Text
-       │
-       ▼
+User Voice / Text / Screen Query
+               │
+               ▼
 ┌─────────────────────────────────────────────────────────┐
 │              JARVIS Voice Assistant Pipeline            │
 │                                                         │
@@ -23,17 +55,17 @@ User Voice / Text
 │    ├── embedding_model.onnx (Google speech embedding)   │
 │    └── hey_jarvis_v0.1.onnx (neural probability)        │
 │           │                                             │
-│           ▼ "Jarvis" confirmed (Prob ≥ 0.35)           │
-│  [Single Intentional SpeechRecognizer Session]          │
+│           ▼ "Jarvis" confirmed (Prob ≥ 0.28)           │
+│  [SpeechRecognizer Session / Floating HUD Overlay]      │
 └─────────────────────────┬───────────────────────────────┘
                           │ Recognized Utterance
                           ▼
 ┌─────────────────────────────────────────────────────────┐
 │              Unified Assistant Dispatcher               │
 │                                                         │
-│  Tier 1: Deterministic Needle 2 & Intent Router (<15ms) │
+│  Tier 1: Deterministic Needle & Intent Router (<15ms)   │
 │    ├── Direct regex & LanguageNormalizer (En / Hi)      │
-│    └── Canonical tools (Torch, WiFi, Apps, Calls, etc.) │
+│    └── Canonical tools (Flashlight, WiFi, Calls, Apps)  │
 │                                                         │
 │  Tier 2: On-Device Local SLM (Qwen 2.5 0.5B/1.5B GGUF)  │
 │    ├── Completely offline reasoning & tool translation  │
@@ -42,78 +74,67 @@ User Voice / Text
 │  Tier 3: Autonomous Ubuntu AGY CLI & Cloud Intelligence │
 │    ├── Zero-API-key AGY CLI inside Ubuntu PRoot / Termux│
 │    └── Gemini Cloud generative reasoning fallback       │
+└─────────────────────────┬───────────────────────────────┘
+                          │ Speech Response Output
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│         Kokoro-82M INT8 ONNX Neural TTS Engine          │
+│   (24kHz PCM Float Streaming + Instant Barge-in Stop)   │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Features
+## 📦 Neural Engine Models & Downloads
 
-### 1. Offline Neural Wake-Word Detection (`openWakeWord`)
-- **Completely offline**: Runs with ONNX Runtime (`ai.onnxruntime:onnxruntime-android`).
-- **Standardized acoustic pipeline**:
-  - Audio ingested at 16 kHz, 16-bit mono PCM.
-  - Streaming window of 1760 samples (1280 new + 480 historical context).
-  - Mel transform formula: `mel = raw_mel / 10.0 + 2.0`.
-  - 76-frame mel spectrogram buffer fed into Google Speech Embedding model (96 dimensions).
-  - 16-frame embedding sliding buffer fed into `hey_jarvis_v0.1.onnx`.
-- **Zero false triggers**: SpeechRecognizer is never run in an infinite restart loop; it is triggered only upon confirmed neural wake detection.
+AI model weights are hosted on GitHub Releases and downloaded on-demand:
 
-### 2. Hands-Free Background Operation
-- Runs as an Android Foreground Service (`JarvisVoiceService`) with `FOREGROUND_SERVICE_TYPE_MICROPHONE`.
-- Continues running when the app is minimized or the screen is locked.
-- Supports **Barge-In Interruption**: User can say "Stop", "Chup", or start speaking to instantly halt TTS playback.
-- Configurable **Follow-Up Conversation Window**: Automatically listens for subsequent commands without requiring the wake word again.
-
-### 3. Companion Mode & Fluid UX
-- Dribbble & Awwwards-inspired glowing orb UI with animated breathing, listening, and processing states.
-- Clean assistant execution cards displaying step-by-step thinking, command status, and tool execution logs.
-- Quick navigation hub between Agent Chat Stream, Voice Settings, Connected Services, and Diagnostics.
-
-### 4. Canonical Tool Execution & Termux Bridge
-- Resolves contact names and executes direct phone calls (`CallTool`).
-- Navigation intent resolution for queries like *"take me home"* or *"ghar ka rasta bata"*.
-- System hardware controls: Flashlight, Volume, Camera, Alarms, Battery status.
-- Termux headless `RUN_COMMAND` integration for local bash and AGY Python agent execution.
+| Model Suite | Size (Compressed) | Uncompressed | Download URL |
+| :--- | :--- | :--- | :--- |
+| **openWakeWord Hey Jarvis ONNX** | 2.9 MB | ~3.5 MB | [openwakeword-models.zip](https://github.com/pranav-pramod-dwivedi/jarvis/releases/download/v1.0.0-models/openwakeword-models.zip) |
+| **Kokoro-82M INT8 Neural TTS** | 61 MB | ~98 MB | [kokoro-tts-v1.0.zip](https://github.com/pranav-pramod-dwivedi/jarvis/releases/download/v1.0.0-models/kokoro-tts-v1.0.zip) |
 
 ---
 
-## Project Structure
+## 🛠️ Project Structure
 
 ```
 app/src/main/
-├── assets/
-│   ├── melspectrogram.onnx      # Audio PCM to 32-bin log-mel spectrogram
-│   ├── embedding_model.onnx     # Mel frames to 96-dim speech embedding
-│   ├── hey_jarvis_v0.1.onnx     # Neural classifier for "Hey Jarvis"
-│   └── agy-daemon / needle      # Autonomous agent daemon scripts
 ├── java/com/pr4nav/jarvis/
-│   ├── MainActivity.kt          # Main glowing orb UI and companion mode
-│   ├── AgentActivity.kt         # Live execution stream with thinking/tool cards
+│   ├── MainActivity.kt               # Futuristic Arc-Reactor orb UI
+│   ├── AgentActivity.kt              # Interactive Chat stream with execution cards
+│   ├── JarvisAccessibilityService.kt # Screen reader & UI automation
+│   ├── companion/
+│   │   ├── JarvisOverlayService.kt   # System-wide floating HUD overlay
+│   │   └── CompanionManager.kt       # Proactive assistant signals
+│   ├── gui/
+│   │   └── StarkWaveformView.kt      # Glowing multi-phase sine wave visualizer
+│   ├── capabilities/
+│   │   ├── ScreenContextReader.kt    # On-screen text analyzer
+│   │   └── CanonicalToolRegistry.kt  # Android system & hardware tools
 │   ├── voice/
-│   │   ├── OnnxWakeWordEngine.kt    # Production streaming ONNX wake engine
-│   │   ├── AcousticWakeDetector.kt  # AudioRecord PCM stream reader
-│   │   ├── JarvisVoiceService.kt    # Persistent Hands-Free foreground service
-│   │   ├── JarvisVoiceEngine.kt     # Android TextToSpeech wrapper
-│   │   └── VoiceSettingsActivity.kt # Hands-free, barge-in, & threshold settings
-│   ├── router/
-│   │   ├── JarvisIntentRouter.kt    # Multi-tier intent router
-│   │   └── NeedleEngine.kt          # Fast deterministic pattern matching
-│   └── tools/
-│       ├── CanonicalToolRegistry.kt # Registry of device and system tools
-│       └── CanonicalTool.kt         # Tool interface & standard definitions
+│   │   ├── KokoroTtsEngine.kt        # Kokoro-82M neural TTS synthesizer
+│   │   ├── OnnxWakeWordEngine.kt     # openWakeWord 3-stage KWS engine
+│   │   ├── ModelDownloadManager.kt   # GitHub Release model downloader & extractor
+│   │   ├── ModelHubActivity.kt       # Model management UI & download center
+│   │   ├── JarvisVoiceService.kt     # Hands-free background service
+│   │   ├── JarvisTileService.kt      # Android Quick Settings tile
+│   │   └── VoiceAssistantPreferences.kt
+│   └── router/
+│       ├── UnifiedAssistantDispatcher.kt
+│       └── NeedleEngine.kt
+└── res/
+    ├── layout/
+    │   ├── activity_main.xml
+    │   ├── activity_agent.xml
+    │   ├── activity_model_hub.xml
+    │   └── layout_jarvis_floating_hud.xml
+    └── drawable/
 ```
 
 ---
 
-## Getting Started
-
-### Prerequisites
-- Android Studio Ladybug or later
-- Android device running Android 10+ (API 29+) with developer options & ADB enabled
-- (Optional) [Termux](https://github.com/termux/termux-app) installed on the device for Linux tools
-
-### Build & Installation
+## 🔧 Building & Installation
 
 1. **Clone the repository**:
    ```bash
@@ -121,17 +142,18 @@ app/src/main/
    cd jarvis
    ```
 
-2. **Build and install debug APK**:
+2. **Build and Install Debug APK**:
    ```bash
    ./gradlew assembleDebug
    adb install -r app/build/outputs/apk/debug/app-debug.apk
    ```
 
-3. **Grant Required Permissions**:
+3. **Grant Permissions**:
    ```bash
    adb shell pm grant com.pr4nav.jarvis android.permission.RECORD_AUDIO
    adb shell pm grant com.pr4nav.jarvis android.permission.CALL_PHONE
    adb shell pm grant com.pr4nav.jarvis android.permission.READ_CONTACTS
+   adb shell appops set com.pr4nav.jarvis SYSTEM_ALERT_WINDOW allow
    ```
 
 4. **Launch JARVIS**:
@@ -141,7 +163,7 @@ app/src/main/
 
 ---
 
-## License
+## 📄 License
 
-Copyright (c) 2026 Pranav Pramod Dwivedi. All rights reserved.
+Copyright (c) 2026 Pranav Pramod Dwivedi. All rights reserved.  
 Distributed under the Apache 2.0 License.
