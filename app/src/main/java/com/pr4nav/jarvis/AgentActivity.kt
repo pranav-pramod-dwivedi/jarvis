@@ -518,56 +518,30 @@ class AgentActivity : AppCompatActivity() {
     }
 
     private fun handle(q: String) {
-        // Step 1: Route through JarvisIntentRouter
-        runOnUiThread {
-            showThinking("Resolving action…", "Searching canonical capabilities")
-        }
+        val lower = q.trim().lowercase()
+        val arg = q.trim().split(" ", limit = 2).getOrNull(1)?.trim() ?: ""
 
-        val routed = com.pr4nav.jarvis.router.JarvisIntentRouter.routeAndExecute(this, q) { res ->
-            runOnUiThread {
-                hideThinking()
-                val steps = mutableListOf<String>()
-                steps.add("Intent parsed: \"$q\"")
-                if (res.capabilities.isNotEmpty()) {
-                    steps.add("Capabilities triggered: ${res.capabilities.joinToString { "${it.icon} ${it.label}" }}")
-                }
-
-                addExecutionStepCard(
-                    title = if (res.matched) "Action Completed ✓" else "Action Completed with Warnings",
-                    steps = steps,
-                    isSuccess = res.matched,
-                    finalSummary = res.executionSummary
-                )
-                updateCtx()
-            }
-        }
-
-        if (routed) return
-
-        // Step 2: Handle Built-in CLI & Agent Commands
-        val lower = q.lowercase()
-        val arg = q.split(" ", limit = 2).getOrNull(1)?.trim() ?: ""
-
+        // Built-in Developer Utilities
         when {
             lower == "help" -> runOnUiThread {
                 hideThinking()
                 addExecutionStepCard(
-                    title = "JARVIS Help & Commands",
+                    title = "⚙️ JARVIS Developer & Command Reference",
                     steps = listOf(
-                        "Natural Language: \"call Akhil\", \"open Spotify\", \"take screenshot\"",
-                        "System: pwd, ls [path], read <path>, write <path> <text>",
-                        "Shell: run <cmd> (executes in Termux)",
+                        "Natural Voice & Chat: \"hi\", \"what is quantum computing\", \"take me home\"",
+                        "Device Control: \"turn on flashlight\", \"set volume 80%\", \"take screenshot\"",
+                        "Linux System: pwd, ls [path], run <cmd> (Termux shell)",
                         "Tools: tools (lists all 23+ canonical tools)"
                     ),
                     isSuccess = true,
-                    finalSummary = "Available commands loaded."
+                    finalSummary = "Reference loaded."
                 )
             }
 
             lower == "pwd" -> runOnUiThread {
                 hideThinking()
                 addExecutionStepCard(
-                    title = "Current Working Directory",
+                    title = "📁 Current Working Directory",
                     steps = listOf("Resolved from SessionState"),
                     isSuccess = true,
                     finalSummary = "cwd: ${SessionState.dir}"
@@ -581,7 +555,7 @@ class AgentActivity : AppCompatActivity() {
                 runOnUiThread {
                     hideThinking()
                     addExecutionStepCard(
-                        title = "Directory Listing: $p",
+                        title = "📁 Directory Listing: $p",
                         steps = items,
                         isSuccess = true,
                         finalSummary = "Found ${list.size} items in $p"
@@ -594,7 +568,7 @@ class AgentActivity : AppCompatActivity() {
                 CmdGuard.check(arg)?.let { err ->
                     runOnUiThread {
                         hideThinking()
-                        addExecutionStepCard("Command Blocked", listOf(err), false, "Security guard prevented execution.")
+                        addExecutionStepCard("⚠️ Command Blocked", listOf(err), false, "Security guard prevented execution.")
                     }
                     return
                 }
@@ -602,7 +576,7 @@ class AgentActivity : AppCompatActivity() {
                 runOnUiThread {
                     hideThinking()
                     addExecutionStepCard(
-                        title = "Termux Shell: $arg",
+                        title = "💻 Termux Shell: $arg",
                         steps = listOf("Exit code: ${r.rc}", "Execution time: ${r.ms}ms", "Via: ${r.via}"),
                         isSuccess = r.rc == 0,
                         finalSummary = if (r.out.isNotBlank()) r.out.take(1000) else if (r.err.isNotBlank()) r.err.take(500) else "(no output)"
@@ -616,7 +590,7 @@ class AgentActivity : AppCompatActivity() {
                 runOnUiThread {
                     hideThinking()
                     addExecutionStepCard(
-                        title = "Registered Canonical Tools",
+                        title = "🛠️ Registered Canonical Tools",
                         steps = cat.lines().take(12),
                         isSuccess = true,
                         finalSummary = "All canonical tools ready for autonomous execution."
@@ -625,25 +599,30 @@ class AgentActivity : AppCompatActivity() {
             }
 
             else -> {
-                // Tier 1 -> Tier 2 -> Tier 3: Unified Autonomous Pipeline
+                // Unified Model Routing: Qwen Local SLM Check -> Cloud Gemini 2.0 Flash / Needle Escalation
                 runOnUiThread {
-                    showThinking("Processing request…", "Analyzing intent through Unified Intelligence")
+                    showThinking("Evaluating intent…", "Asking Qwen 2.5 Local SLM first...")
                 }
                 com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(this, q) { res ->
                     runOnUiThread {
                         hideThinking()
-                        val tierTitle = when (res.source) {
-                            com.pr4nav.jarvis.router.ExecutionSource.DETERMINISTIC_NEEDLE -> "Needle 2 Deterministic Action"
-                            com.pr4nav.jarvis.router.ExecutionSource.LOCAL_LLM -> "On-Device Local SLM"
-                            com.pr4nav.jarvis.router.ExecutionSource.CLOUD_LLM -> "Autonomous Cloud Intelligence (AGY / Gemini)"
-                            com.pr4nav.jarvis.router.ExecutionSource.FALLBACK -> "Assistant Response"
+                        val steps = mutableListOf<String>()
+                        if (res.thinkingTrace.isNotBlank()) {
+                            val traceLines = res.thinkingTrace
+                                .replace("<think>", "")
+                                .replace("</think>", "")
+                                .trim()
+                                .lines()
+                                .map { it.trim() }
+                                .filter { it.isNotEmpty() }
+                            steps.addAll(traceLines)
+                        } else {
+                            steps.add("• Model: ${res.modelName}")
+                            steps.add("• Latency: ${res.latencyMs}ms")
                         }
-                        val steps = listOf(
-                            "Source: ${res.source.name}",
-                            "Latency: ${res.latencyMs}ms"
-                        )
+
                         addExecutionStepCard(
-                            title = tierTitle,
+                            title = res.source.badge,
                             steps = steps,
                             isSuccess = res.handled,
                             finalSummary = res.speechResponse

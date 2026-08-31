@@ -350,24 +350,46 @@ class KokoroTtsEngine(private val context: Context) {
         }
     }
 
-    private fun playAudioTrack(pcmFloats: FloatArray) {
-        if (shouldInterrupt.get()) return
+    private fun normalizeAudio(pcmFloats: FloatArray): FloatArray {
+        var maxVal = 0.0f
+        for (sample in pcmFloats) {
+            val abs = kotlin.math.abs(sample)
+            if (abs > maxVal) maxVal = abs
+        }
 
-        val bufferSize = maxOf(
-            AudioTrack.getMinBufferSize(
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_OUT_MONO,
-                AudioFormat.ENCODING_PCM_FLOAT
-            ),
-            pcmFloats.size * 4
+        val scale = if (maxVal > 0.92f) 0.92f / maxVal else 0.92f
+        val out = FloatArray(pcmFloats.size)
+        val fadeLen = minOf(120, pcmFloats.size / 4)
+
+        for (i in pcmFloats.indices) {
+            var s = pcmFloats[i] * scale
+            if (i < fadeLen) {
+                s *= (i.toFloat() / fadeLen)
+            } else if (i > pcmFloats.size - fadeLen) {
+                s *= ((pcmFloats.size - i).toFloat() / fadeLen)
+            }
+            out[i] = s.coerceIn(-0.92f, 0.92f)
+        }
+        return out
+    }
+
+    private fun playAudioTrack(pcmFloats: FloatArray) {
+        if (shouldInterrupt.get() || pcmFloats.isEmpty()) return
+
+        val normalized = normalizeAudio(pcmFloats)
+        val minBuf = AudioTrack.getMinBufferSize(
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_FLOAT
         )
+        val bufferSize = maxOf(minBuf * 2, normalized.size * 4)
 
         var track: AudioTrack? = null
         try {
             track = AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 )
@@ -385,20 +407,28 @@ class KokoroTtsEngine(private val context: Context) {
             currentAudioTrack = track
             track.play()
 
-            // Stream audio chunk in small sub-buffers to permit immediate sub-millisecond interrupt
+            // Stream normalized floats in small sub-buffers
             val chunkSize = 2400 // 100ms chunks at 24kHz
             var offset = 0
-            while (offset < pcmFloats.size && !shouldInterrupt.get()) {
-                val toWrite = minOf(chunkSize, pcmFloats.size - offset)
-                track.write(pcmFloats, offset, toWrite, AudioTrack.WRITE_BLOCKING)
-                offset += toWrite
+            while (offset < normalized.size && !shouldInterrupt.get()) {
+                val toWrite = minOf(chunkSize, normalized.size - offset)
+                val written = track.write(normalized, offset, toWrite, AudioTrack.WRITE_BLOCKING)
+                if (written > 0) {
+                    offset += written
+                } else {
+                    break
+                }
             }
 
-            // Wait briefly for playback buffer to drain unless interrupted
-            var drainWait = 0
-            while (track.playState == AudioTrack.PLAYSTATE_PLAYING && offset >= pcmFloats.size && !shouldInterrupt.get() && drainWait < 20) {
-                Thread.sleep(25)
-                drainWait++
+            // Wait for audio hardware buffer to completely finish playing before closing track
+            val totalDurationMs = (normalized.size * 1000L) / SAMPLE_RATE
+            val startWait = System.currentTimeMillis()
+            while (track.playState == AudioTrack.PLAYSTATE_PLAYING && !shouldInterrupt.get()) {
+                val playedFrames = track.playbackHeadPosition
+                if (playedFrames >= normalized.size || (System.currentTimeMillis() - startWait) > totalDurationMs + 200) {
+                    break
+                }
+                Thread.sleep(15)
             }
         } catch (e: Exception) {
             Log.w(TAG, "AudioTrack playback error: ${e.message}")

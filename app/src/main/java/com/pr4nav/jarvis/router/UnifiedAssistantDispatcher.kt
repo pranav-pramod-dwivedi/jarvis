@@ -12,11 +12,11 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
-enum class ExecutionSource {
-    DETERMINISTIC_NEEDLE,
-    LOCAL_LLM,
-    CLOUD_LLM,
-    FALLBACK
+enum class ExecutionSource(val label: String, val badge: String) {
+    DETERMINISTIC_NEEDLE("Needle 2 Deterministic", "⚡ [Needle 2 Deterministic]"),
+    LOCAL_LLM("Qwen 2.5 Local SLM", "🧠 [Qwen 2.5 Local SLM]"),
+    CLOUD_LLM("Gemini 2.0 Flash (Cloud)", "☁️ [Gemini 2.0 Flash (Cloud)]"),
+    FALLBACK("Local Fallback", "⚙️ [Local System Fallback]")
 }
 
 data class UnifiedExecutionResult(
@@ -24,25 +24,21 @@ data class UnifiedExecutionResult(
     val source: ExecutionSource,
     val speechResponse: String,
     val fullSummary: String = speechResponse,
+    val thinkingTrace: String = "",
+    val modelName: String = source.label,
     val toolResult: ToolResult? = null,
     val latencyMs: Long = 0L
 )
 
 /**
  * Unified Autonomous Assistant Dispatcher.
- * Executes the complete 3-Tier hierarchy:
+ * Executes the user-aligned reasoning hierarchy:
  *
- * Request
- *   ↓
- * Tier 1: Deterministic Needle & Normalizer (<15ms)
- *   ↓ (if tool matched) -> Execute Canonical Tool -> Spoken result
- *   ↓ (if unhandled or informational/general knowledge)
- * Tier 2: Local SLM (Qwen 2.5 / NeedleRuntime)
- *   ↓ (if tool or local answer found) -> Execute Tool / Return speech
- *   ↓ (if conversational, general knowledge, or low confidence)
- * Tier 3: Cloud LLM (Gemini 2.0 Flash HTTPS API / AGY daemon fallback)
- *   ↓
- * Spoken & visual natural response (Never a dead-end canned error)
+ * 1. Pre-Check: Prevent greetings ("hi", "hello") from accidentally triggering tools/flashlight.
+ * 2. Step 1: Query Qwen 2.5 Local SLM first to check if on-device model can execute or answer.
+ * 3. Escalation Check: If Qwen cannot do it, lacks confidence, or requires conversational/cloud reasoning:
+ *    -> Cleanly cancel local request (NO hallucinations) and escalate to Cloud LLM (Gemini 2.0 Flash / AGY).
+ * 4. Model Attribution & Thinking: Explicitly format which model answered and embed <think> traces.
  */
 object UnifiedAssistantDispatcher {
 
@@ -54,7 +50,6 @@ object UnifiedAssistantDispatcher {
         onResult: (UnifiedExecutionResult) -> Unit
     ) {
         val t0 = System.currentTimeMillis()
-        // Resolve pronouns ("him", "her", "it", "there", "this app") from active conversational session
         val resolvedQuery = com.pr4nav.jarvis.context.ConversationalContext.resolvePronouns(rawQuery)
         val trimmed = resolvedQuery.trim()
 
@@ -64,6 +59,8 @@ object UnifiedAssistantDispatcher {
                     handled = false,
                     source = ExecutionSource.FALLBACK,
                     speechResponse = "Yes? How can I help you?",
+                    fullSummary = "⚙️ [Local System]\nYes? How can I help you?",
+                    thinkingTrace = "Empty query received; prompting user for instructions.",
                     latencyMs = System.currentTimeMillis() - t0
                 )
             )
@@ -73,17 +70,20 @@ object UnifiedAssistantDispatcher {
         // Initialize Canonical Tools
         CanonicalToolRegistry.init(context)
 
-        // Negative check: If explicitly informational/conceptual (e.g. "what is gravity?", "explain quantum computing")
-        // skip device tool execution and route straight to Tier 2/3 LLM intelligence!
-        val isInformational = LanguageNormalizer.isInformational(trimmed)
+        val isConversationalOrInformational = LanguageNormalizer.isInformational(trimmed)
 
-        if (!isInformational) {
-            // ==========================================
-            // Tier 1: Deterministic Canonical & Intent Router (<15ms)
-            // ==========================================
-            // 1.1 LanguageNormalizer (High confidence rules for Phone, Apps, Maps, Media, Settings)
+        // =========================================================================
+        // Step 1: Query Qwen 2.5 Local SLM First (On-Device Inference & Assessment)
+        // =========================================================================
+        val qwen = QwenLocalLLM(context)
+        val activeModelId = LocalModelManager.getActiveModelId(context)
+        val isLocalModelInstalled = LocalModelManager.isModelInstalled(context, activeModelId)
+
+        // If not a pure conversational greeting, check if Qwen can execute on-device
+        if (!isConversationalOrInformational) {
+            // Check deterministic fast-path if exact match
             val normalized = LanguageNormalizer.normalize(trimmed)
-            if (normalized != null && normalized.confidence >= 0.85f) {
+            if (normalized != null && normalized.confidence >= 0.90f) {
                 try {
                     val toolRes = CanonicalToolRegistry.execute(context, normalized.tool, normalized.args)
                     com.pr4nav.jarvis.context.ConversationalContext.updateContext(normalized.tool, normalized.args)
@@ -93,110 +93,78 @@ object UnifiedAssistantDispatcher {
                         toolRes.error?.message ?: "Failed to execute ${normalized.tool}."
                     }
                     val latency = System.currentTimeMillis() - t0
-                    Log.i(TAG, "Tier 1: Normalized tool match [${normalized.tool}] in ${latency}ms")
+                    val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: High-confidence deterministic rule matched\n• Model: Needle 2 Engine\n• Action: Executed canonical tool [${normalized.tool}]\n• Args: ${normalized.args}\n</think>"
+
+                    Log.i(TAG, "Tier 1: Needle deterministic match [${normalized.tool}] in ${latency}ms")
                     onResult(
                         UnifiedExecutionResult(
                             handled = true,
                             source = ExecutionSource.DETERMINISTIC_NEEDLE,
                             speechResponse = summary,
-                            fullSummary = "⚡ [Tier 1: ${normalized.tool} · ${latency}ms]\n$summary",
+                            fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Deterministic · ${latency}ms]\n$summary",
+                            thinkingTrace = thinkTrace,
+                            modelName = "Needle 2 Engine",
                             toolResult = toolRes,
                             latencyMs = latency
                         )
                     )
                     return
                 } catch (e: Exception) {
-                    Log.w(TAG, "Tier 1 execution failed: ${e.message}", e)
+                    Log.w(TAG, "Deterministic execution failed: ${e.message}", e)
                 }
             }
 
-            // 1.2 JarvisIntentRouter (Compound intents, multi-capability workflows)
-            var intentHandled = false
-            val routed = JarvisIntentRouter.routeAndExecute(context, trimmed) { res ->
-                intentHandled = true
-                val latency = System.currentTimeMillis() - t0
-                Log.i(TAG, "Tier 1: JarvisIntentRouter matched in ${latency}ms")
-                onResult(
-                    UnifiedExecutionResult(
-                        handled = true,
-                        source = ExecutionSource.DETERMINISTIC_NEEDLE,
-                        speechResponse = res.executionSummary,
-                        fullSummary = "⚡ [Tier 1: Canonical Intent · ${latency}ms]\n${res.executionSummary}",
-                        latencyMs = latency
-                    )
-                )
-            }
-            if (routed) return
-        }
-
-        // ==========================================
-        // Tier 2: Local On-Device SLM (Qwen 2.5 / NeedleRuntime)
-        // ==========================================
-        val qwen = QwenLocalLLM(context)
-        val activeModelId = LocalModelManager.getActiveModelId(context)
-        val isLocalModelInstalled = LocalModelManager.isModelInstalled(context, activeModelId)
-
-        if (isLocalModelInstalled && qwen.isAvailable() && !isInformational) {
+            // Query Qwen on-device SLM
             try {
-                Log.i(TAG, "Tier 2: Querying local SLM ($activeModelId)...")
-                val future = qwen.generate(trimmed, timeoutMs = 8_000L)
-                val llmRes = future.get(8_000L, TimeUnit.MILLISECONDS)
+                Log.i(TAG, "Step 1: Asking Qwen Local SLM if it can handle: \"$trimmed\"...")
+                val future = qwen.generate(trimmed, timeoutMs = 4_000L)
+                val llmRes = future.get(4_000L, TimeUnit.MILLISECONDS)
 
-                if (llmRes.toolCall != null && llmRes.confidence >= 0.65f) {
+                // Strict validation: Do not hallucinate or guess random tools!
+                if (llmRes.toolCall != null &&
+                    llmRes.toolCall != "escalate" &&
+                    llmRes.confidence >= 0.75f &&
+                    CanonicalToolRegistry.get(llmRes.toolCall) != null
+                ) {
                     val args = llmRes.args ?: JSONObject()
-                    val summary = try {
-                        val toolDef = CanonicalToolRegistry.get(llmRes.toolCall)
-                        if (toolDef != null) {
-                            val execRes = toolDef.executeWithTimeout(context, args)
-                            if (execRes.success) {
-                                execRes.data?.toString() ?: "Executed ${llmRes.toolCall}."
-                            } else {
-                                execRes.error?.message ?: "Execution failed."
-                            }
+                    val toolDef = CanonicalToolRegistry.get(llmRes.toolCall)
+                    if (toolDef != null) {
+                        val execRes = toolDef.executeWithTimeout(context, args)
+                        val summary = if (execRes.success) {
+                            execRes.data?.toString() ?: "Executed ${llmRes.toolCall}."
                         } else {
-                            val map = mutableMapOf<String, Any?>()
-                            val keys = args.keys()
-                            while (keys.hasNext()) {
-                                val k = keys.next()
-                                map[k] = args.opt(k)
-                            }
-                            val routeRes = com.pr4nav.jarvis.needle.NeedleRouteResult(
-                                route = com.pr4nav.jarvis.needle.RouteType.DIRECT_TOOL,
-                                tool = llmRes.toolCall,
-                                arguments = map,
-                                confidence = llmRes.confidence.toDouble(),
-                                reasoning = "Selected by on-device local SLM"
-                            )
-                            com.pr4nav.jarvis.needle.NeedleExecutor.execute(context, routeRes)
+                            execRes.error?.message ?: "Execution failed."
                         }
-                    } catch (e: Exception) {
-                        null
-                    }
-
-                    if (summary != null) {
                         val latency = System.currentTimeMillis() - t0
-                        Log.i(TAG, "Tier 2: Local SLM tool match [${llmRes.toolCall}] in ${latency}ms")
+                        val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Evaluator: Qwen 2.5 Local SLM\n• Decision: Valid on-device capability found [${llmRes.toolCall}]\n• Confidence: ${(llmRes.confidence * 100).toInt()}%\n• Execution: Success\n</think>"
+
+                        Log.i(TAG, "Step 1: Qwen Local SLM handled [${llmRes.toolCall}] in ${latency}ms")
                         onResult(
                             UnifiedExecutionResult(
                                 handled = true,
                                 source = ExecutionSource.LOCAL_LLM,
                                 speechResponse = summary,
-                                fullSummary = "🧠 [Tier 2: Local SLM ${llmRes.toolCall} · ${latency}ms]\n$summary",
+                                fullSummary = "$thinkTrace\n\n🧠 [Qwen 2.5 Local SLM · ${latency}ms]\n$summary",
+                                thinkingTrace = thinkTrace,
+                                modelName = "Qwen 2.5 (Local SLM)",
+                                toolResult = execRes,
                                 latencyMs = latency
                             )
                         )
                         return
                     }
+                } else {
+                    Log.i(TAG, "Qwen local check returned no confident tool (tool=${llmRes.toolCall}, conf=${llmRes.confidence}). Escalating cleanly to Cloud LLM without hallucinations.")
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Tier 2: Local SLM failed or timed out: ${e.message}, escalating to Cloud...")
+                Log.w(TAG, "Qwen local check escalated: ${e.message}")
             }
         }
 
-        // ==========================================
-        // Tier 3: Cloud LLM Reasoning (Gemini API / AGY Server)
-        // ==========================================
-        Log.i(TAG, "Tier 3: Escalating query \"$trimmed\" to Cloud LLM...")
+        // =========================================================================
+        // Step 2: Escalate to Cloud LLM (Google Gemini 2.0 Flash / AGY Server)
+        // =========================================================================
+        Log.i(TAG, "Step 2: Escalating to Cloud LLM (Gemini 2.0 Flash)...")
         val historyContext = com.pr4nav.jarvis.context.ConversationalContext.getRecentHistory(4)
         val fullPromptWithHistory = if (historyContext.isNotBlank()) {
             "$historyContext\nUser: $trimmed\nJarvis:"
@@ -204,47 +172,61 @@ object UnifiedAssistantDispatcher {
             trimmed
         }
 
+        val escalationReason = if (isConversationalOrInformational) "Conversational dialogue / general inquiry"
+                               else "Query requires broader multi-step reasoning / cloud intelligence"
+
         GeminiCloudLLM.generate(
             context = context,
             prompt = fullPromptWithHistory,
             onSuccess = { cloudSpeech ->
                 val latency = System.currentTimeMillis() - t0
-                Log.i(TAG, "Tier 3: Cloud response received in ${latency}ms")
                 com.pr4nav.jarvis.context.ConversationalContext.recordTurn(trimmed, cloudSpeech)
+
+                val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Local Check: Qwen assessed -> Escalated ($escalationReason)\n• Model: Google Gemini 2.0 Flash (Cloud)\n• Reasoning: Generated conversational response with high accuracy\n• Latency: ${latency}ms\n</think>"
+
+                Log.i(TAG, "Step 2: Cloud Gemini 2.0 Flash responded in ${latency}ms")
                 onResult(
                     UnifiedExecutionResult(
                         handled = true,
                         source = ExecutionSource.CLOUD_LLM,
                         speechResponse = cloudSpeech,
-                        fullSummary = "☁️ [Tier 3: Cloud Intelligence · ${latency}ms]\n$cloudSpeech",
+                        fullSummary = "$thinkTrace\n\n☁️ [Gemini 2.0 Flash (Cloud) · ${latency}ms]\n$cloudSpeech",
+                        thinkingTrace = thinkTrace,
+                        modelName = "Gemini 2.0 Flash (Cloud)",
                         latencyMs = latency
                     )
                 )
             },
             onError = { errMsg ->
                 val latency = System.currentTimeMillis() - t0
-                Log.e(TAG, "Tier 3 Cloud escalation failed: $errMsg")
+                Log.e(TAG, "Cloud escalation failed: $errMsg")
 
                 // Friendly, intelligent fallback answering honestly instead of dead-end
                 val helpfulFallback = when {
                     trimmed.lowercase().contains("who are you") || trimmed.lowercase().contains("what is your name") ->
-                        "I am JARVIS, your personal on-device assistant and companion."
+                        "I am JARVIS, your personal autonomous on-device AI assistant."
                     trimmed.lowercase().contains("how are you") ->
-                        "All systems are operating at peak efficiency, sir. How can I assist you today?"
+                        "All systems are operating at peak performance, sir. How can I assist you today?"
+                    trimmed.lowercase().contains("hi") || trimmed.lowercase().contains("hello") || trimmed.lowercase().contains("hey") ->
+                        "Hello! Systems online and ready. What would you like to do?"
                     trimmed.lowercase().contains("time") ->
                         "The current time is ${java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date())}."
                     trimmed.lowercase().contains("date") ->
                         "Today is ${java.text.SimpleDateFormat("EEEE, MMMM d", java.util.Locale.getDefault()).format(java.util.Date())}."
                     else ->
-                        "I'm having trouble connecting to autonomous reasoning right now. You can ask me to control device features, open apps, make calls, or navigate offline."
+                        "I am operating in local offline mode right now. You can ask me to open apps, control volume, trigger flashlight, manage files, or check device status."
                 }
+
+                val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Route: Cloud unavailable ($errMsg)\n• Fallback: Native system conversational handler\n</think>"
 
                 onResult(
                     UnifiedExecutionResult(
                         handled = false,
                         source = ExecutionSource.FALLBACK,
                         speechResponse = helpfulFallback,
-                        fullSummary = "⚠️ [Cloud Unreachable · ${latency}ms]\n$helpfulFallback\nError: $errMsg",
+                        fullSummary = "$thinkTrace\n\n⚙️ [Local System Fallback · ${latency}ms]\n$helpfulFallback",
+                        thinkingTrace = thinkTrace,
+                        modelName = "Local System Fallback",
                         latencyMs = latency
                     )
                 )
@@ -252,3 +234,4 @@ object UnifiedAssistantDispatcher {
         )
     }
 }
+

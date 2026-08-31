@@ -343,20 +343,27 @@ class JarvisOverlayService : Service() {
                 voiceSession,
                 com.pr4nav.jarvis.session.SessionMessage(
                     sender = "agent",
-                    text = res.speechResponse,
-                    steps = listOf("Source: ${res.source.name}"),
+                    text = "${res.source.badge}\n${res.speechResponse}",
+                    steps = listOf("Model: ${res.modelName}", "Trace: ${res.thinkingTrace}"),
                     isSuccess = res.handled
                 )
             )
 
             mainHandler.post {
-                txtStatusBadge?.text = "SPEAKING"
-                txtStatusBadge?.setTextColor(Color.parseColor("#10B981"))
+                txtStatusBadge?.text = res.modelName.uppercase()
+                txtStatusBadge?.setTextColor(
+                    when (res.source) {
+                        com.pr4nav.jarvis.router.ExecutionSource.CLOUD_LLM -> Color.parseColor("#38BDF8")
+                        com.pr4nav.jarvis.router.ExecutionSource.LOCAL_LLM -> Color.parseColor("#A855F7")
+                        com.pr4nav.jarvis.router.ExecutionSource.DETERMINISTIC_NEEDLE -> Color.parseColor("#F59E0B")
+                        com.pr4nav.jarvis.router.ExecutionSource.FALLBACK -> Color.parseColor("#94A3B8")
+                    }
+                )
                 txtResponse?.visibility = View.VISIBLE
-                txtResponse?.text = res.speechResponse
+                txtResponse?.text = "${res.source.badge}\n${res.speechResponse}"
                 waveformView?.setAmplitude(1500f)
 
-                // Speak response via Kokoro-82M TTS
+                // Speak response via Kokoro-82M TTS (only speak the natural clean speechResponse)
                 voiceEngine?.speak(res.speechResponse, interrupt = true) {
                     mainHandler.post {
                         txtStatusBadge?.text = "READY"

@@ -433,8 +433,8 @@ class JarvisVoiceService : Service() {
                     voiceSession,
                     com.pr4nav.jarvis.session.SessionMessage(
                         sender = "agent",
-                        text = res.speechResponse,
-                        steps = listOf("Source: ${res.source.name}"),
+                        text = "${res.source.badge}\n${res.speechResponse}",
+                        steps = listOf("Model: ${res.modelName}", "Thinking: ${res.thinkingTrace}"),
                         isSuccess = res.handled
                     )
                 )
@@ -446,17 +446,16 @@ class JarvisVoiceService : Service() {
     private fun speakResponse(text: String, openConversation: Boolean) {
         mainHandler.post {
             updateState(VoiceState.SPEAKING, text)
-            if (VoiceAssistantPreferences.isBargeInEnabled(applicationContext)) {
-                startAcousticDetector() // Keep acoustic detector active so saying "Jarvis" or speaking halts TTS immediately
-            } else {
-                stopAcousticDetector()
-            }
+            // Stop acoustic detector while assistant speaks so microphone doesn't hear own speaker and self-cancel
+            stopAcousticDetector()
 
             voiceEngine?.speak(text, interrupt = true) {
-                if (openConversation && VoiceAssistantPreferences.isConversationMode(applicationContext)) {
-                    enterConversationWindow()
-                } else {
-                    returnToIdleState("Speech completed")
+                mainHandler.post {
+                    if (openConversation && VoiceAssistantPreferences.isConversationMode(applicationContext)) {
+                        enterConversationWindow()
+                    } else {
+                        returnToIdleState("Speech completed")
+                    }
                 }
             }
         }

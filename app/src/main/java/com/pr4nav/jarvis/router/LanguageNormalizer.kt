@@ -28,9 +28,11 @@ object LanguageNormalizer {
 
     private val rules = ArrayList<PatternRule>()
 
-    // Informational negative patterns: questions asking for explanations, definitions, or trivia
+    // Informational & conversational negative patterns: questions, greetings, trivia
     // These should NOT trigger phone actions!
     private val informationalPatterns = listOf(
+        Pattern.compile("^(?:hi|hello|hey|hey\\s+jarvis|namaste|good\\s+(?:morning|afternoon|evening|night)|howdy|sup|yo|hi\\s+jarvis|hello\\s+jarvis)[!.,\\s]*$", Pattern.CASE_INSENSITIVE),
+        Pattern.compile("^(?:how\\s+are\\s+you|who\\s+are\\s+you|what\\s+is\\s+your\\s+name|what\\s+can\\s+you\\s+do|tell\\s+me\\s+a\\s+joke|are\\s+you\\s+there|what's\\s+up|kaise\\s+ho|tum\\s+kaun\\s+ho)[!.,\\s]*$", Pattern.CASE_INSENSITIVE),
         Pattern.compile("^(?:how\\s+do(?:es)?|why\\s+do(?:es)?)\\s+.*?(?:work|function|operate).*$", Pattern.CASE_INSENSITIVE),
         Pattern.compile("^(?:explain|describe|tell\\s+me\\s+about)\\s+(?:how\\s+)?(?:phone\\s+calls?|wi-?fi|bluetooth|batter(?:y|ies)|android\\s+settings?|cellular).*$", Pattern.CASE_INSENSITIVE),
         Pattern.compile("^(?:what\\s+is|define)\\s+(?:a\\s+|the\\s+concept\\s+of\\s+)?(?:battery\\s+percentage|wi-?fi|bluetooth|android\\s+settings?|phone\\s+call).*$", Pattern.CASE_INSENSITIVE),
