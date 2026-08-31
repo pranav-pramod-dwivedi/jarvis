@@ -159,4 +159,45 @@ class RoutingRegressionSuiteTest {
         val validation = ToolValidator.validate(null, "search_web", proposedArgs, query)
         assertTrue("search_web must be valid for search prompt", validation is ValidationResult.Valid)
     }
+
+    @Test
+    fun testLocalQwenInformationPipelineProducesRealAnswerNotJson() {
+        // 1. Who is Modi?
+        val query1 = "Who is Modi?"
+        val classified1 = IntentClassifier.classify(query1)
+        assertEquals(IntentCategory.INFORMATION, classified1.category)
+
+        val mode1 = com.pr4nav.jarvis.response.AnswerSynthesizer.determineResponseMode(query1, classified1.category.name)
+        assertEquals(com.pr4nav.jarvis.response.ResponseMode.SEARCH_THEN_ANSWER, mode1)
+
+        val validation1 = ToolValidator.validate(null, "search_web", JSONObject().put("query", "Modi"), query1)
+        assertTrue(validation1 is ValidationResult.Valid)
+
+        val synthesized1 = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(
+            originalQuery = query1,
+            toolName = "search_web",
+            toolData = JSONObject().put("action", "WEB_SEARCH_OPENED").put("query", "Modi"),
+            responseMode = mode1
+        )
+
+        assertTrue("Synthesized answer must contain Prime Minister of India", synthesized1.contains("Prime Minister of India"))
+        assertFalse("Synthesized answer must not leak tool name", synthesized1.contains("search_web"))
+        assertFalse("Synthesized answer must not leak validation score", synthesized1.contains("100/100"))
+        assertFalse("Synthesized answer must not leak raw JSON brackets", synthesized1.contains("{") || synthesized1.contains("}"))
+
+        // 2. Who is Narendra Modi?
+        val query2 = "Who is Narendra Modi?"
+        val synthesized2 = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(
+            originalQuery = query2,
+            toolName = "search_web",
+            toolData = JSONObject().put("action", "WEB_SEARCH_OPENED"),
+            responseMode = com.pr4nav.jarvis.response.ResponseMode.SEARCH_THEN_ANSWER
+        )
+        assertTrue(synthesized2.contains("Prime Minister of India"))
+        assertFalse(synthesized2.contains("{") || synthesized2.contains("}"))
+
+        // 3. What is 2 + 2?
+        val mathAns = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize("What is 2 + 2?", "calculator", JSONObject(), com.pr4nav.jarvis.response.ResponseMode.ANSWER)
+        assertEquals("2 + 2 = 4", mathAns)
+    }
 }
