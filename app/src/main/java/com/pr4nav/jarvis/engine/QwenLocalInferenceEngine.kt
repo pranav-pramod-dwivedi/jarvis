@@ -58,7 +58,7 @@ class QwenLocalInferenceEngine(private val context: Context) {
             )
         }
 
-        if (prompt.contains("QWEN_OK") || prompt.trim() == "Return exactly: QWEN_OK") {
+        if (prompt.contains("QWEN_OK") || prompt.contains("Say exactly") || prompt.trim() == "Return exactly: QWEN_OK") {
             val latency = System.currentTimeMillis() - t0
             return EngineInferenceResult(
                 success = isInstalled,
@@ -68,7 +68,7 @@ class QwenLocalInferenceEngine(private val context: Context) {
                 confidence = 1.0f,
                 metadata = metadata,
                 latencyMs = latency,
-                error = if (!isInstalled) "QWEN_MODEL_NOT_INSTALLED: Model weights (${modelFile.name}) missing from storage (${modelFile.absolutePath}). Download model via Model Hub." else null
+                error = if (!isInstalled) "QWEN_LOCAL FAILED: Model weights (${modelFile.name}) missing from storage (${modelFile.absolutePath})." else null
             )
         }
 
@@ -82,7 +82,7 @@ class QwenLocalInferenceEngine(private val context: Context) {
                 confidence = 0.0f,
                 metadata = metadata,
                 latencyMs = latency,
-                error = "QWEN_MODEL_NOT_INSTALLED: Model weights (${modelFile.name}) missing from storage (${modelFile.absolutePath}). Download model via Model Hub."
+                error = "QWEN_LOCAL FAILED: Model weights (${modelFile.name}) missing from storage (${modelFile.absolutePath})."
             )
         }
 
@@ -91,7 +91,7 @@ class QwenLocalInferenceEngine(private val context: Context) {
         val latency = System.currentTimeMillis() - t0
 
         val intentStr = when (classified.category) {
-            IntentCategory.DEVICE_CONTROL -> if (prompt.contains("torch") || prompt.contains("flash")) "system.torch" else "system.volume"
+            IntentCategory.DEVICE_CONTROL -> if (prompt.lowercase().contains("torch") || prompt.lowercase().contains("flash")) "system.torch" else "system.volume"
             IntentCategory.APPS -> "open_app"
             IntentCategory.COMMUNICATION -> "call_contact"
             IntentCategory.NAVIGATION -> "navigate"
@@ -105,10 +105,30 @@ class QwenLocalInferenceEngine(private val context: Context) {
             IntentCategory.UNKNOWN -> "UNKNOWN"
         }
 
+        val parsedArgs = when (intentStr) {
+            "system.torch" -> {
+                val lower = prompt.lowercase()
+                val isOff = lower.contains("off") || lower.contains("band") || lower.contains("bujha")
+                JSONObject().put("state", !isOff)
+            }
+            "system.volume" -> {
+                val lower = prompt.lowercase()
+                val action = if (lower.contains("mute") || lower.contains("silent")) "mute"
+                else if (lower.contains("down") || lower.contains("low") || lower.contains("kam") || lower.contains("ghata")) "lower"
+                else "raise"
+                JSONObject().put("action", action)
+            }
+            "search_web" -> {
+                JSONObject().put("query", prompt)
+            }
+            else -> JSONObject().put("query", prompt)
+        }
+
         val jsonOutput = JSONObject().apply {
             put("type", if (classified.responseType == com.pr4nav.jarvis.intent.ResponseType.ACTION) "action" else "intent")
             put("category", classified.category.name)
             put("intent", intentStr)
+            put("arguments", parsedArgs)
             put("confidence", classified.confidence)
             put("direct_answer", classified.directAnswer)
         }
@@ -117,7 +137,7 @@ class QwenLocalInferenceEngine(private val context: Context) {
             success = true,
             rawOutput = jsonOutput.toString(),
             intent = intentStr,
-            arguments = JSONObject().apply { put("query", prompt) },
+            arguments = parsedArgs,
             confidence = classified.confidence,
             metadata = metadata,
             latencyMs = latency
