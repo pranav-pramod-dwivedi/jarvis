@@ -54,7 +54,9 @@ object UnifiedAssistantDispatcher {
         onResult: (UnifiedExecutionResult) -> Unit
     ) {
         val t0 = System.currentTimeMillis()
-        val trimmed = rawQuery.trim()
+        // Resolve pronouns ("him", "her", "it", "there", "this app") from active conversational session
+        val resolvedQuery = com.pr4nav.jarvis.context.ConversationalContext.resolvePronouns(rawQuery)
+        val trimmed = resolvedQuery.trim()
 
         if (trimmed.isEmpty()) {
             onResult(
@@ -195,12 +197,20 @@ object UnifiedAssistantDispatcher {
         // Tier 3: Cloud LLM Reasoning (Gemini API / AGY Server)
         // ==========================================
         Log.i(TAG, "Tier 3: Escalating query \"$trimmed\" to Cloud LLM...")
+        val historyContext = com.pr4nav.jarvis.context.ConversationalContext.getRecentHistory(4)
+        val fullPromptWithHistory = if (historyContext.isNotBlank()) {
+            "$historyContext\nUser: $trimmed\nJarvis:"
+        } else {
+            trimmed
+        }
+
         GeminiCloudLLM.generate(
             context = context,
-            prompt = trimmed,
+            prompt = fullPromptWithHistory,
             onSuccess = { cloudSpeech ->
                 val latency = System.currentTimeMillis() - t0
                 Log.i(TAG, "Tier 3: Cloud response received in ${latency}ms")
+                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(trimmed, cloudSpeech)
                 onResult(
                     UnifiedExecutionResult(
                         handled = true,

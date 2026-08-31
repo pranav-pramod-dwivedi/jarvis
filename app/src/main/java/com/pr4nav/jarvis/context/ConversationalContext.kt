@@ -19,7 +19,39 @@ object ConversationalContext {
         var timestamp: Long = System.currentTimeMillis()
     )
 
+    data class ConversationTurn(
+        val userQuery: String,
+        val assistantResponse: String,
+        val timestamp: Long = System.currentTimeMillis()
+    )
+
     private val sessionContext = TurnContext()
+    private val turnHistory = java.util.Collections.synchronizedList(mutableListOf<ConversationTurn>())
+
+    fun recordTurn(userQuery: String, assistantResponse: String) {
+        if (userQuery.isNotBlank() && assistantResponse.isNotBlank()) {
+            turnHistory.add(ConversationTurn(userQuery.trim(), assistantResponse.trim()))
+            // Keep at most 10 recent turns
+            while (turnHistory.size > 10) {
+                turnHistory.removeAt(0)
+            }
+        }
+    }
+
+    fun getRecentHistory(limit: Int = 4): String {
+        val recent = synchronized(turnHistory) {
+            val valid = turnHistory.filter { System.currentTimeMillis() - it.timestamp < 10 * 60 * 1000L }
+            valid.takeLast(limit)
+        }
+        if (recent.isEmpty()) return ""
+        return buildString {
+            append("Recent dialogue context:\n")
+            for (turn in recent) {
+                append("User: ").append(turn.userQuery).append("\n")
+                append("Jarvis: ").append(turn.assistantResponse).append("\n")
+            }
+        }.trim()
+    }
 
     fun updateContext(
         tool: String,
