@@ -394,16 +394,11 @@ class JarvisVoiceService : Service() {
             return
         }
 
-        // 4. Execute via canonical system
+        // 4. Execute via unified autonomous system (Deterministic Needle -> Local SLM -> Cloud Gemini LLM)
         updateState(VoiceState.PROCESSING, "\"$cleanCommand\"")
         Thread {
-            JarvisIntentRouter.routeAndExecute(applicationContext, cleanCommand) { res ->
-                val responseText = if (res.matched) {
-                    res.executionSummary
-                } else {
-                    "I didn't quite catch that. Try asking me to call someone, play music, or navigate."
-                }
-                speakResponse(responseText, openConversation = VoiceAssistantPreferences.isConversationMode(applicationContext))
+            com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(applicationContext, cleanCommand) { res ->
+                speakResponse(res.speechResponse, openConversation = VoiceAssistantPreferences.isConversationMode(applicationContext))
             }
         }.start()
     }

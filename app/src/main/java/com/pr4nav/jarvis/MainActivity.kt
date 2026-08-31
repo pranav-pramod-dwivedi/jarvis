@@ -287,21 +287,14 @@ class MainActivity : AppCompatActivity() {
     private fun executeAssistantCommand(query: String) {
         Thread {
             setOrbState(OrbState.EXECUTING, "Executing…", query)
-            val routed = JarvisIntentRouter.routeAndExecute(this, query) { res ->
-                if (res.matched) {
-                    setOrbState(OrbState.FINISHED, "Completed ✓", res.executionSummary)
-                    voiceEngine?.speak(res.executionSummary, interrupt = false)
-                } else {
-                    setOrbState(OrbState.ERROR, "Need more info", res.executionSummary)
-                }
-            }
-
-            if (!routed) {
-                // If not resolved by canonical router, pass to Agent Activity
+            com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(this, query) { res ->
                 runOnUiThread {
-                    Toast.makeText(this, "Opening full execution stream…", Toast.LENGTH_SHORT).show()
-                    startActivity(Intent(this, AgentActivity::class.java))
-                    setOrbState(OrbState.IDLE)
+                    if (res.handled) {
+                        setOrbState(OrbState.FINISHED, "Completed ✓", res.speechResponse)
+                    } else {
+                        setOrbState(OrbState.FINISHED, "JARVIS", res.speechResponse)
+                    }
+                    voiceEngine?.speak(res.speechResponse, interrupt = false)
                 }
             }
         }.start()

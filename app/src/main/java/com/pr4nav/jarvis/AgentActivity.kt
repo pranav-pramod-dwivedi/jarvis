@@ -421,15 +421,41 @@ class AgentActivity : AppCompatActivity() {
             }
 
             else -> {
+                // Tier 3: Escalate to Cloud Intelligence (Gemini API or AGY)
                 runOnUiThread {
-                    hideThinking()
-                    addExecutionStepCard(
-                        title = "Unrecognized Prompt",
-                        steps = listOf("Tried deterministic grammar & canonical registry", "No exact pattern match"),
-                        isSuccess = false,
-                        finalSummary = "I couldn't resolve a specific action for: \"$q\". Try asking me to play music, call someone, take a screenshot, or open an app!"
-                    )
+                    showThinking("Consulting Cloud Intelligence…", "Querying Gemini reasoning engine")
                 }
+                com.pr4nav.jarvis.llm.GeminiCloudLLM.generate(
+                    context = this,
+                    prompt = q,
+                    onSuccess = { answer ->
+                        runOnUiThread {
+                            hideThinking()
+                            addExecutionStepCard(
+                                title = "JARVIS Cloud Intelligence",
+                                steps = listOf("Escalated to Gemini Generative AI", "Reasoning generated"),
+                                isSuccess = true,
+                                finalSummary = answer
+                            )
+                        }
+                    },
+                    onError = { err ->
+                        runOnUiThread {
+                            hideThinking()
+                            val fallbackMsg = if (com.pr4nav.jarvis.llm.GeminiCloudLLM.getApiKey(this).isEmpty()) {
+                                "I couldn't resolve a local action for \"$q\". To enable conversational answers and general intelligence, add your Gemini API key in Connected Services."
+                            } else {
+                                "Cloud query failed: $err. Try asking me to open an app, make a call, or play music!"
+                            }
+                            addExecutionStepCard(
+                                title = "Autonomous Reasoning Notice",
+                                steps = listOf("No deterministic tool match", "Cloud query unfulfilled: $err"),
+                                isSuccess = false,
+                                finalSummary = fallbackMsg
+                            )
+                        }
+                    }
+                )
             }
         }
     }

@@ -35,6 +35,59 @@ class ConnectedServicesActivity : AppCompatActivity() {
             }
         }
 
+        // Gemini Cloud LLM Setup
+        val labelGeminiStatus = findViewById<TextView>(R.id.gemini_cloud_status)
+        val inputGeminiKey = findViewById<EditText>(R.id.input_gemini_api_key)
+        val btnSaveGemini = findViewById<Button>(R.id.btn_save_gemini)
+        val btnTestGemini = findViewById<Button>(R.id.btn_test_gemini)
+
+        val savedGeminiKey = com.pr4nav.jarvis.llm.GeminiCloudLLM.getApiKey(this)
+        if (savedGeminiKey.isNotEmpty()) {
+            inputGeminiKey.setText(savedGeminiKey)
+            labelGeminiStatus.text = "Status: Gemini Cloud Configured (Ready ✓)"
+            labelGeminiStatus.setTextColor(android.graphics.Color.parseColor("#10B981"))
+        }
+
+        btnSaveGemini.setOnClickListener {
+            val key = inputGeminiKey.text.toString().trim()
+            com.pr4nav.jarvis.llm.GeminiCloudLLM.setApiKey(this, key)
+            if (key.isNotEmpty()) {
+                labelGeminiStatus.text = "Status: Gemini Cloud Configured (Ready ✓)"
+                labelGeminiStatus.setTextColor(android.graphics.Color.parseColor("#10B981"))
+                Toast.makeText(this, "Gemini API Key Saved!", Toast.LENGTH_SHORT).show()
+            } else {
+                labelGeminiStatus.text = "Status: API Key Not Set (Using AGY/Termux fallback if active)"
+                labelGeminiStatus.setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+                Toast.makeText(this, "Gemini API Key Cleared", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnTestGemini.setOnClickListener {
+            Toast.makeText(this, "Querying Cloud LLM...", Toast.LENGTH_SHORT).show()
+            com.pr4nav.jarvis.llm.GeminiCloudLLM.generate(
+                context = this,
+                prompt = "Hello JARVIS, explain quantum entanglement in two short sentences.",
+                onSuccess = { response ->
+                    runOnUiThread {
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle("☁️ Cloud AI Response")
+                            .setMessage(response)
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                },
+                onError = { err ->
+                    runOnUiThread {
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle("⚠️ Cloud Connection Error")
+                            .setMessage(err)
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                }
+            )
+        }
+
         // Local AI Management
         val labelLocalAi = findViewById<TextView>(R.id.local_ai_status)
         val progressLocalAi = findViewById<android.widget.ProgressBar>(R.id.local_ai_progress)
