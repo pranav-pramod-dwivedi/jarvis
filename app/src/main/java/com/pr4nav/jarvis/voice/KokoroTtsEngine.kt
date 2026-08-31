@@ -46,6 +46,12 @@ class KokoroTtsEngine(private val context: Context) {
                 instance ?: KokoroTtsEngine(context.applicationContext).also { instance = it }
             }
         }
+        fun isModelInstalled(context: Context): Boolean {
+            val baseDir = File(context.filesDir, MODEL_DIR_NAME)
+            val modelFile = File(baseDir, MODEL_FILE_NAME)
+            val voiceFile = File(baseDir, VOICE_FILE_NAME)
+            return modelFile.exists() && modelFile.length() > 10_000_000L && voiceFile.exists()
+        }
     }
 
     private var ortEnv: OrtEnvironment? = null
@@ -73,7 +79,7 @@ class KokoroTtsEngine(private val context: Context) {
     fun isSpeakingNow(): Boolean = isSpeaking.get()
 
     fun initialize(): Boolean {
-        if (isInitialized.get()) return true
+        if (isInitialized.get() && ortSession != null && voiceStyle != null) return true
 
         try {
             val baseDir = File(context.filesDir, MODEL_DIR_NAME)
@@ -239,17 +245,21 @@ class KokoroTtsEngine(private val context: Context) {
             stop()
         }
 
-        if (!isInitialized.get() || ortSession == null || voiceStyle == null) {
-            Log.w(TAG, "Kokoro engine not ready, aborting speech")
-            onDone?.invoke()
-            return
-        }
-
         shouldInterrupt.set(false)
         executor.execute {
             if (shouldInterrupt.get()) {
                 onDone?.invoke()
                 return@execute
+            }
+
+            if (!isInitialized.get() || ortSession == null || voiceStyle == null) {
+                Log.i(TAG, "Kokoro engine initializing for incoming speech request...")
+                val success = initialize()
+                if (!success || ortSession == null || voiceStyle == null) {
+                    Log.w(TAG, "Kokoro engine initialization failed, aborting speech")
+                    onDone?.invoke()
+                    return@execute
+                }
             }
 
             isSpeaking.set(true)

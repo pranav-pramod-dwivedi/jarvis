@@ -167,6 +167,12 @@ class AgentActivity : AppCompatActivity() {
     }
 
     private fun handleWakeWordIntent(intent: Intent?) {
+        val promptExtra = intent?.getStringExtra("prompt") ?: intent?.getStringExtra("auto_submit")
+        if (!promptExtra.isNullOrBlank()) {
+            submit(promptExtra.trim())
+            return
+        }
+
         if (intent?.getBooleanExtra("from_wake_word", false) == true) {
             val wakeWord = intent.getStringExtra("wake_word") ?: "Jarvis"
             showThinking("🎙 $wakeWord is listening…", "Hands-free session active. Speak your command.")

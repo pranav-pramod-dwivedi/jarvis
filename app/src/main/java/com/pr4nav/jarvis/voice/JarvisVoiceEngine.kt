@@ -56,9 +56,9 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
             stopSpeaking()
         }
 
-        // 1. Prioritize on-device Kokoro-82M INT8 ONNX TTS
-        if (kokoroTts.isReady()) {
-            Log.i(TAG, "Speaking via Kokoro-82M INT8 ONNX Engine: \"$text\"")
+        // 1. Prioritize on-device Neural Kokoro-82M INT8 ONNX TTS
+        if (KokoroTtsEngine.isModelInstalled(context)) {
+            Log.i(TAG, "Speaking via Neural Kokoro-82M INT8 ONNX Engine: \"$text\"")
             kokoroTts.speak(text, speed = 1.0f, interrupt = interrupt, onDone = onDone)
             return
         }
