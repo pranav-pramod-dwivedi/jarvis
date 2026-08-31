@@ -290,11 +290,11 @@ class MainActivity : AppCompatActivity() {
             com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(this, query) { res ->
                 runOnUiThread {
                     if (res.handled) {
-                        setOrbState(OrbState.FINISHED, "Completed ✓", res.speechResponse)
+                        setOrbState(OrbState.FINISHED, "Completed ✓", res.jarvisResponse.text)
                     } else {
-                        setOrbState(OrbState.FINISHED, "JARVIS", res.speechResponse)
+                        setOrbState(OrbState.FINISHED, "JARVIS", res.jarvisResponse.text)
                     }
-                    voiceEngine?.speak(res.speechResponse, interrupt = false)
+                    voiceEngine?.speak(res.jarvisResponse.speechText, interrupt = false)
                 }
             }
         }.start()

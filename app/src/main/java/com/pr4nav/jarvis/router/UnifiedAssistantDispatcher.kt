@@ -23,13 +23,36 @@ enum class ExecutionSource(val label: String, val badge: String) {
 data class UnifiedExecutionResult(
     val handled: Boolean,
     val source: ExecutionSource,
-    val speechResponse: String,
-    val fullSummary: String = speechResponse,
+    val jarvisResponse: com.pr4nav.jarvis.response.JarvisResponse,
+    val speechResponse: String = jarvisResponse.speechText,
+    val fullSummary: String = jarvisResponse.text,
     val thinkingTrace: String = "",
     val modelName: String = source.label,
     val toolResult: ToolResult? = null,
     val latencyMs: Long = 0L
-)
+) {
+    // Secondary constructor for backwards compatibility
+    constructor(
+        handled: Boolean,
+        source: ExecutionSource,
+        speechResponse: String,
+        fullSummary: String = speechResponse,
+        thinkingTrace: String = "",
+        modelName: String = source.label,
+        toolResult: ToolResult? = null,
+        latencyMs: Long = 0L
+    ) : this(
+        handled = handled,
+        source = source,
+        jarvisResponse = com.pr4nav.jarvis.response.JarvisResponse.of(speechResponse),
+        speechResponse = com.pr4nav.jarvis.response.UserResponseSanitizer.sanitizeForSpeech(speechResponse),
+        fullSummary = fullSummary,
+        thinkingTrace = thinkingTrace,
+        modelName = modelName,
+        toolResult = toolResult,
+        latencyMs = latencyMs
+    )
+}
 
 /**
  * Unified Autonomous Assistant Dispatcher.

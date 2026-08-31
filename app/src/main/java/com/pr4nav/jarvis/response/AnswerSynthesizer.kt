@@ -140,12 +140,14 @@ object AnswerSynthesizer {
             }
 
             "system.torch" -> {
-                val state = json?.optBoolean("state", true) ?: true
+                val argsObj = json?.optJSONObject("arguments") ?: json
+                val state = if (argsObj != null && argsObj.has("state")) argsObj.optBoolean("state") else true
                 return if (state) "Flashlight turned on." else "Flashlight turned off."
             }
 
             "system.volume" -> {
-                val action = json?.optString("action", "adjusted")
+                val argsObj = json?.optJSONObject("arguments") ?: json
+                val action = argsObj?.optString("action", "adjusted")
                 return when (action) {
                     "raise", "up" -> "Volume increased."
                     "lower", "down" -> "Volume decreased."

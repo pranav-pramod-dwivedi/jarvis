@@ -343,7 +343,7 @@ class JarvisOverlayService : Service() {
                 voiceSession,
                 com.pr4nav.jarvis.session.SessionMessage(
                     sender = "agent",
-                    text = "${res.source.badge}\n${res.speechResponse}",
+                    text = "${res.source.badge}\n${res.jarvisResponse.text}",
                     steps = listOf("Model: ${res.modelName}", "Trace: ${res.thinkingTrace}"),
                     isSuccess = res.handled
                 )
@@ -361,11 +361,11 @@ class JarvisOverlayService : Service() {
                     }
                 )
                 txtResponse?.visibility = View.VISIBLE
-                txtResponse?.text = "${res.source.badge}\n${res.speechResponse}"
+                txtResponse?.text = "${res.source.badge}\n${res.jarvisResponse.text}"
                 waveformView?.setAmplitude(1500f)
 
-                // Speak response via Kokoro-82M TTS (only speak the natural clean speechResponse)
-                voiceEngine?.speak(res.speechResponse, interrupt = true) {
+                // Speak response via Kokoro-82M TTS (only speak the natural clean speechText)
+                voiceEngine?.speak(res.jarvisResponse.speechText, interrupt = true) {
                     mainHandler.post {
                         txtStatusBadge?.text = "READY"
                         txtStatusBadge?.setTextColor(Color.parseColor("#94A3B8"))

@@ -733,7 +733,7 @@ class AgentActivity : AppCompatActivity() {
                                 steps.add("• Latency: ${res.latencyMs}ms")
                             }
 
-                            streamCardUpdater?.invoke(res.source.badge, res.speechResponse, steps, true)
+                            streamCardUpdater?.invoke(res.source.badge, res.jarvisResponse.text, steps, true)
 
                             // Persist to active session
                             if (::currentSession.isInitialized) {
@@ -742,7 +742,7 @@ class AgentActivity : AppCompatActivity() {
                                     currentSession,
                                     com.pr4nav.jarvis.session.SessionMessage(
                                         sender = "agent",
-                                        text = "${res.source.badge}\n${res.speechResponse}",
+                                        text = "${res.source.badge}\n${res.jarvisResponse.text}",
                                         steps = steps,
                                         isSuccess = res.handled
                                     )
@@ -750,7 +750,7 @@ class AgentActivity : AppCompatActivity() {
                             }
 
                             // Speak response via Kokoro-82M TTS
-                            voiceEngine?.speak(res.speechResponse, interrupt = false)
+                            voiceEngine?.speak(res.jarvisResponse.speechText, interrupt = false)
                             updateCtx()
                         }
                     }

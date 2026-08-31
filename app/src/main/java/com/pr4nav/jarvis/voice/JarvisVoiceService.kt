@@ -433,12 +433,12 @@ class JarvisVoiceService : Service() {
                     voiceSession,
                     com.pr4nav.jarvis.session.SessionMessage(
                         sender = "agent",
-                        text = "${res.source.badge}\n${res.speechResponse}",
+                        text = "${res.source.badge}\n${res.jarvisResponse.text}",
                         steps = listOf("Model: ${res.modelName}", "Thinking: ${res.thinkingTrace}"),
                         isSuccess = res.handled
                     )
                 )
-                speakResponse(res.speechResponse, openConversation = VoiceAssistantPreferences.isConversationMode(applicationContext))
+                speakResponse(res.jarvisResponse.speechText, openConversation = VoiceAssistantPreferences.isConversationMode(applicationContext))
             }
         }.start()
     }
