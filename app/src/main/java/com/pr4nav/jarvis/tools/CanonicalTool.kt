@@ -142,13 +142,16 @@ enum class ToolState {
 /**
  * Canonical Tool definition.
  * Holds name, description, backend, JSON schema for arguments, required permissions, timeout,
- * execution function, and verification function.
+ * capability matrix, fallback chains, idempotency flag, execution and verification functions.
  */
 data class CanonicalToolDef(
     val name: String,
     val description: String,
     val argumentSchema: JSONObject,
     val backend: ToolBackend = ToolBackend.ANDROID_NATIVE,
+    val supportedBackends: Set<ToolBackend> = setOf(backend),
+    val fallbackChain: List<ToolBackend> = emptyList(),
+    val isIdempotent: Boolean = true,
     val requiredPermissions: List<String> = emptyList(),
     val defaultTimeoutMs: Long = 10_000L,
     val checkAvailability: (context: Context) -> ToolState = { ToolState.AVAILABLE },
@@ -156,18 +159,51 @@ data class CanonicalToolDef(
     val execute: (context: Context, args: JSONObject) -> ToolResult
 ) {
     /**
-     * Executes the tool with timeout enforcement and verification.
+     * Executes the tool with timeout enforcement, verification, and Journal auditing.
      */
     fun executeWithTimeout(context: Context, args: JSONObject, timeoutOverrideMs: Long? = null): ToolResult {
         val timeout = timeoutOverrideMs ?: defaultTimeoutMs
         val t0 = System.currentTimeMillis()
+        val execId = com.pr4nav.jarvis.core.ExecutionJournal.generateExecutionId()
 
         // 1. Availability check
         val state = checkAvailability(context)
         if (state == ToolState.UNAVAILABLE) {
-            return ToolResult.failure("BACKEND_UNAVAILABLE", "Tool '$name' backend ($backend) is unavailable", 0L)
+            val errRes = ToolResult.failure("BACKEND_UNAVAILABLE", "Tool '$name' backend ($backend) is unavailable", 0L)
+            com.pr4nav.jarvis.core.ExecutionJournal.record(
+                com.pr4nav.jarvis.core.JournalEntry(
+                    executionId = execId,
+                    rawRequest = name,
+                    normalizedIntent = name,
+                    tool = name,
+                    args = args,
+                    backend = backend.name,
+                    phase = com.pr4nav.jarvis.core.ExecutionPhase.FAILED,
+                    success = false,
+                    verified = false,
+                    durationMs = 0L,
+                    error = "BACKEND_UNAVAILABLE"
+                )
+            )
+            return errRes
         } else if (state == ToolState.BROKEN) {
-            return ToolResult.failure("BACKEND_BROKEN", "Tool '$name' backend ($backend) is broken or corrupted", 0L)
+            val errRes = ToolResult.failure("BACKEND_BROKEN", "Tool '$name' backend ($backend) is broken or corrupted", 0L)
+            com.pr4nav.jarvis.core.ExecutionJournal.record(
+                com.pr4nav.jarvis.core.JournalEntry(
+                    executionId = execId,
+                    rawRequest = name,
+                    normalizedIntent = name,
+                    tool = name,
+                    args = args,
+                    backend = backend.name,
+                    phase = com.pr4nav.jarvis.core.ExecutionPhase.FAILED,
+                    success = false,
+                    verified = false,
+                    durationMs = 0L,
+                    error = "BACKEND_BROKEN"
+                )
+            )
+            return errRes
         }
 
         // 2. Argument validation against schema (checks required fields)
@@ -175,7 +211,7 @@ data class CanonicalToolDef(
         if (requiredFields != null) {
             for (i in 0 until requiredFields.length()) {
                 val field = requiredFields.optString(i)
-                if (field.isNotBlank() && !args.has(field)) {
+                if (field.isNotBlank() && (!args.has(field) || args.optString(field).isBlank())) {
                     return ToolResult.invalidArguments("Missing required argument: $field")
                 }
             }
@@ -197,14 +233,14 @@ data class CanonicalToolDef(
             execute(context, args)
         })
 
-        return try {
-            val res = future.get(timeout, TimeUnit.MILLISECONDS)
+        val res = try {
+            val result = future.get(timeout, TimeUnit.MILLISECONDS)
             executor.shutdownNow()
             val totalLatency = System.currentTimeMillis() - t0
 
             // 4. Verification Check
-            val isVerified = if (res.success) verify(context, args, res) else false
-            if (res.success && !isVerified) {
+            val isVerified = if (result.success) verify(context, args, result) else false
+            if (result.success && !isVerified) {
                 ToolResult(
                     success = false,
                     status = ToolStatus.FAILED,
@@ -212,7 +248,7 @@ data class CanonicalToolDef(
                     latencyMs = totalLatency
                 )
             } else {
-                res.copy(latencyMs = totalLatency)
+                result.copy(latencyMs = totalLatency)
             }
         } catch (e: TimeoutException) {
             future.cancel(true)
@@ -224,5 +260,24 @@ data class CanonicalToolDef(
             val latency = System.currentTimeMillis() - t0
             ToolResult.failure("EXECUTION_ERROR", e.message ?: e.javaClass.simpleName, latency)
         }
+
+        // 5. Record in Execution Journal
+        com.pr4nav.jarvis.core.ExecutionJournal.record(
+            com.pr4nav.jarvis.core.JournalEntry(
+                executionId = execId,
+                rawRequest = name,
+                normalizedIntent = name,
+                tool = name,
+                args = args,
+                backend = backend.name,
+                phase = if (res.success) com.pr4nav.jarvis.core.ExecutionPhase.COMPLETED else com.pr4nav.jarvis.core.ExecutionPhase.FAILED,
+                success = res.success,
+                verified = res.success,
+                durationMs = res.latencyMs,
+                error = res.error?.message
+            )
+        )
+
+        return res
     }
 }

@@ -9,10 +9,28 @@ import java.io.File
  */
 enum class ExecutionEnvironment {
     ANDROID_APP,
+    SHARED_STORAGE,
     TERMUX,
     UBUNTU_PROOT,
-    OPENCODE_WORKSPACE,
-    SHARED_STORAGE
+    OPENCODE_WORKSPACE
+}
+
+/**
+ * Strongly typed Environment Path representation.
+ * Prevents naked, ambiguous path strings from crossing system boundaries.
+ */
+data class EnvironmentPath(
+    val environment: ExecutionEnvironment,
+    val path: String
+) {
+    fun isAccessibleOnHost(): Boolean {
+        return try {
+            val f = File(path)
+            f.exists()
+        } catch (_: Exception) {
+            false
+        }
+    }
 }
 
 /**
@@ -52,9 +70,6 @@ object EnvironmentManager {
     const val UBUNTU_HOME_IN_PROOT = "/home"
     const val UBUNTU_TMP_IN_PROOT = "/tmp"
 
-    // OpenCode Workspace Paths
-    const val OPENCODE_WORKSPACE = "/sdcard"
-
     /**
      * Resolves a canonical path for a target environment.
      */
@@ -84,9 +99,63 @@ object EnvironmentManager {
             }
             ExecutionEnvironment.OPENCODE_WORKSPACE -> {
                 if (trimmed.startsWith("/")) trimmed
-                else "$OPENCODE_WORKSPACE/$trimmed"
+                else "/sdcard/$trimmed"
             }
         }
+    }
+
+    /**
+     * Translates a path from one environment to another.
+     * Returns null if translation is impossible or inaccessible across environments.
+     */
+    fun translate(source: EnvironmentPath, target: ExecutionEnvironment): EnvironmentPath? {
+        val srcPath = source.path.trim()
+
+        // 1. Identity translation
+        if (source.environment == target) return source
+
+        // 2. Shared storage mapping (/sdcard <-> Termux /sdcard <-> Ubuntu PRoot /sdcard)
+        if (source.environment == ExecutionEnvironment.SHARED_STORAGE) {
+            val rel = if (srcPath.startsWith("/sdcard/")) srcPath.removePrefix("/sdcard/")
+                      else if (srcPath.startsWith("/storage/emulated/0/")) srcPath.removePrefix("/storage/emulated/0/")
+                      else srcPath.trimStart('/')
+
+            return when (target) {
+                ExecutionEnvironment.ANDROID_APP -> EnvironmentPath(target, File(sharedStorageDir(), rel).absolutePath)
+                ExecutionEnvironment.SHARED_STORAGE -> EnvironmentPath(target, "/sdcard/$rel")
+                ExecutionEnvironment.TERMUX -> EnvironmentPath(target, "/sdcard/$rel")
+                ExecutionEnvironment.UBUNTU_PROOT -> EnvironmentPath(target, "/sdcard/$rel")
+                ExecutionEnvironment.OPENCODE_WORKSPACE -> EnvironmentPath(target, "/sdcard/$rel")
+            }
+        }
+
+        // 3. Termux host to Ubuntu PRoot mapping
+        if (source.environment == ExecutionEnvironment.TERMUX && target == ExecutionEnvironment.UBUNTU_PROOT) {
+            if (srcPath.startsWith("/sdcard") || srcPath.startsWith("/storage/emulated/0")) {
+                return EnvironmentPath(ExecutionEnvironment.UBUNTU_PROOT, srcPath)
+            }
+            if (srcPath.startsWith("$UBUNTU_BASE/root")) {
+                return EnvironmentPath(ExecutionEnvironment.UBUNTU_PROOT, srcPath.removePrefix(UBUNTU_BASE))
+            }
+            if (srcPath.startsWith(UBUNTU_BASE)) {
+                return EnvironmentPath(ExecutionEnvironment.UBUNTU_PROOT, srcPath.removePrefix(UBUNTU_BASE))
+            }
+            // Termux home is mounted in PRoot at /termux or accessible via shared storage
+            return null
+        }
+
+        // 4. Ubuntu PRoot to Termux host mapping
+        if (source.environment == ExecutionEnvironment.UBUNTU_PROOT && target == ExecutionEnvironment.TERMUX) {
+            if (srcPath.startsWith("/sdcard") || srcPath.startsWith("/storage/emulated/0")) {
+                return EnvironmentPath(ExecutionEnvironment.TERMUX, srcPath)
+            }
+            if (srcPath.startsWith("/root") || srcPath.startsWith("/home") || srcPath.startsWith("/tmp")) {
+                return EnvironmentPath(ExecutionEnvironment.TERMUX, "$UBUNTU_BASE$srcPath")
+            }
+            return null
+        }
+
+        return null
     }
 
     /**
