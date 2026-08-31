@@ -140,16 +140,38 @@ object UnifiedAssistantDispatcher {
                 val future = qwen.generate(trimmed, timeoutMs = 8_000L)
                 val llmRes = future.get(8_000L, TimeUnit.MILLISECONDS)
 
-                if (llmRes.toolCall != null && llmRes.confidence >= 0.70f) {
-                    val toolDef = CanonicalToolRegistry.get(llmRes.toolCall)
-                    if (toolDef != null) {
-                        val args = llmRes.args ?: JSONObject()
-                        val execRes = toolDef.executeWithTimeout(context, args)
-                        val summary = if (execRes.success) {
-                            execRes.data?.toString() ?: "Executed ${llmRes.toolCall}."
+                if (llmRes.toolCall != null && llmRes.confidence >= 0.65f) {
+                    val args = llmRes.args ?: JSONObject()
+                    val summary = try {
+                        val toolDef = CanonicalToolRegistry.get(llmRes.toolCall)
+                        if (toolDef != null) {
+                            val execRes = toolDef.executeWithTimeout(context, args)
+                            if (execRes.success) {
+                                execRes.data?.toString() ?: "Executed ${llmRes.toolCall}."
+                            } else {
+                                execRes.error?.message ?: "Execution failed."
+                            }
                         } else {
-                            execRes.error?.message ?: "Execution failed."
+                            val map = mutableMapOf<String, Any?>()
+                            val keys = args.keys()
+                            while (keys.hasNext()) {
+                                val k = keys.next()
+                                map[k] = args.opt(k)
+                            }
+                            val routeRes = com.pr4nav.jarvis.needle.NeedleRouteResult(
+                                route = com.pr4nav.jarvis.needle.RouteType.DIRECT_TOOL,
+                                tool = llmRes.toolCall,
+                                arguments = map,
+                                confidence = llmRes.confidence.toDouble(),
+                                reasoning = "Selected by on-device local SLM"
+                            )
+                            com.pr4nav.jarvis.needle.NeedleExecutor.execute(context, routeRes)
                         }
+                    } catch (e: Exception) {
+                        null
+                    }
+
+                    if (summary != null) {
                         val latency = System.currentTimeMillis() - t0
                         Log.i(TAG, "Tier 2: Local SLM tool match [${llmRes.toolCall}] in ${latency}ms")
                         onResult(
@@ -158,7 +180,6 @@ object UnifiedAssistantDispatcher {
                                 source = ExecutionSource.LOCAL_LLM,
                                 speechResponse = summary,
                                 fullSummary = "🧠 [Tier 2: Local SLM ${llmRes.toolCall} · ${latency}ms]\n$summary",
-                                toolResult = execRes,
                                 latencyMs = latency
                             )
                         )

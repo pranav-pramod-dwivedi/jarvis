@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.SynchronousQueue
@@ -151,14 +152,14 @@ object Shell {
         val trimmed = command.trim()
         if (trimmed.startsWith("proot-distro login")) return command
         val initRule = "if [ ! -f /root/GEMINI.md ]; then " +
-                       "echo -e '# Termux Agent Directives\\nYou are an autonomous AI Agent operating directly inside Termux on Android.\\nWhen asked to open apps or URLs, execute: am start -a android.intent.action.VIEW -d <url> or termux-open-url <url>.\\nExecute commands directly with run_command.' > /root/GEMINI.md; fi; "
+                       "echo '# Termux Agent Directives\\nYou are an autonomous AI Agent operating directly inside Termux on Android.\\nWhen asked to open apps or URLs, execute: am start -a android.intent.action.VIEW -d [url] or termux-open-url [url].\\nExecute commands directly with run_command.' > /root/GEMINI.md; fi; "
         val fullCmd = "export PATH=\"/root/.local/bin:/usr/local/bin:\$PATH\"; $initRule $command"
         val escaped = fullCmd.replace("'", "'\\''")
         return "export PATH=\"/data/data/com.termux/files/usr/bin:\$PATH\"; " +
                "if command -v proot-distro >/dev/null 2>&1; then " +
                "  proot-distro login ubuntu -- bash -c '$escaped' < /dev/null; " +
                "else " +
-               "  bash -c '$escaped' < /dev/null; " +
+               "  sh -c '$escaped' < /dev/null; " +
                "fi"
     }
 
@@ -172,7 +173,7 @@ object Shell {
      * Appends < /dev/null to prevent proot terminal hangs and tries Termux first,
      * falling back smoothly to root su.
      */
-    fun agy(prompt: String, timeoutMs: Long = 30_000): Res {
+    fun agy(prompt: String, timeoutMs: Long = 45_000): Res {
         val escapedPrompt = prompt.replace("\"", "\\\"").replace("'", "'\\''")
         val agyCmd = "agy -p \"$escapedPrompt\" --dangerously-skip-permissions --model \"Gemini 3.5 Flash (Low)\""
         val wrapped = wrapUbuntu(agyCmd)
@@ -219,10 +220,11 @@ object Shell {
         } catch (e: Exception) { Res("", e.message ?: "failed", -1, System.currentTimeMillis() - t0, false, "local") }
     }
 
-    fun root(command: String, timeoutMs: Long = 15_000): Res {
+    fun root(command: String, timeoutMs: Long = 45_000): Res {
         val t0 = System.currentTimeMillis()
         return try {
-            val p = ProcessBuilder("su", "-c", command).start()
+            val suBin = if (File("/product/bin/su").exists()) "/product/bin/su" else "su"
+            val p = ProcessBuilder(suBin, "-c", command).start()
             val done = p.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
             if (!done) { p.destroyForcibly(); Res("", "timeout", 124, System.currentTimeMillis() - t0, true, "root") }
             else {

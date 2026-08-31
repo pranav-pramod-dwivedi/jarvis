@@ -1,12 +1,12 @@
 # JARVIS — Neural On-Device Personal Voice Assistant
 
-JARVIS is an autonomous, on-device AI personal assistant built for Android. It combines offline neural wake-word verification, low-latency canonical tool routing, local LLM natural language understanding, hands-free background operation, and headless Linux environment execution (Termux/AGY).
+JARVIS is an autonomous, on-device AI personal assistant built for Android. It combines offline neural wake-word verification, low-latency canonical tool routing, local on-device SLM natural language understanding (Qwen 2.5), zero-API-key AGY autonomous CLI execution via Ubuntu PRoot / Termux, and hands-free background operation.
 
-**Author**: Pranav Pramod Dwivedi (`pranav-pramod-dwivedi`)
+**Author**: Pranav Pramod Dwivedi (`pranav-pramod`)
 
 ---
 
-## Key Capabilities & Architecture
+## 3-Tier Intelligence Architecture
 
 ```
 User Voice / Text
@@ -15,7 +15,7 @@ User Voice / Text
 ┌─────────────────────────────────────────────────────────┐
 │              JARVIS Voice Assistant Pipeline            │
 │                                                         │
-│  [Low-Power VAD Monitor]                                │
+│  [Low-Power Acoustic Monitor]                           │
 │           │                                             │
 │           ▼                                             │
 │  [OnnxWakeWordEngine] ── 16kHz PCM (openWakeWord)       │
@@ -23,23 +23,25 @@ User Voice / Text
 │    ├── embedding_model.onnx (Google speech embedding)   │
 │    └── hey_jarvis_v0.1.onnx (neural probability)        │
 │           │                                             │
-│           ▼ "Jarvis" confirmed (Prob ≥ 0.50)           │
+│           ▼ "Jarvis" confirmed (Prob ≥ 0.35)           │
 │  [Single Intentional SpeechRecognizer Session]          │
 └─────────────────────────┬───────────────────────────────┘
                           │ Recognized Utterance
                           ▼
 ┌─────────────────────────────────────────────────────────┐
-│               Jarvis Intent Router & Needle             │
+│              Unified Assistant Dispatcher               │
 │                                                         │
-│  1. Deterministic / Regex Needle Matcher                │
-│  2. Local LLM / Natural Language Normalizer             │
-│  3. Canonical Tool Registry                             │
-│     ├── System Tools (Camera, WiFi, Flashlight, Alarms) │
-│     ├── App Automation (WhatsApp, YouTube, Spotify)     │
-│     ├── Phone & Contacts (Direct Call, Contacts query)  │
-│     ├── Media Playback & Volume Control                 │
-│     └── Termux Linux CLI (AGY daemon, shell scripts)    │
-│  4. TTS Feedback Engine & Conversational Follow-Up      │
+│  Tier 1: Deterministic Needle 2 & Intent Router (<15ms) │
+│    ├── Direct regex & LanguageNormalizer (En / Hi)      │
+│    └── Canonical tools (Torch, WiFi, Apps, Calls, etc.) │
+│                                                         │
+│  Tier 2: On-Device Local SLM (Qwen 2.5 0.5B/1.5B GGUF)  │
+│    ├── Completely offline reasoning & tool translation  │
+│    └── Maps ambiguous natural queries to Needle tools   │
+│                                                         │
+│  Tier 3: Autonomous Ubuntu AGY CLI & Cloud Intelligence │
+│    ├── Zero-API-key AGY CLI inside Ubuntu PRoot / Termux│
+│    └── Gemini Cloud generative reasoning fallback       │
 └─────────────────────────────────────────────────────────┘
 ```
 

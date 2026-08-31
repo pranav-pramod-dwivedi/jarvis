@@ -225,8 +225,8 @@ class OnnxWakeWordEngine : WakeWordEngine {
                     .format(prob, latency, prob >= 0.50f))
             }
 
-            // Threshold evaluation (0.50f standard)
-            val threshold = 0.50f
+            // Threshold evaluation (0.35f sensitive default to capture natural speech variants)
+            val threshold = 0.35f
             if (prob >= threshold) {
                 Log.i(TAG, "★ WAKE_DETECTED! Confirmed 'Jarvis' wake word (Prob: %.4f, Latency: %dms, Peak: %d)".format(prob, latency, peak))
                 // Reset rolling buffers after detection

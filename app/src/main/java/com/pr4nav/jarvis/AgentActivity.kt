@@ -421,37 +421,32 @@ class AgentActivity : AppCompatActivity() {
             }
 
             else -> {
-                // Tier 3: Escalate to Cloud Intelligence (Gemini API or AGY)
+                // Tier 1 -> Tier 2 -> Tier 3: Unified Autonomous Pipeline
                 runOnUiThread {
-                    showThinking("Consulting Cloud Intelligence…", "Querying Gemini reasoning engine")
+                    showThinking("Processing request…", "Analyzing intent through Unified Intelligence")
                 }
-                com.pr4nav.jarvis.llm.GeminiCloudLLM.generate(
-                    context = this,
-                    prompt = q,
-                    onSuccess = { answer ->
-                        runOnUiThread {
-                            hideThinking()
-                            addExecutionStepCard(
-                                title = "JARVIS Cloud Intelligence",
-                                steps = listOf("Escalated to Gemini Generative AI", "Reasoning generated"),
-                                isSuccess = true,
-                                finalSummary = answer
-                            )
+                com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(this, q) { res ->
+                    runOnUiThread {
+                        hideThinking()
+                        val tierTitle = when (res.source) {
+                            com.pr4nav.jarvis.router.ExecutionSource.DETERMINISTIC_NEEDLE -> "Needle 2 Deterministic Action"
+                            com.pr4nav.jarvis.router.ExecutionSource.LOCAL_LLM -> "On-Device Local SLM"
+                            com.pr4nav.jarvis.router.ExecutionSource.CLOUD_LLM -> "Autonomous Cloud Intelligence (AGY / Gemini)"
+                            com.pr4nav.jarvis.router.ExecutionSource.FALLBACK -> "Assistant Response"
                         }
-                    },
-                    onError = { err ->
-                        runOnUiThread {
-                            hideThinking()
-                            val fallbackMsg = "Could not resolve response for \"$q\": $err. Local tools and device controls are fully active."
-                            addExecutionStepCard(
-                                title = "Autonomous Reasoning Notice",
-                                steps = listOf("Autonomous reasoning query unfulfilled: $err"),
-                                isSuccess = false,
-                                finalSummary = fallbackMsg
-                            )
-                        }
+                        val steps = listOf(
+                            "Source: ${res.source.name}",
+                            "Latency: ${res.latencyMs}ms"
+                        )
+                        addExecutionStepCard(
+                            title = tierTitle,
+                            steps = steps,
+                            isSuccess = res.handled,
+                            finalSummary = res.speechResponse
+                        )
+                        updateCtx()
                     }
-                )
+                }
             }
         }
     }
