@@ -101,22 +101,35 @@
         android:paddingVertical="6dp">
 
         <TextView
-            android:id="@+id/badge_model"
+            android:id="@+id/txt_agy_session_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="⚡ Gemini 3.5 Flash • Autonomous Agent"
+            android:text="📅 01 Sep 2026, 01:36:15 AM"
             android:textColor="#38BDF8"
             android:textSize="11sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:ellipsize="end"
+            android:maxLines="1" />
+
+        <Button
+            android:id="@+id/btn_agy_sessions"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:backgroundTint="#1E293B"
+            android:paddingHorizontal="8dp"
+            android:text="History ▾"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp" />
 
         <Button
             android:id="@+id/btn_new_chat"
             android:layout_width="wrap_content"
             android:layout_height="32dp"
+            android:layout_marginStart="6dp"
             android:backgroundTint="#2563EB"
             android:paddingHorizontal="10dp"
-            android:text="+ New Chat"
+            android:text="+ New"
             android:textColor="#FFFFFF"
             android:textSize="11sp"
             android:textStyle="bold" />

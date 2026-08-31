@@ -42,6 +42,10 @@ class AgyActivity : AppCompatActivity() {
     private lateinit var btnSend: Button
     private lateinit var btnAbort: Button
 
+    private lateinit var txtAgySessionTitle: TextView
+    private lateinit var btnAgySessions: Button
+    private lateinit var currentSession: com.pr4nav.jarvis.session.JarvisSession
+
     private var isFirstTurn = true
     private val client = AgyClient()
     private val processManager = AgyProcessManager(client)
@@ -66,6 +70,7 @@ class AgyActivity : AppCompatActivity() {
         com.pr4nav.jarvis.automation.JarvisAutomationEngine.init(this)
 
         bindViews()
+        setupSessionControls()
         setupListeners()
         setupChips()
 
@@ -74,6 +79,53 @@ class AgyActivity : AppCompatActivity() {
         }
 
         appendBanner("⚡ Antigravity (AGY) Console initialized.\nConnecting to AGY daemon on 127.0.0.1:5050...\n")
+    }
+
+    private fun setupSessionControls() {
+        val session = com.pr4nav.jarvis.session.JarvisSessionManager.getActiveSession(
+            this,
+            com.pr4nav.jarvis.session.SessionType.AGY_CODING
+        )
+        loadSession(session)
+
+        btnAgySessions.setOnClickListener {
+            com.pr4nav.jarvis.session.SessionHistoryDialog(
+                context = this,
+                filterType = com.pr4nav.jarvis.session.SessionType.AGY_CODING,
+                currentSessionId = currentSession.id,
+                onSessionSelected = { selected ->
+                    loadSession(selected)
+                },
+                onNewSessionRequested = {
+                    createNewSession()
+                }
+            ).show()
+        }
+    }
+
+    private fun createNewSession() {
+        val newSession = com.pr4nav.jarvis.session.JarvisSessionManager.createSession(
+            this,
+            com.pr4nav.jarvis.session.SessionType.AGY_CODING
+        )
+        loadSession(newSession)
+        Toast.makeText(this, "Started new AGY session: ${newSession.title}", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun loadSession(session: com.pr4nav.jarvis.session.JarvisSession) {
+        currentSession = session
+        txtAgySessionTitle.text = "📅 ${session.title}"
+        outputView.text = ""
+        isFirstTurn = session.messages.isEmpty()
+
+        appendBanner("⚡ Loaded AGY Session: ${session.title}\nWorking dir: ${session.workingDir}\n")
+        for (m in session.messages) {
+            if (m.sender == "user") {
+                appendUserPrompt(m.text)
+            } else {
+                appendToken(m.text + "\n")
+            }
+        }
     }
 
     override fun onResume() {
@@ -103,6 +155,8 @@ class AgyActivity : AppCompatActivity() {
         inputPrompt = findViewById(R.id.input_prompt)
         btnSend = findViewById(R.id.btn_send)
         btnAbort = findViewById(R.id.btn_abort)
+        txtAgySessionTitle = findViewById(R.id.txt_agy_session_title)
+        btnAgySessions = findViewById(R.id.btn_agy_sessions)
     }
 
     private fun setupListeners() {
@@ -132,10 +186,7 @@ class AgyActivity : AppCompatActivity() {
         }
 
         btnNewChat.setOnClickListener {
-            isFirstTurn = true
-            outputView.text = ""
-            appendSystem("⚡ Started new chat session. Context reset.\n")
-            Toast.makeText(this, "New chat started", Toast.LENGTH_SHORT).show()
+            createNewSession()
         }
 
         btnClearOutput.setOnClickListener {

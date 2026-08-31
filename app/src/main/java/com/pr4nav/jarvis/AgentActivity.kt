@@ -32,6 +32,11 @@ class AgentActivity : AppCompatActivity() {
     private lateinit var thinkingDetail: TextView
     private lateinit var agentCtx: TextView
 
+    private lateinit var txtSessionTitle: TextView
+    private lateinit var btnSessionHistory: Button
+    private lateinit var btnNewSession: Button
+    private lateinit var currentSession: com.pr4nav.jarvis.session.JarvisSession
+
     private var voiceEngine: JarvisVoiceEngine? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,9 +53,16 @@ class AgentActivity : AppCompatActivity() {
         thinkingDetail = findViewById(R.id.thinking_detail)
         agentCtx = findViewById(R.id.agent_ctx)
 
+        txtSessionTitle = findViewById(R.id.txt_current_session_title)
+        btnSessionHistory = findViewById(R.id.btn_sessions_history)
+        btnNewSession = findViewById(R.id.btn_new_session)
+
         voiceEngine = JarvisVoiceEngine(this)
 
         findViewById<View>(R.id.btn_back)?.setOnClickListener { finish() }
+
+        // Setup Session Switcher & History
+        setupSessionControls()
 
         // Setup All Pages dialog popup
         findViewById<View>(R.id.btn_all_pages)?.setOnClickListener {
@@ -75,6 +87,77 @@ class AgentActivity : AppCompatActivity() {
 
         updateCtx()
         handleWakeWordIntent(intent)
+    }
+
+    private fun setupSessionControls() {
+        // Load active session or create initial session
+        val session = com.pr4nav.jarvis.session.JarvisSessionManager.getActiveSession(
+            this,
+            com.pr4nav.jarvis.session.SessionType.AGENT_CHAT
+        )
+        loadSession(session)
+
+        btnSessionHistory.setOnClickListener {
+            com.pr4nav.jarvis.session.SessionHistoryDialog(
+                context = this,
+                filterType = com.pr4nav.jarvis.session.SessionType.AGENT_CHAT,
+                currentSessionId = currentSession.id,
+                onSessionSelected = { selected ->
+                    loadSession(selected)
+                },
+                onNewSessionRequested = {
+                    createNewSession()
+                }
+            ).show()
+        }
+
+        btnNewSession.setOnClickListener {
+            createNewSession()
+        }
+    }
+
+    private fun createNewSession() {
+        val newSession = com.pr4nav.jarvis.session.JarvisSessionManager.createSession(
+            this,
+            com.pr4nav.jarvis.session.SessionType.AGENT_CHAT,
+            workingDir = SessionState.dir
+        )
+        loadSession(newSession)
+        Toast.makeText(this, "Started new session: ${newSession.title}", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun loadSession(session: com.pr4nav.jarvis.session.JarvisSession) {
+        currentSession = session
+        txtSessionTitle.text = "📅 ${session.title}"
+        SessionState.dir = session.workingDir
+
+        // Render previous messages from session history
+        messagesContainer.removeAllViews()
+
+        if (session.messages.isEmpty()) {
+            addExecutionStepCard(
+                title = "JARVIS Neural Agent Ready",
+                steps = listOf(
+                    "Session initialized: ${session.title}",
+                    "Deterministic tool routing: Active",
+                    "Autonomous coding & execution: Active",
+                    "Working directory: ${session.workingDir}"
+                ),
+                isSuccess = true,
+                finalSummary = "Ready for complex autonomous tasks and natural conversation.",
+                saveToHistory = false
+            )
+        } else {
+            for (m in session.messages) {
+                if (m.sender == "user") {
+                    renderUserBubble(m.text)
+                } else {
+                    renderStepCard(m.steps, m.isSuccess, m.text)
+                }
+            }
+        }
+        scrollToBottom()
+        updateCtx()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -216,7 +299,7 @@ class AgentActivity : AppCompatActivity() {
         scroller.post { scroller.fullScroll(View.FOCUS_DOWN) }
     }
 
-    private fun addUserMessage(text: String) {
+    private fun renderUserBubble(text: String) {
         val bubble = TextView(this).apply {
             this.text = text
             setTextColor(Color.WHITE)
@@ -234,10 +317,97 @@ class AgentActivity : AppCompatActivity() {
             layoutParams = lp
         }
         messagesContainer.addView(bubble)
-        scrollToBottom()
     }
 
-    private fun addExecutionStepCard(title: String, steps: List<String>, isSuccess: Boolean, finalSummary: String) {
+    private fun renderStepCard(steps: List<String>, isSuccess: Boolean, finalSummary: String) {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.bg_chat_agent)
+            setPadding(36, 32, 36, 32)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.START
+                topMargin = 20
+                marginEnd = 40
+            }
+            layoutParams = lp
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val dot = View(this).apply {
+            val size = (10 * resources.displayMetrics.density).toInt()
+            layoutParams = LinearLayout.LayoutParams(size, size).apply { marginEnd = 16 }
+            setBackgroundResource(if (isSuccess) R.drawable.bg_dot else R.drawable.bg_round_glow)
+        }
+        val tvTitle = TextView(this).apply {
+            this.text = if (isSuccess) "Agent Execution ✓" else "Action Completed with Notice"
+            setTextColor(if (isSuccess) Color.parseColor("#10B981") else Color.parseColor("#FF7A00"))
+            textSize = 13f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+        header.addView(dot)
+        header.addView(tvTitle)
+        card.addView(header)
+
+        for (step in steps) {
+            val stepRow = TextView(this).apply {
+                this.text = "• $step"
+                setTextColor(Color.parseColor("#94A3B8"))
+                textSize = 12f
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = 8 }
+                layoutParams = lp
+            }
+            card.addView(stepRow)
+        }
+
+        val outcome = TextView(this).apply {
+            this.text = finalSummary
+            setTextColor(Color.parseColor("#F8FAFC"))
+            textSize = 13f
+            setBackgroundResource(if (isSuccess) R.drawable.bg_step_success else R.drawable.bg_step_progress)
+            setPadding(24, 20, 24, 20)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 16 }
+            layoutParams = lp
+        }
+        card.addView(outcome)
+        messagesContainer.addView(card)
+    }
+
+    private fun addUserMessage(text: String) {
+        renderUserBubble(text)
+        scrollToBottom()
+
+        // Persist to active session
+        if (::currentSession.isInitialized) {
+            com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+                this,
+                currentSession,
+                com.pr4nav.jarvis.session.SessionMessage(
+                    sender = "user",
+                    text = text
+                )
+            )
+        }
+    }
+
+    private fun addExecutionStepCard(
+        title: String,
+        steps: List<String>,
+        isSuccess: Boolean,
+        finalSummary: String,
+        saveToHistory: Boolean = true
+    ) {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.bg_chat_agent)
@@ -305,6 +475,20 @@ class AgentActivity : AppCompatActivity() {
 
         messagesContainer.addView(card)
         scrollToBottom()
+
+        // Persist to active session
+        if (saveToHistory && ::currentSession.isInitialized) {
+            com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+                this,
+                currentSession,
+                com.pr4nav.jarvis.session.SessionMessage(
+                    sender = "agent",
+                    text = finalSummary,
+                    steps = steps,
+                    isSuccess = isSuccess
+                )
+            )
+        }
 
         // Speak outcome via TTS
         voiceEngine?.speak(finalSummary, interrupt = false)

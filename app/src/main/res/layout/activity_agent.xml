@@ -88,6 +88,54 @@
             app:tint="#FF7A00" />
     </LinearLayout>
 
+    <!-- Session Switcher Bar (Ordered Last Used First, Named by Date/Time) -->
+    <LinearLayout
+        android:id="@+id/session_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_agent_input_bar"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="2dp"
+        android:paddingVertical="6dp"
+        android:paddingHorizontal="10dp"
+        app:layout_constraintTop_toBottomOf="@id/top_bar">
+
+        <TextView
+            android:id="@+id/txt_current_session_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📅 01 Sep 2026, 01:36:15 AM"
+            android:textColor="#38BDF8"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:ellipsize="end"
+            android:maxLines="1" />
+
+        <Button
+            android:id="@+id/btn_sessions_history"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:text="History ▾"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:background="@drawable/bg_btn_action_pill"
+            android:paddingHorizontal="8dp" />
+
+        <Button
+            android:id="@+id/btn_new_session"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:layout_marginStart="6dp"
+            android:text="+ New"
+            android:textColor="#00E5FF"
+            android:textSize="11sp"
+            android:background="@drawable/bg_btn_action_pill"
+            android:paddingHorizontal="8dp" />
+    </LinearLayout>
+
     <!-- Horizontal Quick App Navigation Tabs (Linked Pages) -->
     <HorizontalScrollView
         android:id="@+id/quick_nav_bar"
@@ -96,7 +144,7 @@
         android:layout_marginTop="4dp"
         android:paddingHorizontal="12dp"
         android:scrollbars="none"
-        app:layout_constraintTop_toBottomOf="@id/top_bar">
+        app:layout_constraintTop_toBottomOf="@id/session_bar">
 
         <LinearLayout
             android:layout_width="wrap_content"

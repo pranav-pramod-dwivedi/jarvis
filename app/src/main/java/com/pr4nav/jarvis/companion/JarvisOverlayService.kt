@@ -327,7 +327,28 @@ class JarvisOverlayService : Service() {
             return
         }
 
+        val voiceSession = com.pr4nav.jarvis.session.JarvisSessionManager.getActiveSession(
+            applicationContext,
+            com.pr4nav.jarvis.session.SessionType.VOICE_CHAT
+        )
+        com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+            applicationContext,
+            voiceSession,
+            com.pr4nav.jarvis.session.SessionMessage(sender = "user", text = command)
+        )
+
         UnifiedAssistantDispatcher.execute(applicationContext, command) { res ->
+            com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+                applicationContext,
+                voiceSession,
+                com.pr4nav.jarvis.session.SessionMessage(
+                    sender = "agent",
+                    text = res.speechResponse,
+                    steps = listOf("Source: ${res.source.name}"),
+                    isSuccess = res.handled
+                )
+            )
+
             mainHandler.post {
                 txtStatusBadge?.text = "SPEAKING"
                 txtStatusBadge?.setTextColor(Color.parseColor("#10B981"))
@@ -353,7 +374,28 @@ class JarvisOverlayService : Service() {
         txtTranscription?.text = "Inspecting on-screen content…"
         waveformView?.setActive(true)
 
+        val voiceSession = com.pr4nav.jarvis.session.JarvisSessionManager.getActiveSession(
+            applicationContext,
+            com.pr4nav.jarvis.session.SessionType.VOICE_CHAT
+        )
+        com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+            applicationContext,
+            voiceSession,
+            com.pr4nav.jarvis.session.SessionMessage(sender = "user", text = "Summarize screen content")
+        )
+
         ScreenContextReader.analyzeAndSummarizeScreen(applicationContext) { summary ->
+            com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+                applicationContext,
+                voiceSession,
+                com.pr4nav.jarvis.session.SessionMessage(
+                    sender = "agent",
+                    text = summary,
+                    steps = listOf("Accessibility Screen Analysis"),
+                    isSuccess = true
+                )
+            )
+
             mainHandler.post {
                 txtStatusBadge?.text = "SPEAKING"
                 txtStatusBadge?.setTextColor(Color.parseColor("#10B981"))

@@ -415,8 +415,29 @@ class JarvisVoiceService : Service() {
 
         // 4. Execute via unified autonomous system (Deterministic Needle -> Local SLM -> Cloud Gemini LLM)
         updateState(VoiceState.PROCESSING, "\"$cleanCommand\"")
+
+        val voiceSession = com.pr4nav.jarvis.session.JarvisSessionManager.getActiveSession(
+            applicationContext,
+            com.pr4nav.jarvis.session.SessionType.VOICE_CHAT
+        )
+        com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+            applicationContext,
+            voiceSession,
+            com.pr4nav.jarvis.session.SessionMessage(sender = "user", text = cleanCommand)
+        )
+
         Thread {
             com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(applicationContext, cleanCommand) { res ->
+                com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+                    applicationContext,
+                    voiceSession,
+                    com.pr4nav.jarvis.session.SessionMessage(
+                        sender = "agent",
+                        text = res.speechResponse,
+                        steps = listOf("Source: ${res.source.name}"),
+                        isSuccess = res.handled
+                    )
+                )
                 speakResponse(res.speechResponse, openConversation = VoiceAssistantPreferences.isConversationMode(applicationContext))
             }
         }.start()
