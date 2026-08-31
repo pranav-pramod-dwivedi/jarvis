@@ -14,7 +14,7 @@ import java.util.concurrent.TimeoutException
 
 enum class ExecutionSource(val label: String, val badge: String) {
     DETERMINISTIC_NEEDLE("Needle 2 Deterministic", "⚡ [Needle 2 Deterministic]"),
-    LOCAL_LLM("Qwen 2.5 Local SLM", "🧠 [Qwen 2.5 Local SLM]"),
+    LOCAL_LLM("🟢 Local Qwen3.5-2B", "🟢 [Local: Qwen3.5-2B]"),
     CLOUD_LLM("Gemini 2.0 Flash (Cloud)", "☁️ [Gemini 2.0 Flash (Cloud)]"),
     FALLBACK("Local Fallback", "⚙️ [Local System Fallback]")
 }
@@ -35,8 +35,8 @@ data class UnifiedExecutionResult(
  * Executes the user-aligned reasoning hierarchy:
  *
  * 1. Pre-Check: Prevent greetings ("hi", "hello") from accidentally triggering tools/flashlight.
- * 2. Step 1: Query Qwen 2.5 Local SLM first to check if on-device model can execute or answer.
- * 3. Escalation Check: If Qwen cannot do it, lacks confidence, or requires conversational/cloud reasoning:
+ * 2. Step 1: Query 🟢 Local Qwen3.5-2B first to check if on-device model can execute or answer.
+ * 3. Escalation Check: If Qwen3.5-2B cannot do it, lacks confidence, or requires conversational/cloud reasoning:
  *    -> Cleanly cancel local request (NO hallucinations) and escalate to Cloud LLM (Gemini 2.0 Flash / AGY).
  * 4. Model Attribution & Thinking: Explicitly format which model answered and embed <think> traces.
  */
@@ -73,7 +73,7 @@ object UnifiedAssistantDispatcher {
         val isConversationalOrInformational = LanguageNormalizer.isInformational(trimmed)
 
         // =========================================================================
-        // Step 1: Query Qwen 2.5 Local SLM First (On-Device Inference & Assessment)
+        // Step 1: Query 🟢 Local Qwen3.5-2B First (On-Device Inference & Assessment)
         // =========================================================================
         val qwen = QwenLocalLLM(context)
         val activeModelId = LocalModelManager.getActiveModelId(context)
@@ -114,9 +114,9 @@ object UnifiedAssistantDispatcher {
                 }
             }
 
-            // Query Qwen on-device SLM
+            // Query Qwen3.5-2B on-device SLM
             try {
-                Log.i(TAG, "Step 1: Asking Qwen Local SLM if it can handle: \"$trimmed\"...")
+                Log.i(TAG, "Step 1: Asking 🟢 Local Qwen3.5-2B if it can handle: \"$trimmed\"...")
                 val future = qwen.generate(trimmed, timeoutMs = 4_000L)
                 val llmRes = future.get(4_000L, TimeUnit.MILLISECONDS)
 
@@ -136,17 +136,17 @@ object UnifiedAssistantDispatcher {
                             execRes.error?.message ?: "Execution failed."
                         }
                         val latency = System.currentTimeMillis() - t0
-                        val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Evaluator: Qwen 2.5 Local SLM\n• Decision: Valid on-device capability found [${llmRes.toolCall}]\n• Confidence: ${(llmRes.confidence * 100).toInt()}%\n• Execution: Success\n</think>"
+                        val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Evaluator: 🟢 Local Qwen3.5-2B\n• Decision: Valid on-device capability found [${llmRes.toolCall}]\n• Confidence: ${(llmRes.confidence * 100).toInt()}%\n• Execution: Success\n</think>"
 
-                        Log.i(TAG, "Step 1: Qwen Local SLM handled [${llmRes.toolCall}] in ${latency}ms")
+                        Log.i(TAG, "Step 1: 🟢 Local Qwen3.5-2B handled [${llmRes.toolCall}] in ${latency}ms")
                         onResult(
                             UnifiedExecutionResult(
                                 handled = true,
                                 source = ExecutionSource.LOCAL_LLM,
                                 speechResponse = summary,
-                                fullSummary = "$thinkTrace\n\n🧠 [Qwen 2.5 Local SLM · ${latency}ms]\n$summary",
+                                fullSummary = "$thinkTrace\n\n🟢 [Local: Qwen3.5-2B · ${latency}ms]\n$summary",
                                 thinkingTrace = thinkTrace,
-                                modelName = "Qwen 2.5 (Local SLM)",
+                                modelName = "🟢 Local Qwen3.5-2B",
                                 toolResult = execRes,
                                 latencyMs = latency
                             )
@@ -154,10 +154,10 @@ object UnifiedAssistantDispatcher {
                         return
                     }
                 } else {
-                    Log.i(TAG, "Qwen local check returned no confident tool (tool=${llmRes.toolCall}, conf=${llmRes.confidence}). Escalating cleanly to Cloud LLM without hallucinations.")
+                    Log.i(TAG, "🟢 Local Qwen3.5-2B check returned no confident tool (tool=${llmRes.toolCall}, conf=${llmRes.confidence}). Escalating cleanly to Cloud LLM without hallucinations.")
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Qwen local check escalated: ${e.message}")
+                Log.w(TAG, "🟢 Local Qwen3.5-2B check escalated: ${e.message}")
             }
         }
 
@@ -182,7 +182,7 @@ object UnifiedAssistantDispatcher {
                 val latency = System.currentTimeMillis() - t0
                 com.pr4nav.jarvis.context.ConversationalContext.recordTurn(trimmed, cloudSpeech)
 
-                val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Local Check: Qwen assessed -> Escalated ($escalationReason)\n• Model: Google Gemini 2.0 Flash (Cloud)\n• Reasoning: Generated conversational response with high accuracy\n• Latency: ${latency}ms\n</think>"
+                val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Local Check: 🟢 Local Qwen3.5-2B assessed -> Escalated ($escalationReason)\n• Model: Google Gemini 2.0 Flash (Cloud)\n• Reasoning: Generated conversational response with high accuracy\n• Latency: ${latency}ms\n</think>"
 
                 Log.i(TAG, "Step 2: Cloud Gemini 2.0 Flash responded in ${latency}ms")
                 onResult(

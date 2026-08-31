@@ -36,27 +36,27 @@ object LocalModelManager {
     private const val PREFS_NAME = "jarvis_local_ai_prefs"
     private const val KEY_ACTIVE_MODEL = "active_local_model_id"
 
-    // Supported on-device SLMs (e.g. Qwen2.5-1.5B-Instruct quantized)
+    // Supported on-device SLMs (e.g. Qwen3.5-2B-Instruct quantized)
     val AVAILABLE_MODELS = listOf(
         ModelSpec(
-            id = "qwen2.5-1.5b-instruct-q4",
-            displayName = "Qwen 2.5 (1.5B Instruct - Q4_K_M)",
-            parameterSize = "1.54 Billion",
+            id = "qwen3.5-2b-instruct-q4",
+            displayName = "🟢 Local Qwen3.5-2B (2B Instruct - High Reasoning)",
+            parameterSize = "2.0 Billion",
             quantFormat = "GGUF Q4_K_M",
-            downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-            estimatedSizeBytes = 986_000_000L, // ~986 MB
-            minRamBytes = 2_000_000_000L,      // 2 GB free RAM
-            recommendedTps = 24.5
+            downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
+            estimatedSizeBytes = 1_280_000_000L, // ~1.28 GB
+            minRamBytes = 2_500_000_000L,      // 2.5 GB free RAM
+            recommendedTps = 28.0
         ),
         ModelSpec(
-            id = "qwen2.5-0.5b-instruct-q4",
-            displayName = "Qwen 2.5 (0.5B Instruct - Ultra Light)",
-            parameterSize = "490 Million",
+            id = "qwen3.5-2b-coder-q4",
+            displayName = "🟢 Local Qwen3.5-2B Coder (Autonomous Coding)",
+            parameterSize = "2.0 Billion",
             quantFormat = "GGUF Q4_K_M",
-            downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-            estimatedSizeBytes = 398_000_000L, // ~398 MB
-            minRamBytes = 1_000_000_000L,      // 1 GB free RAM
-            recommendedTps = 48.0
+            downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf",
+            estimatedSizeBytes = 1_320_000_000L, // ~1.32 GB
+            minRamBytes = 2_500_000_000L,      // 2.5 GB free RAM
+            recommendedTps = 26.5
         )
     )
 

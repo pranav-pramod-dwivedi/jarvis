@@ -100,18 +100,18 @@ class ConnectedServicesActivity : AppCompatActivity() {
         val activeModelId = com.pr4nav.jarvis.llm.LocalModelManager.getActiveModelId(this)
         val isInstalled = com.pr4nav.jarvis.llm.LocalModelManager.isModelInstalled(this, activeModelId)
         if (isInstalled) {
-            labelLocalAi.text = "Status: Qwen 2.5 (Active & Ready in App Storage ✓)"
+            labelLocalAi.text = "Status: 🟢 Local Qwen3.5-2B (Active & Ready in App Storage ✓)"
             btnDownloadLocalAi.text = "RE-DOWNLOAD"
         } else {
-            labelLocalAi.text = "Status: Qwen 2.5 (1.5B Instruct) — Not Downloaded (~986MB)"
-            btnDownloadLocalAi.text = "DOWNLOAD QWEN 2.5"
+            labelLocalAi.text = "Status: 🟢 Local Qwen3.5-2B (2B Instruct) — Not Downloaded (~1.2GB)"
+            btnDownloadLocalAi.text = "DOWNLOAD QWEN 3.5-2B"
         }
 
         btnDownloadLocalAi.setOnClickListener {
             progressLocalAi.visibility = android.view.View.VISIBLE
             progressLocalAi.progress = 0
             btnDownloadLocalAi.isEnabled = false
-            labelLocalAi.text = "Downloading Qwen 2.5 to internal app storage..."
+            labelLocalAi.text = "Downloading 🟢 Local Qwen3.5-2B to internal app storage..."
 
             com.pr4nav.jarvis.llm.LocalModelManager.startDownload(
                 context = this,
@@ -127,8 +127,8 @@ class ConnectedServicesActivity : AppCompatActivity() {
                         btnDownloadLocalAi.isEnabled = true
                         progressLocalAi.visibility = android.view.View.GONE
                         if (success) {
-                            labelLocalAi.text = "Status: Qwen 2.5 Installed & Ready ✓"
-                            Toast.makeText(this, "Local Model Downloaded Successfully!", Toast.LENGTH_SHORT).show()
+                            labelLocalAi.text = "Status: 🟢 Local Qwen3.5-2B Installed & Ready ✓"
+                            Toast.makeText(this, "Local Qwen3.5-2B Downloaded Successfully!", Toast.LENGTH_SHORT).show()
                         } else {
                             labelLocalAi.text = "Download Failed: $err"
                             Toast.makeText(this, "Download error: $err", Toast.LENGTH_LONG).show()

@@ -16,7 +16,7 @@ import java.util.concurrent.TimeoutException
  */
 class QwenLocalLLM(
     private val context: Context,
-    override val name: String = "Qwen2.5-1.5B-Instruct-GGUF"
+    override val name: String = "🟢 Local Qwen3.5-2B (Instruct GGUF)"
 ) : LocalLLM {
 
     companion object {

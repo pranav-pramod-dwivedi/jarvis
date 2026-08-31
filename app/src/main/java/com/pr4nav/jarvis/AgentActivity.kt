@@ -605,9 +605,9 @@ class AgentActivity : AppCompatActivity() {
             }
 
             else -> {
-                // Unified Model Routing: Qwen Local SLM Check -> Cloud Gemini 2.0 Flash / Needle Escalation
+                // Unified Model Routing: Qwen3.5-2B Local SLM Check -> Cloud Gemini 2.0 Flash / Needle Escalation
                 runOnUiThread {
-                    showThinking("Evaluating intent…", "Asking Qwen 2.5 Local SLM first...")
+                    showThinking("Evaluating intent…", "Asking 🟢 Local Qwen3.5-2B first...")
                 }
                 com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(this, q) { res ->
                     runOnUiThread {
