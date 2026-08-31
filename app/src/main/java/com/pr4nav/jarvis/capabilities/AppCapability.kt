@@ -29,14 +29,78 @@ object AppCapability : Capability {
         }.distinctBy { it.pkg }.sortedBy { it.label.lowercase() }
     }
 
+    private val appAliases = mapOf(
+        "chrome" to listOf("com.android.chrome", "chrome", "google chrome"),
+        "browser" to listOf("com.android.chrome", "chrome", "browser", "org.mozilla.firefox", "com.brave.browser", "com.opera.browser"),
+        "camera" to listOf("camera", "google camera", "com.android.camera", "com.google.android.GoogleCamera"),
+        "gallery" to listOf("gallery", "photos", "google photos", "com.google.android.apps.photos", "com.miui.gallery"),
+        "photos" to listOf("google photos", "photos", "gallery", "com.google.android.apps.photos"),
+        "spotify" to listOf("spotify", "com.spotify.music"),
+        "music" to listOf("spotify", "youtube music", "apple music", "amazon music", "music", "jiosaavn", "wynk"),
+        "youtube" to listOf("youtube", "com.google.android.youtube"),
+        "maps" to listOf("maps", "google maps", "com.google.android.apps.maps"),
+        "whatsapp" to listOf("whatsapp", "com.whatsapp"),
+        "gmail" to listOf("gmail", "email", "com.google.android.gm"),
+        "mail" to listOf("gmail", "email", "outlook", "mail"),
+        "settings" to listOf("settings", "com.android.settings"),
+        "phone" to listOf("phone", "dialer", "contacts", "com.google.android.dialer"),
+        "dialer" to listOf("phone", "dialer", "com.google.android.dialer"),
+        "messages" to listOf("messages", "messaging", "sms", "com.google.android.apps.messaging"),
+        "sms" to listOf("messages", "messaging", "sms"),
+        "files" to listOf("files", "file manager", "my files", "com.google.android.apps.nbu.files"),
+        "notes" to listOf("keep notes", "google keep", "notes", "com.google.android.keep"),
+        "calculator" to listOf("calculator", "google calculator", "com.google.android.calculator"),
+        "clock" to listOf("clock", "google clock", "alarm", "com.google.android.deskclock"),
+        "telegram" to listOf("telegram", "org.telegram.messenger"),
+        "instagram" to listOf("instagram", "com.instagram.android"),
+        "termux" to listOf("termux", "com.termux"),
+        "terminal" to listOf("termux", "terminal")
+    )
+
     fun find(query: String): AppInfo? {
         val q = query.trim().lowercase()
         if (q.isEmpty()) return null
         val apps = launchables()
-        return apps.firstOrNull { it.label.lowercase() == q }
-            ?: apps.firstOrNull { it.pkg.lowercase() == q || it.pkg.lowercase().endsWith(".$q") }
-            ?: apps.filter { it.label.lowercase().contains(q) }.minByOrNull { it.label.length }
-            ?: apps.firstOrNull { it.pkg.lowercase().contains(q.replace(' ', '.')) && q.length > 3 }
+
+        // 1. Exact label match
+        val exactLabel = apps.firstOrNull { it.label.lowercase() == q }
+        if (exactLabel != null) return exactLabel
+
+        // 2. Exact package match
+        val exactPkg = apps.firstOrNull { it.pkg.lowercase() == q || it.pkg.lowercase().endsWith(".$q") }
+        if (exactPkg != null) return exactPkg
+
+        // 3. Known aliases match
+        val aliasCandidates = appAliases[q]
+        if (aliasCandidates != null) {
+            for (alias in aliasCandidates) {
+                val match = apps.firstOrNull {
+                    it.label.lowercase() == alias ||
+                    it.pkg.lowercase() == alias ||
+                    it.label.lowercase().contains(alias) ||
+                    it.pkg.lowercase().contains(alias)
+                }
+                if (match != null) return match
+            }
+        }
+
+        // 4. Word boundary match in label (e.g. "Google Chrome" matches "chrome")
+        val wordMatch = apps.firstOrNull { app ->
+            val words = app.label.lowercase().split("\\s+".toRegex())
+            words.any { it == q }
+        }
+        if (wordMatch != null) return wordMatch
+
+        // 5. Starts with query
+        val startsWith = apps.firstOrNull { it.label.lowercase().startsWith(q) }
+        if (startsWith != null) return startsWith
+
+        // 6. Contains query in label (shortest label first to prioritize exact app over companion tools)
+        val containsLabel = apps.filter { it.label.lowercase().contains(q) }.minByOrNull { it.label.length }
+        if (containsLabel != null) return containsLabel
+
+        // 7. Contains query in package name
+        return apps.firstOrNull { it.pkg.lowercase().contains(q.replace(' ', '.')) && q.length > 3 }
     }
 
     fun isInstalled(pkgOrName: String): CapabilityResult {

@@ -151,8 +151,7 @@ object Shell {
     fun wrapUbuntu(command: String): String {
         val trimmed = command.trim()
         if (trimmed.startsWith("proot-distro login")) return command
-        val initRule = "if [ ! -f /root/GEMINI.md ]; then " +
-                       "echo '# Termux Agent Directives\\nYou are an autonomous AI Agent operating directly inside Termux on Android.\\nWhen asked to open apps or URLs, execute: am start -a android.intent.action.VIEW -d [url] or termux-open-url [url].\\nExecute commands directly with run_command.' > /root/GEMINI.md; fi; "
+        val initRule = "DIR=\"/root\"; if [ ! -w \"/root\" ]; then DIR=\"\${HOME:-/tmp}\"; fi; mkdir -p \"\$DIR\" 2>/dev/null; if [ ! -f \"\$DIR/GEMINI.md\" ] && [ -w \"\$DIR\" ]; then echo '# Termux Agent Directives\\nYou are an autonomous AI Agent operating directly inside Termux on Android.\\nWhen asked to open apps or URLs, execute: am start -a android.intent.action.VIEW -d [url] or termux-open-url [url].\\nExecute commands directly with run_command.' > \"\$DIR/GEMINI.md\" 2>/dev/null || true; fi; "
         val fullCmd = "export PATH=\"/root/.local/bin:/usr/local/bin:\$PATH\"; $initRule $command"
         val escaped = fullCmd.replace("'", "'\\''")
         return "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; " +
@@ -160,11 +159,11 @@ object Shell {
                "export HOME=\"/data/data/com.termux/files/home\"; " +
                "unset LD_PRELOAD; " +
                "if [ -x /data/data/com.termux/files/usr/bin/proot-distro ] || command -v proot-distro >/dev/null 2>&1; then " +
-               "  /data/data/com.termux/files/usr/bin/proot-distro login ubuntu -- /bin/bash -c '$escaped' < /dev/null; " +
+               "  /data/data/com.termux/files/usr/bin/proot-distro login ubuntu -- /bin/bash -c '$escaped' 2>/dev/null < /dev/null; " +
                "elif [ -x /data/data/com.termux/files/usr/bin/bash ]; then " +
-               "  /data/data/com.termux/files/usr/bin/bash -c '$escaped' < /dev/null; " +
+               "  /data/data/com.termux/files/usr/bin/bash -c '$escaped' 2>/dev/null < /dev/null; " +
                "else " +
-               "  sh -c '$escaped' < /dev/null; " +
+               "  sh -c '$escaped' 2>/dev/null < /dev/null; " +
                "fi"
     }
 

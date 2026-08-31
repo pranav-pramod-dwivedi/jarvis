@@ -230,7 +230,16 @@ object GeminiCloudLLM {
      * Removes asterisks, Markdown headers, code block delimiters, and URLs.
      */
     fun cleanForSpeech(raw: String): String {
-        return raw
+        val filteredLines = raw.lines().filterNot { line ->
+            val l = line.trim().lowercase()
+            l.contains("cannot create /root") ||
+            l.contains("gemini.md") ||
+            (l.contains("permission denied") && l.contains("root/")) ||
+            l.contains("export path=") ||
+            l.startsWith("export prefix=")
+        }
+        val text = filteredLines.joinToString("\n")
+        return text
             .replace(Regex("```[a-zA-Z]*"), "") // Code fences
             .replace("```", "")
             .replace(Regex("\\*\\*(.*?)\\*\\*"), "$1") // Bold **text**

@@ -93,19 +93,80 @@ object ContactResolver {
             return ContactResolutionResult.NotFound
         }
 
-        // Exact name matches take priority
-        val exactMatches = matches.filter { it.name.equals(trimmed, ignoreCase = true) }
-        if (exactMatches.size == 1) {
-            return ContactResolutionResult.Single(exactMatches[0])
-        } else if (exactMatches.size > 1) {
-            return ContactResolutionResult.Ambiguous(exactMatches)
+        // Deduplicate matches by normalized phone number
+        val distinctMatches = matches.distinctBy { it.number.replace(Regex("[^0-9+]"), "") }
+
+        // 1. Exact name matches (case-insensitive)
+        val exactMatches = distinctMatches.filter { it.name.trim().equals(trimmed, ignoreCase = true) }
+        if (exactMatches.isNotEmpty()) {
+            // Prioritize Mobile type if available, else first number
+            val best = exactMatches.firstOrNull { it.typeLabel.equals("Mobile", ignoreCase = true) } ?: exactMatches[0]
+            return ContactResolutionResult.Single(best)
         }
 
-        return if (matches.size == 1) {
-            ContactResolutionResult.Single(matches[0])
-        } else {
-            ContactResolutionResult.Ambiguous(matches)
+        // 2. Starts-with or word-boundary matches
+        val wordMatches = distinctMatches.filter { match ->
+            val words = match.name.trim().split("\\s+".toRegex())
+            words.any { it.equals(trimmed, ignoreCase = true) } || match.name.startsWith(trimmed, ignoreCase = true)
+        }.sortedBy { it.name.length }
+
+        if (wordMatches.isNotEmpty()) {
+            val best = wordMatches.firstOrNull { it.typeLabel.equals("Mobile", ignoreCase = true) } ?: wordMatches[0]
+            return ContactResolutionResult.Single(best)
         }
+
+        // 3. Fallback: Closest partial match by length
+        val bestPartial = distinctMatches.minByOrNull { it.name.length } ?: distinctMatches[0]
+        return ContactResolutionResult.Single(bestPartial)
+    }
+
+    fun resolveAll(context: Context, query: String): List<ContactMatch> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        if (context.checkCallingOrSelfPermission(android.Manifest.permission.READ_CONTACTS)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return emptyList()
+        }
+        val matches = ArrayList<ContactMatch>()
+        val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+        val projection = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER,
+            ContactsContract.CommonDataKinds.Phone.TYPE
+        )
+        val selection = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?"
+        val selectionArgs = arrayOf("%$trimmed%")
+
+        var cursor: Cursor? = null
+        try {
+            cursor = context.contentResolver.query(uri, projection, selection, selectionArgs, null)
+            if (cursor != null) {
+                val idCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
+                val nameCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                val numCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                val typeCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.TYPE)
+
+                while (cursor.moveToNext()) {
+                    val id = if (idCol >= 0) cursor.getString(idCol) ?: "" else ""
+                    val name = if (nameCol >= 0) cursor.getString(nameCol) ?: "" else ""
+                    val num = if (numCol >= 0) cursor.getString(numCol) ?: "" else ""
+                    val typeInt = if (typeCol >= 0) cursor.getInt(typeCol) else ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE
+                    val label = when (typeInt) {
+                        ContactsContract.CommonDataKinds.Phone.TYPE_HOME -> "Home"
+                        ContactsContract.CommonDataKinds.Phone.TYPE_WORK -> "Work"
+                        else -> "Mobile"
+                    }
+                    if (num.isNotBlank()) {
+                        matches.add(ContactMatch(id, name, num, label))
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        } finally {
+            cursor?.close()
+        }
+        return matches.distinctBy { it.number.replace(Regex("[^0-9+]"), "") }
     }
 
     private fun isPhoneNumber(s: String): Boolean {
