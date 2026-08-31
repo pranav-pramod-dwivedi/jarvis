@@ -36,12 +36,12 @@ object LocalModelManager {
     private const val PREFS_NAME = "jarvis_local_ai_prefs"
     private const val KEY_ACTIVE_MODEL = "active_local_model_id"
 
-    // Supported on-device SLMs (e.g. Qwen3.5-2B-Instruct quantized)
+    // Supported on-device SLMs (accurately verified against GGUF metadata)
     val AVAILABLE_MODELS = listOf(
         ModelSpec(
-            id = "qwen3.5-2b-instruct-q4",
-            displayName = "🟢 Local Qwen3.5-2B (2B Instruct - High Reasoning)",
-            parameterSize = "2.0 Billion",
+            id = "qwen2.5-1.5b-instruct-q4",
+            displayName = "🟢 Local Qwen2.5-1.5B (1.5B Instruct - High Reasoning)",
+            parameterSize = "1.8 Billion",
             quantFormat = "GGUF Q4_K_M",
             downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
             estimatedSizeBytes = 1_117_320_736L, // ~1.04 GB
@@ -49,9 +49,19 @@ object LocalModelManager {
             recommendedTps = 28.0
         ),
         ModelSpec(
-            id = "qwen3.5-2b-coder-q4",
-            displayName = "🟢 Local Qwen3.5-2B Coder (Autonomous Coding)",
-            parameterSize = "2.0 Billion",
+            id = "qwen2.5-3b-instruct-q4",
+            displayName = "🟢 Local Qwen2.5-3B (3.0B Instruct - Deep Reasoning)",
+            parameterSize = "3.09 Billion",
+            quantFormat = "GGUF Q4_K_M",
+            downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
+            estimatedSizeBytes = 1_930_000_000L, // ~1.93 GB
+            minRamBytes = 3_500_000_000L,
+            recommendedTps = 18.0
+        ),
+        ModelSpec(
+            id = "qwen2.5-coder-1.5b-instruct-q4",
+            displayName = "🟢 Local Qwen2.5-Coder (1.5B Coder - Autonomous Coding)",
+            parameterSize = "1.8 Billion",
             quantFormat = "GGUF Q4_K_M",
             downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
             estimatedSizeBytes = 1_117_320_736L, // ~1.04 GB
@@ -136,36 +146,23 @@ object LocalModelManager {
             )
         }
 
-        var validHeader = false
-        try {
-            f.inputStream().use { stream ->
-                val magic = ByteArray(4)
-                if (stream.read(magic) == 4) {
-                    val magicStr = String(magic, Charsets.US_ASCII)
-                    validHeader = magicStr == "GGUF"
-                }
-            }
-        } catch (_: Exception) {}
-
-        val sha256 = com.pr4nav.jarvis.engine.EngineMetadata.computeFileSha256(f)
-        val isReady = validHeader && size >= 500_000_000L
-
-        val statusText = if (isReady) {
-            "READY (${size / 1024 / 1024} MB · GGUF Valid)"
-        } else if (validHeader) {
-            "PARTIAL (${size / 1024 / 1024} MB)"
-        } else {
-            "INVALID_HEADER"
-        }
+        val parsed = GgufMetadataParser.parse(f)
+        val identityCheck = parsed.verifyIdentity(modelId)
 
         return ModelIntegrityStatus(
             exists = true,
             isReadable = readable,
             sizeBytes = size,
-            hasValidGgufHeader = validHeader,
-            sha256 = sha256,
-            isReady = isReady,
-            statusText = statusText
+            hasValidGgufHeader = parsed.isValidGguf,
+            sha256 = com.pr4nav.jarvis.engine.EngineMetadata.computeFileSha256(f),
+            isReady = parsed.isValidGguf && identityCheck.isIdentityPass,
+            statusText = if (parsed.isValidGguf && identityCheck.isIdentityPass) {
+                "VERIFIED & READY (${parsed.modelName} · ${parsed.quantization})"
+            } else if (parsed.isValidGguf) {
+                "IDENTITY MISMATCH: ${identityCheck.statusText}"
+            } else {
+                "INVALID GGUF HEADER"
+            }
         )
     }
 

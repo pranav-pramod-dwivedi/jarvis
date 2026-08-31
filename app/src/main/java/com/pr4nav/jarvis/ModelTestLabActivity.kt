@@ -72,10 +72,10 @@ class ModelTestLabActivity : AppCompatActivity() {
 
         // Setup Engine Dropdown
         val engines = listOf(
-            "⚡ Auto Router (Deterministic -> Local SLM -> AGY)",
-            "⚡ Needle 2 Reflex (Fast Path)",
-            "🟢 Local Qwen3.5-2B (On-Device SLM)",
-            "🤖 AGY Autonomous Agent (PRoot Linux)"
+            "⚡ Auto Router (Needle -> AGY -> Cloud)",
+            "⚡ Needle 2 Reflex (Direct Device Actions)",
+            "🟢 Local Qwen2.5-1.5B (On-Device SLM)",
+            "🤖 AGY Agent (PRoot Linux :5050)"
         )
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, engines)
         spinnerEngine.adapter = adapter
@@ -291,8 +291,8 @@ class ModelTestLabActivity : AppCompatActivity() {
                     sb.append("• Latency: ${result.latencyMs}ms\n")
                     sb.append("• Raw Output:\n${result.rawOutput}\n")
                 }
-                2 -> { // Local Qwen3.5-2B (RAW_QWEN_ONLY - ZERO FALLBACK)
-                    sb.append("SELECTED ENGINE: 🟢 Local Qwen3.5-2B (RAW_QWEN_ONLY - Isolated Inference)\n\n")
+                2 -> { // Local Qwen2.5-1.5B (RAW_QWEN_ONLY - ZERO FALLBACK)
+                    sb.append("SELECTED ENGINE: 🟢 Local Qwen2.5-1.5B (RAW_QWEN_ONLY - Isolated Inference)\n\n")
                     val result = qwenEngine.generateChat(input)
 
                     sb.append("=========================================\n")

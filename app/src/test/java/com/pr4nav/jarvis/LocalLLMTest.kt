@@ -15,11 +15,11 @@ class LocalLLMTest {
         val models = LocalModelManager.AVAILABLE_MODELS
         assertTrue("Available models list should not be empty", models.isNotEmpty())
 
-        val qwen35b = models.firstOrNull { it.id == "qwen3.5-2b-instruct-q4" }
-        assertNotNull("🟢 Local Qwen 3.5 2B spec should be defined", qwen35b)
-        assertEquals("GGUF Q4_K_M", qwen35b?.quantFormat)
-        assertTrue("URL must point to GGUF weights", qwen35b!!.downloadUrl.endsWith(".gguf"))
-        assertTrue("Estimated size must be reasonable", qwen35b.estimatedSizeBytes > 500_000_000L)
+        val qwenModel = models.firstOrNull { it.id == "qwen2.5-1.5b-instruct-q4" }
+        assertNotNull("🟢 Local Qwen 2.5 1.5B spec should be defined", qwenModel)
+        assertEquals("GGUF Q4_K_M", qwenModel?.quantFormat)
+        assertTrue("URL must point to GGUF weights", qwenModel!!.downloadUrl.endsWith(".gguf"))
+        assertTrue("Estimated size must be reasonable", qwenModel.estimatedSizeBytes > 500_000_000L)
     }
 
     @Test

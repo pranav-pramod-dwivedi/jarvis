@@ -15,7 +15,7 @@ import java.util.concurrent.TimeoutException
 enum class ExecutionSource(val label: String, val badge: String) {
     DETERMINISTIC_NEEDLE("Needle 2 Deterministic", "⚡ [Needle 2 Deterministic]"),
     AGY_AGENT("AGY Autonomous Agent", "🤖 [AGY Agent (PRoot Linux)]"),
-    LOCAL_LLM("🟢 Local Qwen3.5-2B", "🟢 [Local: Qwen3.5-2B]"),
+    LOCAL_LLM("🟢 Local Qwen2.5-1.5B", "🟢 [Local: Qwen2.5-1.5B]"),
     CLOUD_LLM("Gemini 2.0 Flash (Cloud)", "☁️ [Gemini 2.0 Flash (Cloud)]"),
     FALLBACK("Local Fallback", "⚙️ [Local System Fallback]")
 }
@@ -161,13 +161,13 @@ object UnifiedAssistantDispatcher {
                 }
             }
 
-            // Check Local Qwen3.5-2B if installed
+            // Check Local Qwen2.5-1.5B if installed
             val qwen = QwenLocalLLM(context)
             val activeModelId = LocalModelManager.getActiveModelId(context)
             if (LocalModelManager.isModelInstalled(context, activeModelId)) {
                 try {
-                    Log.i(TAG, "Checking Local Qwen3.5-2B SLM...")
-                    onStatus?.invoke("🟢 Asking Local Qwen3.5-2B on-device model...")
+                    Log.i(TAG, "Checking Local Qwen2.5-1.5B SLM...")
+                    onStatus?.invoke("🟢 Asking Local Qwen2.5-1.5B on-device model...")
                     val future = qwen.generate(trimmed, timeoutMs = 4_000L)
                     val llmRes = future.get(4_000L, TimeUnit.MILLISECONDS)
 
@@ -180,7 +180,7 @@ object UnifiedAssistantDispatcher {
                         )
 
                         if (validation is com.pr4nav.jarvis.tools.ValidationResult.Valid) {
-                            onStatus?.invoke("🟢 Executing [${llmRes.toolCall}] via Qwen3.5-2B...")
+                            onStatus?.invoke("🟢 Executing [${llmRes.toolCall}] via Qwen2.5-1.5B...")
                             val args = llmRes.args ?: JSONObject()
                             val toolDef = validation.toolDef
                             val execRes = toolDef.executeWithTimeout(context, args)
@@ -188,7 +188,7 @@ object UnifiedAssistantDispatcher {
                             val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, llmRes.toolCall, execRes.data, responseMode)
                             val terminationStatus = if (toolDef.purpose == com.pr4nav.jarvis.response.ToolPurpose.ACTION) com.pr4nav.jarvis.response.TerminationStatus.ACTION_COMPLETED else com.pr4nav.jarvis.response.TerminationStatus.FINAL_ANSWER
                             val latency = System.currentTimeMillis() - t0
-                            val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Evaluator: 🟢 Local Qwen3.5-2B\n• Decision: Validated on-device capability [${llmRes.toolCall}]\n• Purpose: ${toolDef.purpose}\n• Termination: $terminationStatus\n• Score: ${validation.score}/100\n• Execution: Success\n</think>"
+                            val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Evaluator: 🟢 Local Qwen2.5-1.5B\n• Decision: Validated on-device capability [${llmRes.toolCall}]\n• Purpose: ${toolDef.purpose}\n• Termination: $terminationStatus\n• Score: ${validation.score}/100\n• Execution: Success\n</think>"
 
                             onChunk?.invoke(synthesizedAnswer)
                             onResult(
@@ -196,9 +196,9 @@ object UnifiedAssistantDispatcher {
                                     handled = true,
                                     source = ExecutionSource.LOCAL_LLM,
                                     speechResponse = synthesizedAnswer,
-                                    fullSummary = "$thinkTrace\n\n🟢 [Local: Qwen3.5-2B · ${latency}ms]\n$synthesizedAnswer",
+                                    fullSummary = "$thinkTrace\n\n🟢 [Local: Qwen2.5-1.5B · ${latency}ms]\n$synthesizedAnswer",
                                     thinkingTrace = thinkTrace,
-                                    modelName = "🟢 Local Qwen3.5-2B",
+                                    modelName = "🟢 Local Qwen2.5-1.5B",
                                     toolResult = execRes,
                                     latencyMs = latency
                                 )
@@ -209,7 +209,7 @@ object UnifiedAssistantDispatcher {
                         }
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Local Qwen3.5-2B check passed: ${e.message}")
+                    Log.w(TAG, "Local Qwen2.5-1.5B check passed: ${e.message}")
                 }
             }
         }
