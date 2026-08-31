@@ -38,7 +38,25 @@ object JarvisToolRegistry {
         else tools.values.joinToString("\n") { "- ${it.name}: ${it.description} args=${it.argsHint}" }
 
     fun execute(name: String, argsJson: String?): JSONObject {
-        val def = tools[name] ?: return err("unknown tool: $name. available=${names()}")
+        // Check canonical tool registry first
+        val canonical = CanonicalToolRegistry.get(name)
+        if (canonical != null) {
+            val args = if (argsJson.isNullOrBlank()) JSONObject() else JSONObject(argsJson)
+            val ctx = Capabilities.app
+            if (ctx != null) {
+                val res = canonical.executeWithTimeout(ctx, args)
+                val o = JSONObject()
+                o.put("ok", res.success)
+                if (res.success) {
+                    o.put("result", res.data ?: JSONObject.NULL)
+                } else {
+                    o.put("error", res.error?.message ?: "Execution failed")
+                }
+                return o
+            }
+        }
+
+        val def = tools[name] ?: return err("unknown tool: $name. available=${(names() + CanonicalToolRegistry.names()).distinct()}")
         try {
             def.gate?.let { g ->
                 g()?.let { reason -> return err(reason) }

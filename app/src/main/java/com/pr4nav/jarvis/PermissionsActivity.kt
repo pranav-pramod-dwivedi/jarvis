@@ -58,6 +58,7 @@ class PermissionsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_permissions)
         listHost = findViewById(R.id.perm_list)
         summary = findViewById(R.id.perm_summary)
+        findViewById<android.view.View>(R.id.btn_back)?.setOnClickListener { finish() }
         findViewById<Button>(R.id.btn_grant_all).setOnClickListener { grantAll() }
         checkRoot()
     }
@@ -176,6 +177,11 @@ class PermissionsActivity : AppCompatActivity() {
             "External drives/devices — Android prompts automatically when one is attached.",
             true, false, { true }, null),
         Row("Internet", "Talk to services and the Termux bridge.", false, false, { true }, null),
+        Row("Termux command bridge",
+            "Execute commands inside Termux and PRoot Ubuntu (requires com.termux.permission.RUN_COMMAND).",
+            false, false,
+            { TermuxBridge.hasPermission() },
+            { requestRuntime("com.termux.permission.RUN_COMMAND") }),
         Row("Root (superuser)",
             "Advanced automation via su — Magisk/SuperSU prompt at first use. Root tool calls are gated and logged.",
             true, false, { com.pr4nav.jarvis.capabilities.RootCapability.state ==

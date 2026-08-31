@@ -1,89 +1,145 @@
-# JARVIS — Termux Bridge Prototype
+# JARVIS — Neural On-Device Personal Voice Assistant
 
-Minimal Android (Kotlin) prototype that proves a standalone **Jarvis APK → Termux → bash command** pipeline using Termux's **official RUN_COMMAND intent interface**, with results (stdout / stderr / exit code) returned to the app.
+JARVIS is an autonomous, on-device AI personal assistant built for Android. It combines offline neural wake-word verification, low-latency canonical tool routing, local LLM natural language understanding, hands-free background operation, and headless Linux environment execution (Termux/AGY).
 
-Authored by **Pranav Pramod Dwivedi**.
+**Author**: Pranav Pramod Dwivedi (`pranav-pramod-dwivedi`)
 
 ---
 
-## Architecture
+## Key Capabilities & Architecture
 
 ```
-Jarvis.apk  (UI/client — no shell, no terminal emulation)
-   ↓
-Android Intent → com.termux/.app.RunCommandService   (official Termux API)
-   ↓
-Termux app  (Linux execution environment)
-   ↓
-sh -c "<command>"  or  ~/jarvis_test.sh
-   ↓
-stdout / stderr / exit code via PendingIntent callback
-   ↓
-Jarvis.apk  (status pill + output log)
+User Voice / Text
+       │
+       ▼
+┌─────────────────────────────────────────────────────────┐
+│              JARVIS Voice Assistant Pipeline            │
+│                                                         │
+│  [Low-Power VAD Monitor]                                │
+│           │                                             │
+│           ▼                                             │
+│  [OnnxWakeWordEngine] ── 16kHz PCM (openWakeWord)       │
+│    ├── melspectrogram.onnx (log-mel extraction)         │
+│    ├── embedding_model.onnx (Google speech embedding)   │
+│    └── hey_jarvis_v0.1.onnx (neural probability)        │
+│           │                                             │
+│           ▼ "Jarvis" confirmed (Prob ≥ 0.50)           │
+│  [Single Intentional SpeechRecognizer Session]          │
+└─────────────────────────┬───────────────────────────────┘
+                          │ Recognized Utterance
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│               Jarvis Intent Router & Needle             │
+│                                                         │
+│  1. Deterministic / Regex Needle Matcher                │
+│  2. Local LLM / Natural Language Normalizer             │
+│  3. Canonical Tool Registry                             │
+│     ├── System Tools (Camera, WiFi, Flashlight, Alarms) │
+│     ├── App Automation (WhatsApp, YouTube, Spotify)     │
+│     ├── Phone & Contacts (Direct Call, Contacts query)  │
+│     ├── Media Playback & Volume Control                 │
+│     └── Termux Linux CLI (AGY daemon, shell scripts)    │
+│  4. TTS Feedback Engine & Conversational Follow-Up      │
+└─────────────────────────────────────────────────────────┘
 ```
 
-The APK is fully **offline by design**: it requests **no INTERNET permission**. All IPC is local Android intents.
-
-## Interface used (official Termux mechanism)
-
-Verified against [termux-app `TermuxConstants`](https://github.com/termux/termux-app/blob/master/termux-shared/src/main/java/com/termux/shared/termux/TermuxConstants.java) and the [RUN_COMMAND wiki](https://github.com/termux/termux-app/wiki/RUN_COMMAND-Intent).
-
-| Field | Value |
-|---|---|
-| Component | `com.termux/com.termux.app.RunCommandService` |
-| Action | `com.termux.RUN_COMMAND` |
-| Path extra | `com.termux.RUN_COMMAND_PATH` = `/data/data/com.termux/files/usr/bin/sh` |
-| Args extra | `com.termux.RUN_COMMAND_ARGUMENTS` = `["-c", "<command>"]` |
-| Workdir extra | `com.termux.RUN_COMMAND_WORKDIR` = `/data/data/com.termux/files/home` |
-| Background extra | `com.termux.RUN_COMMAND_BACKGROUND` = `true` (headless; works with Termux not visible) |
-| Result return | `com.termux.RUN_COMMAND_PENDING_INTENT` = one-shot mutable `PendingIntent.getBroadcast(...)` |
-| Result bundle | extra `"result"` → keys `stdout`, `stderr`, `exitCode`, `err` (`-1` = no internal error), `errmsg` |
-
-Result return requires **Termux ≥ 0.109**. Tested against v0.118.x.
+---
 
 ## Features
 
-- Buttons: `echo`, `pwd`, `whoami`, `uname -a`, `exit 3` (exit-code proof), `stderr` (stderr + nonzero-rc proof)
-- `TEST TERMUX` — runs the four basic commands sequentially, one result at a time
-- `TEST JARVIS SCRIPT` — creates `~/jarvis_test.sh` inside Termux home, then executes it as a script
-- Status pill: **Connected** (green) / **Waiting…** (amber) / **Failed** (red, with exact reason)
-- Every result logged to logcat tag `JARVIS` as JSON: `{label, cmd, stdout, stderr, rc, err, errmsg}`
-- Timeout (20 s) + explicit error surfacing — never fakes success
-- ADB-driven automation: `--es auto basic|script|all`
+### 1. Offline Neural Wake-Word Detection (`openWakeWord`)
+- **Completely offline**: Runs with ONNX Runtime (`ai.onnxruntime:onnxruntime-android`).
+- **Standardized acoustic pipeline**:
+  - Audio ingested at 16 kHz, 16-bit mono PCM.
+  - Streaming window of 1760 samples (1280 new + 480 historical context).
+  - Mel transform formula: `mel = raw_mel / 10.0 + 2.0`.
+  - 76-frame mel spectrogram buffer fed into Google Speech Embedding model (96 dimensions).
+  - 16-frame embedding sliding buffer fed into `hey_jarvis_v0.1.onnx`.
+- **Zero false triggers**: SpeechRecognizer is never run in an infinite restart loop; it is triggered only upon confirmed neural wake detection.
 
-## Setup (one-time)
+### 2. Hands-Free Background Operation
+- Runs as an Android Foreground Service (`JarvisVoiceService`) with `FOREGROUND_SERVICE_TYPE_MICROPHONE`.
+- Continues running when the app is minimized or the screen is locked.
+- Supports **Barge-In Interruption**: User can say "Stop", "Chup", or start speaking to instantly halt TTS playback.
+- Configurable **Follow-Up Conversation Window**: Automatically listens for subsequent commands without requiring the wake word again.
 
-1. Install [Termux](https://github.com/termux/termux-app/releases) (**≥ 0.109**, arm64-v8a build recommended) and open it once.
-2. Inside Termux:
-   ```bash
-   mkdir -p ~/.termux && printf '\nallow-external-apps=true\n' >> ~/.termux/termux.properties && termux-reload-settings
-   ```
-3. Build & install Jarvis:
-   ```bash
-   ./gradlew :app:assembleDebug
-   adb install app/build/outputs/apk/debug/app-debug.apk
-   ```
-4. Grant the permission (runtime dialog on first launch also works):
-   ```bash
-   adb shell pm grant com.pr4nav.jarvis com.termux.permission.RUN_COMMAND
-   ```
+### 3. Companion Mode & Fluid UX
+- Dribbble & Awwwards-inspired glowing orb UI with animated breathing, listening, and processing states.
+- Clean assistant execution cards displaying step-by-step thinking, command status, and tool execution logs.
+- Quick navigation hub between Agent Chat Stream, Voice Settings, Connected Services, and Diagnostics.
 
-## Run tests
+### 4. Canonical Tool Execution & Termux Bridge
+- Resolves contact names and executes direct phone calls (`CallTool`).
+- Navigation intent resolution for queries like *"take me home"* or *"ghar ka rasta bata"*.
+- System hardware controls: Flashlight, Volume, Camera, Alarms, Battery status.
+- Termux headless `RUN_COMMAND` integration for local bash and AGY Python agent execution.
 
-Tap buttons in the app, or drive everything from ADB:
+---
 
-```bash
-adb shell am start -n com.pr4nav.jarvis/.MainActivity --es auto all
-adb logcat -s JARVIS
-```
-
-Background-Termux test: press Home so Termux is not visible and run again — background commands need no visible session and no "Draw over apps" grant.
-
-## Project layout
+## Project Structure
 
 ```
-app/src/main/java/com/pr4nav/jarvis/
-├── MainActivity.kt          # UI, permission flow, sequential command runner, timeouts
-├── TermuxResultReceiver.kt  # BroadcastReceiver for Termux result PendingIntents (+ JSON logging)
-app/src/main/AndroidManifest.xml  # RUN_COMMAND permission, <queries> visibility, receiver
+app/src/main/
+├── assets/
+│   ├── melspectrogram.onnx      # Audio PCM to 32-bin log-mel spectrogram
+│   ├── embedding_model.onnx     # Mel frames to 96-dim speech embedding
+│   ├── hey_jarvis_v0.1.onnx     # Neural classifier for "Hey Jarvis"
+│   └── agy-daemon / needle      # Autonomous agent daemon scripts
+├── java/com/pr4nav/jarvis/
+│   ├── MainActivity.kt          # Main glowing orb UI and companion mode
+│   ├── AgentActivity.kt         # Live execution stream with thinking/tool cards
+│   ├── voice/
+│   │   ├── OnnxWakeWordEngine.kt    # Production streaming ONNX wake engine
+│   │   ├── AcousticWakeDetector.kt  # AudioRecord PCM stream reader
+│   │   ├── JarvisVoiceService.kt    # Persistent Hands-Free foreground service
+│   │   ├── JarvisVoiceEngine.kt     # Android TextToSpeech wrapper
+│   │   └── VoiceSettingsActivity.kt # Hands-free, barge-in, & threshold settings
+│   ├── router/
+│   │   ├── JarvisIntentRouter.kt    # Multi-tier intent router
+│   │   └── NeedleEngine.kt          # Fast deterministic pattern matching
+│   └── tools/
+│       ├── CanonicalToolRegistry.kt # Registry of device and system tools
+│       └── CanonicalTool.kt         # Tool interface & standard definitions
 ```
+
+---
+
+## Getting Started
+
+### Prerequisites
+- Android Studio Ladybug or later
+- Android device running Android 10+ (API 29+) with developer options & ADB enabled
+- (Optional) [Termux](https://github.com/termux/termux-app) installed on the device for Linux tools
+
+### Build & Installation
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/pranav-pramod-dwivedi/jarvis.git
+   cd jarvis
+   ```
+
+2. **Build and install debug APK**:
+   ```bash
+   ./gradlew assembleDebug
+   adb install -r app/build/outputs/apk/debug/app-debug.apk
+   ```
+
+3. **Grant Required Permissions**:
+   ```bash
+   adb shell pm grant com.pr4nav.jarvis android.permission.RECORD_AUDIO
+   adb shell pm grant com.pr4nav.jarvis android.permission.CALL_PHONE
+   adb shell pm grant com.pr4nav.jarvis android.permission.READ_CONTACTS
+   ```
+
+4. **Launch JARVIS**:
+   ```bash
+   adb shell am start -n com.pr4nav.jarvis/.MainActivity
+   ```
+
+---
+
+## License
+
+Copyright (c) 2026 Pranav Pramod Dwivedi. All rights reserved.
+Distributed under the Apache 2.0 License.

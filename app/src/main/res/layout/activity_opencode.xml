@@ -80,6 +80,22 @@
                 android:layout_marginStart="6dp"
                 android:text="Connect"
                 android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btn_oc_test"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:text="Test"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btn_oc_discover"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:text="Auto"
+                android:textSize="11sp" />
         </LinearLayout>
 
         <!-- Project row -->

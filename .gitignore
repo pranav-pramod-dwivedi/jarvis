@@ -15,3 +15,10 @@
 local.properties
 build/
 .kotlin/
+*.png
+*.wav
+*.aiff
+*.xml
+!app/src/**/*.xml
+.idea/
+GATES.md

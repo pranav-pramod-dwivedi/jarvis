@@ -22,7 +22,7 @@ class CommanderActivity : AppCompatActivity() {
     private lateinit var log: TextView
     private lateinit var scroller: ScrollView
     private lateinit var input: EditText
-    private var via: String = "termux"
+    private var via: String = "ubuntu"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,16 +30,20 @@ class CommanderActivity : AppCompatActivity() {
         log = findViewById(R.id.cmd_log)
         scroller = findViewById(R.id.cmd_scroller)
         input = findViewById(R.id.cmd_input)
+        findViewById<View>(R.id.btn_back)?.setOnClickListener { finish() }
         updateCtx()
 
+        val bu = findViewById<Button>(R.id.cmd_via_ubuntu)
         val bt = findViewById<Button>(R.id.cmd_via_termux)
         val bl = findViewById<Button>(R.id.cmd_via_local)
         val br = findViewById<Button>(R.id.cmd_via_root)
         fun paint() {
+            bu.setBackgroundColor(if (via == "ubuntu") 0xFF16232E.toInt() else 0x00000000)
             bt.setBackgroundColor(if (via == "termux") 0xFF16232E.toInt() else 0x00000000)
             bl.setBackgroundColor(if (via == "local") 0xFF16232E.toInt() else 0x00000000)
             br.setBackgroundColor(if (via == "root") 0xFF16232E.toInt() else 0x00000000)
         }
+        bu.setOnClickListener { via = "ubuntu"; paint(); updateCtx() }
         bt.setOnClickListener { via = "termux"; paint(); updateCtx() }
         bl.setOnClickListener { via = "local"; paint(); updateCtx() }
         br.setOnClickListener { via = "root"; paint(); updateCtx() }
@@ -51,7 +55,7 @@ class CommanderActivity : AppCompatActivity() {
 
     private fun updateCtx() {
         findViewById<TextView>(R.id.cmd_ctx).text =
-            "runner: $via · cwd: ${SessionState.dir} · fs: ${Fs.accessLevel}"
+            "runner: $via (proot distro) · cwd: ${SessionState.dir} · fs: ${Fs.accessLevel}"
     }
 
     private fun append(s: String) {
@@ -69,9 +73,11 @@ class CommanderActivity : AppCompatActivity() {
         findViewById<Button>(R.id.cmd_run).isEnabled = false
         thread {
             val r = when (via) {
+                "ubuntu" -> Shell.ubuntu(cmd, 60_000)
+                "termux" -> Shell.termuxRaw(cmd, 60_000)
                 "local" -> Shell.local(cmd, 30_000)
                 "root" -> Shell.root(cmd, 30_000)
-                else -> Shell.termux(cmd, 60_000)
+                else -> Shell.ubuntu(cmd, 60_000)
             }
             runOnUiThread {
                 findViewById<Button>(R.id.cmd_run).isEnabled = true

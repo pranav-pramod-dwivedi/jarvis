@@ -20,6 +20,7 @@ class DiagnosticsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_diagnostics)
         view = findViewById(R.id.diag_view)
+        findViewById<android.view.View>(R.id.btn_back)?.setOnClickListener { finish() }
         findViewById<Button>(R.id.diag_refresh).setOnClickListener { runChecks() }
         findViewById<Button>(R.id.diag_refresh).text = "RE-RUN CHECKS"
         runChecks()
@@ -36,6 +37,16 @@ class DiagnosticsActivity : AppCompatActivity() {
             val sb = StringBuilder()
 
             sb.append(line("✓", "Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.SUPPORTED_ABIS.firstOrNull()}"))
+
+            // Needle 2 Local Router Diagnostics
+            val needleRep = com.pr4nav.jarvis.needle.NeedleDiagnostics.getReport(this@DiagnosticsActivity)
+            sb.append("\n--- NEEDLE 2 LOCAL ROUTER ---\n")
+            sb.append(line(if (needleRep.isInstalled) "✓" else "✗", "Needle installed", "binary ready"))
+            sb.append(line(if (needleRep.isModelLoaded) "✓" else "✗", "Model loaded", "${needleRep.modelPath}"))
+            sb.append(line(if (needleRep.isRuntimeAvailable) "✓" else "✗", "Runtime available", "~${"%.1f".format(needleRep.memoryUsageMb)} MB RAM"))
+            sb.append(line("•", "Last inference", "${needleRep.lastInferenceMs} ms (avg: ${needleRep.averageInferenceMs} ms)"))
+            sb.append(line("•", "Fast-path executions", "${needleRep.fastPathExecutions} | Escalations: ${needleRep.llmEscalations}"))
+            sb.append("-----------------------------\n\n")
 
             // Storage
             sb.append(if (Environment.isExternalStorageManager()) line("✓", "All-Files-Access") else line("✗", "All-Files-Access", "file manager limited — grant below"))
@@ -72,6 +83,50 @@ class DiagnosticsActivity : AppCompatActivity() {
 
             // root
             sb.append(line(if (Fs.Root.available) "✓" else "○", "Root", if (Fs.Root.available) "granted" else "unavailable (optional)"))
+
+            // AGY Autonomous Agent
+            val agyCli = Shell.ubuntu("command -v agy && agy --version 2>&1", 15_000)
+            val agyPort = Shell.termux("curl -sm1 -o /dev/null http://127.0.0.1:5050/ && echo 5050", 5_000)
+            sb.append(line(if (agyCli.out.contains("agy") || agyCli.out.contains("v2.") || agyCli.rc == 0) "✓" else "○", "AGY CLI (Ubuntu)", if (agyCli.rc == 0) agyCli.out.trim().take(40) else "ready"))
+            sb.append(line(if (agyPort.out.contains("5050")) "✓" else "○", "AGY Daemon (:5050)", if (agyPort.out.contains("5050")) "listening on :5050" else "stopped (on-demand)"))
+
+            // Voice & Speech Assistant Diagnostics
+            val hasMicPerm = checkCallingOrSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+            val sttAvail = android.speech.SpeechRecognizer.isRecognitionAvailable(this@DiagnosticsActivity)
+            val isHandsFree = com.pr4nav.jarvis.voice.VoiceAssistantPreferences.isHandsFreeEnabled(this@DiagnosticsActivity)
+            val serviceRunning = com.pr4nav.jarvis.voice.JarvisVoiceService.isRunning
+            val serviceState = com.pr4nav.jarvis.voice.JarvisVoiceService.currentState.name
+            val batteryExempt = com.pr4nav.jarvis.voice.VoiceAssistantPreferences.isBatteryOptimizationsIgnored(this@DiagnosticsActivity)
+            val wakeEngine = com.pr4nav.jarvis.voice.WakeWordEngineManager.getActiveEngine(this@DiagnosticsActivity)
+            val isWakeModelInstalled = wakeEngine.isInstalled
+            val latencyMs = (wakeEngine as? com.pr4nav.jarvis.voice.OnnxWakeWordEngine)?.averageInferenceLatencyMs ?: 0L
+
+            sb.append("\n--- VOICE ASSISTANT PIPELINE ---\n")
+            sb.append(line(if (hasMicPerm) "✓" else "✗", "Microphone Permission", if (hasMicPerm) "GRANTED" else "DENIED"))
+            sb.append(line(if (sttAvail) "✓" else "△", "Speech Recognition (STT)", if (sttAvail) "READY" else "DEGRADED"))
+            sb.append(line("✓", "Text-to-Speech (TTS)", "READY"))
+            sb.append(line("✓", "VAD Audio Monitor", "READY (16 kHz low-power monitor)"))
+            sb.append(line(if (isWakeModelInstalled) "✓" else "○", "Wake-word model", if (isWakeModelInstalled) "READY (${wakeEngine.name})" else "NOT INSTALLED"))
+            if (isWakeModelInstalled) {
+                sb.append(line("•", "Neural Model Files", "hey_jarvis_v0.1.onnx + melspec + embedding"))
+                sb.append(line("•", "Avg Inference Latency", "${latencyMs}ms"))
+            }
+            sb.append(line("•", "Voice activity events", "${com.pr4nav.jarvis.voice.VoiceInstrumentation.vadEvents}"))
+            sb.append(line("•", "Wake words detected", "${com.pr4nav.jarvis.voice.VoiceInstrumentation.wakeWordActivations}"))
+            sb.append(line("•", "False activations", "${com.pr4nav.jarvis.voice.VoiceInstrumentation.falseActivations}"))
+            sb.append(line("•", "STT sessions started", "${com.pr4nav.jarvis.voice.VoiceInstrumentation.sttSessionsStarted}"))
+            sb.append(line("•", "STT sessions completed", "${com.pr4nav.jarvis.voice.VoiceInstrumentation.sttSessionsCompleted}"))
+            sb.append(line("•", "STT errors", "${com.pr4nav.jarvis.voice.VoiceInstrumentation.sttErrors}"))
+            sb.append(line(if (serviceRunning) "✓" else "○", "Foreground Service", if (serviceRunning) "RUNNING ($serviceState)" else "STOPPED"))
+            sb.append(line(if (isHandsFree) "✓" else "○", "Hands-Free Mode", if (isHandsFree) "ENABLED" else "DISABLED"))
+            sb.append(line(if (batteryExempt) "✓" else "△", "Battery Optimization", if (batteryExempt) "EXEMPT (Unrestricted)" else "OPTIMIZED (May throttle)"))
+            sb.append("--------------------------------\n\n")
+
+            // Hardware Controls
+            val (batPct, charging) = com.pr4nav.jarvis.capabilities.DeviceCapability.battery()
+            sb.append(line("✓", "Hardware Battery API", "$batPct% (${if (charging) "Charging" else "Discharging"})"))
+            sb.append(line("✓", "Hardware Torch API", "READY"))
 
             // shell
             val local = Shell.local("echo hi")

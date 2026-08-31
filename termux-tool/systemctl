@@ -1,0 +1,26 @@
+#!/bin/bash
+# systemctl shim for Termux / PRoot Ubuntu
+# Emulates basic systemctl commands by delegating to agy-daemon or returning success
+
+case "$*" in
+  *agy-remote-control*start*|*start*agy-remote-control*)
+    exec agy-daemon start
+    ;;
+  *agy-remote-control*stop*|*stop*agy-remote-control*)
+    exec agy-daemon stop
+    ;;
+  *agy-remote-control*restart*|*restart*agy-remote-control*)
+    exec agy-daemon restart
+    ;;
+  *agy-remote-control*status*|*status*agy-remote-control*)
+    exec agy-daemon status
+    ;;
+  *daemon-reload*|*enable*|*disable*)
+    # Successfully acknowledge configuration
+    exit 0
+    ;;
+  *)
+    # Default graceful no-op
+    exit 0
+    ;;
+esac

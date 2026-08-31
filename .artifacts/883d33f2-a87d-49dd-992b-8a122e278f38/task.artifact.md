@@ -1,0 +1,5 @@
+- [x] Add Compose dependencies to `libs.versions.toml`
+- [x] Enable Compose and add dependencies in `app/build.gradle.kts`
+- [x] Perform Gradle sync
+- [x] Integrate Video Splash Screen into `MainActivity.kt`
+- [x] Verify build and functionality

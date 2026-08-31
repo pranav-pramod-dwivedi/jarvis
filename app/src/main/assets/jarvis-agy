@@ -1,0 +1,122 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# jarvis-agy — Termux tool & daemon manager for Antigravity CLI (AGY).
+set -euo pipefail
+
+PORT="${2:-5050}"
+PID_FILE="/tmp/jarvis-agy.pid"
+LOG_FILE="/tmp/jarvis-agy.log"
+SERVER_SCRIPT="$(dirname "$0")/agy_server.py"
+
+if [[ ! -f "$SERVER_SCRIPT" ]]; then
+  for p in "$HOME/jarvis/bin/agy_server.py" "$HOME/.jarvis/agy_server.py" "${PREFIX:-/data/data/com.termux/files/usr}/bin/agy_server.py"; do
+    if [[ -f "$p" ]]; then SERVER_SCRIPT="$p"; break; fi
+  done
+fi
+
+check_python() {
+  if ! command -v python3 >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
+    echo "[*] Python not found — installing python..."
+    pkg install -y python 2>&1 | tail -5 || apt-get install -y python3 2>&1 | tail -5
+  fi
+}
+
+cmd_start() {
+  local p="${1:-5050}"
+  check_python
+
+  if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+    echo "[✓] agy serve already running (PID: $(cat "$PID_FILE")) on port $p"
+    return 0
+  fi
+
+  if curl -sk "http://127.0.0.1:${p}/health" >/dev/null 2>&1; then
+    echo "[✓] Port $p is already serving AGY"
+    return 0
+  fi
+
+  echo "[*] Starting agy serve daemon on http://127.0.0.1:${p}..."
+  PYTHON="$(command -v python3 || command -v python)"
+  nohup "$PYTHON" "$SERVER_SCRIPT" "$p" > "$LOG_FILE" 2>&1 &
+  local pid=$!
+  echo "$pid" > "$PID_FILE"
+
+  local ready=0
+  for i in {1..15}; do
+    if curl -sk "http://127.0.0.1:${p}/health" | grep -q '"ok":true' 2>/dev/null; then
+      ready=1; break
+    fi
+    sleep 0.3
+  done
+
+  if [[ $ready -eq 1 ]]; then
+    echo "[✓] agy serve daemon is READY on http://127.0.0.1:${p} (PID: $pid)"
+  else
+    echo "[!] Server started (PID $pid); check logs with: jarvis-agy log"
+  fi
+}
+
+cmd_stop() {
+  if [[ -f "$PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$PID_FILE")"
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.5
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+    rm -f "$PID_FILE"
+  fi
+  pkill -f "agy_server.py" 2>/dev/null || true
+  echo "[✓] agy serve daemon stopped"
+}
+
+cmd_status() {
+  local res
+  res=$(curl -sk "http://127.0.0.1:${PORT}/health" 2>/dev/null || echo '{"ok":false}')
+  if echo "$res" | grep -q '"ok":true'; then
+    echo "[✓] AGY daemon ONLINE: $res"
+  else
+    echo "[✗] AGY daemon OFFLINE on port ${PORT}"
+  fi
+}
+
+cmd_send() {
+  local prompt="$1"
+  local p="${PORT}"
+  if curl -sk "http://127.0.0.1:${p}/health" >/dev/null 2>&1; then
+    curl -N -s -X POST "http://127.0.0.1:${p}/api/prompt" \
+      -H "Content-Type: application/json" \
+      -d "{\"prompt\": $(echo "$prompt" | jq -R .), \"continue\": true}"
+  else
+    agy -p "$prompt"
+  fi
+}
+
+cmd_install() {
+  local bin_dir="${PREFIX:-/data/data/com.termux/files/usr}/bin"
+  mkdir -p "$bin_dir"
+  cp "$0" "$bin_dir/jarvis-agy"
+  chmod +x "$bin_dir/jarvis-agy"
+  if [[ -f "$SERVER_SCRIPT" ]]; then
+    cp "$SERVER_SCRIPT" "$bin_dir/agy_server.py"
+    chmod +x "$bin_dir/agy_server.py"
+  fi
+  cat > "$bin_dir/agy-serve" <<'EOF'
+#!/bin/sh
+exec jarvis-agy start "$@"
+EOF
+  chmod +x "$bin_dir/agy-serve"
+  echo "[✓] Installed jarvis-agy and agy-serve to $bin_dir"
+}
+
+case "${1:-help}" in
+  start)   cmd_start "${2:-$PORT}" ;;
+  stop)    cmd_stop ;;
+  restart) cmd_stop; sleep 1; cmd_start "${2:-$PORT}" ;;
+  status)  cmd_status ;;
+  log)     tail -n 60 "$LOG_FILE" 2>/dev/null || echo "No log file found." ;;
+  send)    cmd_send "${2:?Prompt required}" ;;
+  install) cmd_install ;;
+  serve)   cmd_start "${2:-$PORT}" ;;
+  *) echo "Usage: jarvis-agy {start|stop|restart|status|log|send|install} [port]" ;;
+esac

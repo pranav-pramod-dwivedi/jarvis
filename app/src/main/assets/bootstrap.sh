@@ -8,6 +8,11 @@
 
 set -u
 
+# Ensure Termux uses the official mirror to avoid bad mirrors
+echo "deb https://packages.termux.dev/apt/termux-main stable main" > "$PREFIX/etc/apt/sources.list"
+# Also remove any sources.list.d files that might cause issues
+rm -f "$PREFIX/etc/apt/sources.list.d/"*
+
 J="$HOME/jarvis"
 STATE="$J/state"; LOGS="$J/logs"; MEM="$J/memory"; BK="$J/backup"
 mkdir -p "$J/bin" "$STATE" "$LOGS" "$MEM" "$BK" "$J/run"
@@ -170,13 +175,18 @@ repair_apt(){
   pgrep -x dpkg >/dev/null 2>&1 && sleep 8
   rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock /var/lib/apt/lists/lock
   dpkg --configure -a
-  apt-get -f install -y
+  apt-get update -qq >/dev/null 2>&1 || true
+  apt-get -f install -y >/dev/null 2>&1 || true
 }
 MISS=""
 for p in curl ca-certificates git bash; do
-  command -v "$p" >/dev/null 2>&1 || dpkg -s "$p" >/dev/null 2>&1 || MISS="$MISS $p"
+  command -v "$p" >/dev/null 2>&1 || MISS="$MISS $p"
 done
 if [ -n "${MISS# }" ]; then
+  # Ensure sources.list exists inside Ubuntu container
+  if [ ! -f /etc/apt/sources.list ]; then
+    echo "deb https://packages.termux.dev/apt/termux-main stable main" > /etc/apt/sources.list
+  fi
   apt-get update -qq >/dev/null 2>&1 || { repair_apt; sleep 3; apt-get update -qq; }
   apt-get install -y ${MISS# } || { repair_apt; apt-get install -y ${MISS# }; }
 fi
@@ -304,6 +314,42 @@ EOF
 ) ; log "model: $out"; forward "$out"
 }
 
+# ---------- Stage: agy (Antigravity CLI & serve daemon) ----------
+agy_stage(){
+  emit agy running "Setting up Antigravity (AGY) & agy serve…"
+  local BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
+  mkdir -p "$BIN_DIR" "$HOME/jarvis/bin" 2>/dev/null || true
+
+  # Ensure python3
+  if ! command -v python3 >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
+    pkg install -y python 2>&1 | tail -5 || true
+  fi
+
+  # Copy scripts if present in assets/jarvis
+  if [ -f "$HOME/jarvis/bin/agy_server.py" ]; then
+    cp "$HOME/jarvis/bin/agy_server.py" "$BIN_DIR/agy_server.py" 2>/dev/null || true
+    chmod +x "$BIN_DIR/agy_server.py" 2>/dev/null || true
+  fi
+  if [ -f "$HOME/jarvis/bin/jarvis-agy" ]; then
+    cp "$HOME/jarvis/bin/jarvis-agy" "$BIN_DIR/jarvis-agy" 2>/dev/null || true
+    chmod +x "$BIN_DIR/jarvis-agy" 2>/dev/null || true
+  fi
+
+  # Create `agy-serve` starter
+  cat > "$BIN_DIR/agy-serve" <<'EOF'
+#!/bin/sh
+exec jarvis-agy start "$@"
+EOF
+  chmod +x "$BIN_DIR/agy-serve" 2>/dev/null || true
+
+  # Start agy serve on port 5050
+  if command -v jarvis-agy >/dev/null 2>&1; then
+    jarvis-agy start 5050 2>&1 | tail -3 || true
+  fi
+
+  emit agy done "AGY server configured (port 5050)"
+}
+
 # ---------- entry ----------
 case "${1:-}" in
   auth)
@@ -311,7 +357,7 @@ case "${1:-}" in
     exec proot-distro login ubuntu -- /bin/bash -lc 'opencode auth login'
     ;;
   health)
-    termux_base; ubuntu_install; ubuntu_login; ubuntu_packages; opencode_stage; auth_stage; serve_stage; model_stage
+    termux_base; ubuntu_install; ubuntu_login; ubuntu_packages; opencode_stage; auth_stage; serve_stage; model_stage; agy_stage
     emit jarvis done "Health sweep complete"
     exit 0 ;;
 esac
@@ -325,4 +371,6 @@ opencode_stage
 auth_stage
 serve_stage
 model_stage
+agy_stage
 emit jarvis done "Jarvis environment ready"
+

@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:background="#0B0F19">
+
+    <!-- Top Action Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="12dp"
+        android:background="#0F172A">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_revert"
+            app:tint="#94A3B8"
+            android:contentDescription="Back" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CAPABILITIES REGISTRY"
+                android:textColor="#F8FAFC"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.05" />
+
+            <TextView
+                android:id="@+id/header_subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="100+ native deterministic tools · Sub-10ms reflex execution"
+                android:textColor="#64748B"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/badge_total_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="114 READY"
+            android:textColor="#10B981"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:background="#064E3B"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp" />
+    </LinearLayout>
+
+    <!-- Search Input -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <EditText
+            android:id="@+id/input_search"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="#1E293B"
+            android:hint="🔎 Search ID, name, keyword, or alias..."
+            android:textColorHint="#475569"
+            android:textColor="#F8FAFC"
+            android:textSize="13sp"
+            android:paddingHorizontal="14dp"
+            android:inputType="text"
+            android:maxLines="1" />
+    </LinearLayout>
+
+    <!-- Category Filter Chips -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:paddingHorizontal="12dp"
+        android:paddingBottom="8dp">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chip_group_categories"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:singleSelection="true">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_all"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ALL"
+                android:checked="true"
+                app:chipBackgroundColor="#1E293B"
+                android:textColor="#E2E8F0" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_device"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚡ DEVICE"
+                app:chipBackgroundColor="#1E293B"
+                android:textColor="#E2E8F0" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_media"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎵 MEDIA"
+                app:chipBackgroundColor="#1E293B"
+                android:textColor="#E2E8F0" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_apps"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📦 APPS"
+                app:chipBackgroundColor="#1E293B"
+                android:textColor="#E2E8F0" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_navigation"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🗺️ NAV &amp; COMM"
+                app:chipBackgroundColor="#1E293B"
+                android:textColor="#E2E8F0" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_filesystem"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📁 FILES"
+                app:chipBackgroundColor="#1E293B"
+                android:textColor="#E2E8F0" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_linux"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="💻 LINUX &amp; TERMUX"
+                app:chipBackgroundColor="#1E293B"
+                android:textColor="#E2E8F0" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_agents"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🤖 AGENTS"
+                app:chipBackgroundColor="#1E293B"
+                android:textColor="#E2E8F0" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_system"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⏰ SYSTEM &amp; CLOCK"
+                app:chipBackgroundColor="#1E293B"
+                android:textColor="#E2E8F0" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_workflows"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔄 WORKFLOWS"
+                app:chipBackgroundColor="#1E293B"
+                android:textColor="#E2E8F0" />
+
+        </com.google.android.material.chip.ChipGroup>
+    </HorizontalScrollView>
+
+    <!-- Capabilities List -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recycler_capabilities"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingVertical="4dp"
+        android:clipToPadding="false" />
+
+</LinearLayout>

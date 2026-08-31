@@ -126,8 +126,13 @@ object TermuxBridge {
                 .putExtra(EXTRA_COMMAND_LABEL, label)
                 .putExtra(EXTRA_PENDING_INTENT, pi)
             stdin?.let { i.putExtra(EXTRA_STDIN, it) }
-            if (android.os.Build.VERSION.SDK_INT >= 26) c.startForegroundService(i)
-            else c.startService(i)
+            try {
+                c.startService(i)
+            } catch (_: Exception) {
+                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    c.startForegroundService(i)
+                }
+            }
             return q.poll(timeoutMs, TimeUnit.MILLISECONDS)
         } catch (e: Exception) {
             return TermuxResult(id, label, command, null, null, null, null, null,
@@ -138,17 +143,42 @@ object TermuxBridge {
     }
 }
 
-/** Unified shell runner: Termux (real Linux env), local Android sh, root su. */
+/** Unified shell runner: Termux (Ubuntu proot Linux env), local Android sh, root su. */
 object Shell {
     data class Res(val out: String, val err: String, val rc: Int?, val ms: Long, val timedOut: Boolean, val via: String)
 
-    fun termux(command: String, timeoutMs: Long = 30_000): Res {
+    fun wrapUbuntu(command: String): String {
+        val trimmed = command.trim()
+        if (trimmed.startsWith("proot-distro login")) return command
+        val initRule = "if [ ! -f /root/GEMINI.md ]; then " +
+                       "echo -e '# Termux Agent Directives\\nYou are an autonomous AI Agent operating directly inside Termux on Android.\\nWhen asked to open apps or URLs, execute: am start -a android.intent.action.VIEW -d <url> or termux-open-url <url>.\\nExecute commands directly with run_command.' > /root/GEMINI.md; fi; "
+        val fullCmd = "export PATH=\"/root/.local/bin:/usr/local/bin:\$PATH\"; $initRule $command"
+        val escaped = fullCmd.replace("'", "'\\''")
+        return "export PATH=\"/data/data/com.termux/files/usr/bin:\$PATH\"; " +
+               "if command -v proot-distro >/dev/null 2>&1; then " +
+               "  proot-distro login ubuntu -- bash -c '$escaped'; " +
+               "else " +
+               "  bash -c '$escaped'; " +
+               "fi"
+    }
+
+    fun ubuntu(command: String, timeoutMs: Long = 30_000): Res {
+        return termux(wrapUbuntu(command), timeoutMs, inUbuntu = false, viaName = "ubuntu")
+    }
+
+    fun termuxRaw(command: String, timeoutMs: Long = 30_000): Res {
+        return termux(command, timeoutMs, inUbuntu = false, viaName = "termux-host")
+    }
+
+    fun termux(command: String, timeoutMs: Long = 30_000, inUbuntu: Boolean = true, viaName: String? = null): Res {
         val t0 = System.currentTimeMillis()
-        val r = TermuxBridge.execute("shell", command, timeoutMs) ?: return Res("", "bridge unavailable/timeout", null, System.currentTimeMillis() - t0, true, "termux")
+        val finalCmd = if (inUbuntu) wrapUbuntu(command) else command
+        val via = viaName ?: (if (inUbuntu) "ubuntu" else "termux")
+        val r = TermuxBridge.execute("shell", finalCmd, timeoutMs) ?: return Res("", "bridge unavailable/timeout", null, System.currentTimeMillis() - t0, true, via)
         val ok = r.internalError == null && (r.err ?: -1) == -1
         return Res(
             r.stdout ?: "", (r.stderr ?: "") + if (r.internalError != null) " ${r.internalError}" else "",
-            if (ok) r.exitCode else -1, System.currentTimeMillis() - t0, !ok && r.internalError?.contains("TIMEOUT") == true, "termux"
+            if (ok) r.exitCode else -1, System.currentTimeMillis() - t0, !ok && r.internalError?.contains("TIMEOUT") == true, via
         )
     }
 

@@ -1,0 +1,201 @@
+#!/bin/bash
+# agy-daemon — Lightweight background daemon manager for Antigravity (AGY) in Termux / PRoot Ubuntu.
+# Replaces systemd/systemctl on environments without init systems.
+# Manages both:
+#   1. `agy --remote-control` (Google Antigravity Cloud Remote Control & LSP)
+#   2. `agy_server.py` (Local HTTP/SSE streaming API on port 5050 for Jarvis App & Porta)
+
+set -e
+
+AGY_BIN="${HOME}/.local/bin/agy"
+[[ -x "$AGY_BIN" ]] || AGY_BIN="$(command -v agy 2>/dev/null || echo "agy")"
+
+PID_DIR="${HOME}/.antigravity"
+PID_FILE="${PID_DIR}/agy_daemon.pid"
+LOG_FILE="${PID_DIR}/agy_daemon.log"
+
+API_PID_FILE="/tmp/jarvis-agy.pid"
+API_LOG_FILE="/tmp/jarvis-agy.log"
+API_PORT="${2:-5050}"
+
+mkdir -p "$PID_DIR" "/tmp"
+
+# Find python3
+PYTHON="$(command -v python3 || command -v python || true)"
+
+# Find agy_server.py
+SERVER_SCRIPT="$(dirname "$0")/agy_server.py"
+if [[ ! -f "$SERVER_SCRIPT" ]]; then
+  for p in "$HOME/jarvis/bin/agy_server.py" "$HOME/.jarvis/agy_server.py" "/usr/local/bin/agy_server.py" "${PREFIX:-/data/data/com.termux/files/usr}/bin/agy_server.py"; do
+    if [[ -f "$p" ]]; then SERVER_SCRIPT="$p"; break; fi
+  done
+fi
+
+is_running() {
+  local pfile="$1"
+  if [[ -f "$pfile" ]]; then
+    local pid
+    pid="$(cat "$pfile" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+cmd_start() {
+  echo "⚡ [Antigravity Daemon] Starting services..."
+
+  # 1. Start agy --remote-control in background
+  if is_running "$PID_FILE"; then
+    echo "  [✓] agy --remote-control already running (PID: $(cat "$PID_FILE"))"
+  else
+    echo "  [*] Launching agy --remote-control in background..."
+    # Probe a free port between 4400 and 4500 for hub
+    local hub_port=4400
+    while (( hub_port < 4500 )) && (exec 3<>"/dev/tcp/127.0.0.1/${hub_port}") 2>/dev/null; do
+      hub_port=$((hub_port + 1))
+    done
+
+    nohup "$AGY_BIN" --remote-control --hub-port "$hub_port" > "$LOG_FILE" 2>&1 &
+    local r_pid=$!
+    echo "$r_pid" > "$PID_FILE"
+    sleep 1
+    if kill -0 "$r_pid" 2>/dev/null; then
+      echo "  [✓] agy --remote-control live in background (PID: $r_pid, Hub: $hub_port)"
+    else
+      echo "  [!] Warning: agy --remote-control exited early. Check logs: agy-daemon log"
+    fi
+  fi
+
+  # 2. Start agy_server.py HTTP API for Jarvis / Porta on port 5050
+  if is_running "$API_PID_FILE"; then
+    echo "  [✓] Jarvis AGY API server already running (PID: $(cat "$API_PID_FILE")) on port $API_PORT"
+  elif [[ -f "$SERVER_SCRIPT" ]] && [[ -n "$PYTHON" ]]; then
+    echo "  [*] Launching Jarvis AGY API server on http://127.0.0.1:${API_PORT}..."
+    nohup "$PYTHON" "$SERVER_SCRIPT" "$API_PORT" > "$API_LOG_FILE" 2>&1 &
+    local s_pid=$!
+    echo "$s_pid" > "$API_PID_FILE"
+    sleep 1
+    if kill -0 "$s_pid" 2>/dev/null; then
+      echo "  [✓] Jarvis AGY API server live on http://127.0.0.1:${API_PORT} (PID: $s_pid)"
+    fi
+  fi
+
+  echo "✓ All Antigravity daemon services running persistently in background."
+}
+
+cmd_stop() {
+  echo "⚡ [Antigravity Daemon] Stopping services..."
+  if [[ -f "$PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.5
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+    rm -f "$PID_FILE"
+  fi
+  pkill -f "agy --remote-control" 2>/dev/null || true
+  echo "  [✓] agy --remote-control stopped"
+
+  if [[ -f "$API_PID_FILE" ]]; then
+    local s_pid
+    s_pid="$(cat "$API_PID_FILE" 2>/dev/null || true)"
+    if [[ -n "$s_pid" ]] && kill -0 "$s_pid" 2>/dev/null; then
+      kill "$s_pid" 2>/dev/null || true
+      sleep 0.5
+      kill -9 "$s_pid" 2>/dev/null || true
+    fi
+    rm -f "$API_PID_FILE"
+  fi
+  pkill -f "agy_server.py" 2>/dev/null || true
+  echo "  [✓] Jarvis AGY API server stopped"
+}
+
+cmd_status() {
+  echo "⚡ [Antigravity Daemon Status]"
+  local rc_ok=0
+  local api_ok=0
+
+  if is_running "$PID_FILE"; then
+    echo "  ● agy --remote-control: ACTIVE (PID: $(cat "$PID_FILE"))"
+    rc_ok=1
+  else
+    # Also check if running without PID file
+    local found_pid
+    found_pid="$(pgrep -f "agy --remote-control" | head -1 || true)"
+    if [[ -n "$found_pid" ]]; then
+      echo "  ● agy --remote-control: ACTIVE (PID: $found_pid)"
+      echo "$found_pid" > "$PID_FILE"
+      rc_ok=1
+    else
+      echo "  ○ agy --remote-control: INACTIVE (Stopped)"
+    fi
+  fi
+
+  if is_running "$API_PID_FILE"; then
+    echo "  ● Jarvis AGY API (port $API_PORT): ACTIVE (PID: $(cat "$API_PID_FILE"))"
+    api_ok=1
+  else
+    local found_api
+    found_api="$(pgrep -f "agy_server.py" | head -1 || true)"
+    if [[ -n "$found_api" ]]; then
+      echo "  ● Jarvis AGY API (port $API_PORT): ACTIVE (PID: $found_api)"
+      echo "$found_api" > "$API_PID_FILE"
+      api_ok=1
+    else
+      echo "  ○ Jarvis AGY API (port $API_PORT): INACTIVE (Stopped)"
+    fi
+  fi
+
+  # HTTP Probe
+  local probe
+  probe="$(curl -sk "http://127.0.0.1:${API_PORT}/health" 2>/dev/null || echo '{"ok":false}')"
+  if echo "$probe" | grep -q '"ok":true'; then
+    echo "  [✓] Jarvis Console HTTP/SSE Endpoint is HEALTHY on port ${API_PORT}"
+  else
+    echo "  [!] Note: Run 'agy-daemon start' to enable Jarvis In-App Remote Console"
+  fi
+}
+
+cmd_log() {
+  echo "=== [agy --remote-control log] ==="
+  if [[ -f "$LOG_FILE" ]]; then
+    tail -n 30 "$LOG_FILE"
+  else
+    echo "No log file at $LOG_FILE"
+  fi
+
+  echo -e "\n=== [Jarvis AGY API server log] ==="
+  if [[ -f "$API_LOG_FILE" ]]; then
+    tail -n 30 "$API_LOG_FILE"
+  else
+    echo "No log file at $API_LOG_FILE"
+  fi
+}
+
+case "${1:-status}" in
+  start)
+    cmd_start
+    ;;
+  stop)
+    cmd_stop
+    ;;
+  restart)
+    cmd_stop
+    sleep 1
+    cmd_start
+    ;;
+  status)
+    cmd_status
+    ;;
+  log|logs)
+    cmd_log
+    ;;
+  *)
+    echo "Usage: agy-daemon {start|stop|restart|status|log}"
+    exit 1
+    ;;
+esac

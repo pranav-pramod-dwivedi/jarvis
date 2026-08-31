@@ -1,185 +1,353 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:background="#070A0F">
 
-    <LinearLayout
+    <!-- Top Ambient Glow -->
+    <View
+        android:id="@+id/home_glow"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:layout_height="220dp"
+        android:background="@drawable/bg_agent_header_glow"
+        app:layout_constraintTop_toTopOf="parent" />
 
-        <TextView
-            android:id="@+id/title_view"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="JARVIS"
-            android:textSize="30sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="File Manager · AI Agent · Termux Bridge"
-            android:textColor="#8FB8D8"
-            android:textSize="13sp" />
-
-        <TextView
-            android:id="@+id/info_view"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="center"
-            android:textSize="11sp" />
-
-        <Button
-            android:id="@+id/btn_open_files"
-            android:layout_width="match_parent"
-            android:layout_height="58dp"
-            android:layout_marginTop="12dp"
-            android:text="OPEN FILE MANAGER"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/btn_open_opencode"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="8dp"
-            android:backgroundTint="#238636"
-            android:text="OPENCODE CONSOLE"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+    <!-- Top Status & Mode Bar -->
+    <LinearLayout
+        android:id="@+id/top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="32dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        app:layout_constraintTop_toTopOf="parent">
 
         <LinearLayout
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:orientation="horizontal">
+            android:background="@drawable/bg_status_pill"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="5dp">
 
-            <Button
-                android:id="@+id/btn_nav_agent"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textSize="11sp"
-                android:text="Agent" />
+            <View
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/bg_dot" />
 
-            <Button
-                android:id="@+id/btn_nav_commander"
-                android:layout_width="0dp"
+            <TextView
+                android:id="@+id/txt_system_status"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textSize="11sp"
-                android:text="Commander" />
-
-            <Button
-                android:id="@+id/btn_nav_terminal"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textSize="11sp"
-                android:text="Terminal" />
-
-            <Button
-                android:id="@+id/btn_nav_status"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textSize="11sp"
-                android:text="Status" />
+                android:layout_marginStart="8dp"
+                android:text="Linux execution · Ready"
+                android:textColor="#94A3B8"
+                android:textSize="11sp" />
         </LinearLayout>
 
-        <Button
-            android:id="@+id/btn_permissions"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="PERMISSIONS" />
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
 
-        <TextView
-            android:id="@+id/storage_view"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="#101820"
-            android:fontFamily="monospace"
-            android:padding="10dp"
-            android:text="storage…"
-            android:textColor="#B0CDE0"
-            android:textSize="12sp" />
+        <!-- Developer Mode Toggle / Pages Hub -->
+        <ImageButton
+            android:id="@+id/btn_dev_mode_toggle"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/bg_quick_nav_tab"
+            android:contentDescription="Developer Hub"
+            android:src="@android:drawable/ic_dialog_dialer"
+            app:tint="#FF7A00" />
+    </LinearLayout>
 
+    <!-- Center Section: Glowing Assistant Orb -->
+    <LinearLayout
+        android:id="@+id/center_content"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toTopOf="@id/bottom_action_section"
+        app:layout_constraintTop_toBottomOf="@id/top_bar"
+        app:layout_constraintVertical_bias="0.38">
+
+        <!-- Title -->
         <TextView
-            android:id="@+id/status_view"
-            android:layout_width="match_parent"
+            android:id="@+id/home_title"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="#37474F"
-            android:gravity="center"
-            android:padding="10dp"
-            android:text="IDLE"
+            android:letterSpacing="0.15"
+            android:text="JARVIS"
             android:textColor="#FFFFFF"
+            android:textSize="32sp"
             android:textStyle="bold" />
 
+        <!-- Interactive Animated Glowing Orb -->
+        <FrameLayout
+            android:id="@+id/orb_container"
+            android:layout_width="160dp"
+            android:layout_height="160dp"
+            android:layout_marginTop="24dp">
+
+            <!-- Outer Pulse Ring -->
+            <View
+                android:id="@+id/orb_ring"
+                android:layout_width="160dp"
+                android:layout_height="160dp"
+                android:background="@drawable/bg_orb_outer_ring" />
+
+            <!-- Core Radiant Orb -->
+            <View
+                android:id="@+id/orb_core"
+                android:layout_width="104dp"
+                android:layout_height="104dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_orb_idle" />
+        </FrameLayout>
+
+        <!-- Subtitle / Dynamic Status Prompt -->
         <TextView
-            android:id="@+id/stage_view"
-            android:layout_width="match_parent"
+            android:id="@+id/txt_main_prompt"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="#101010"
-            android:fontFamily="monospace"
-            android:padding="8dp"
-            android:textColor="#E0E0E0"
-            android:textSize="13sp" />
+            android:layout_marginTop="26dp"
+            android:text="What do you need?"
+            android:textColor="#E2E8F0"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <!-- Active Outcome Sub-Text -->
+        <TextView
+            android:id="@+id/txt_action_subtext"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Ready for natural voice or text command"
+            android:textColor="#64748B"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Bottom Actions: Speak & Type -->
+    <LinearLayout
+        android:id="@+id/bottom_action_section"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingBottom="24dp"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- Speak Pill Button -->
+            <LinearLayout
+                android:id="@+id/btn_home_speak"
+                android:layout_width="144dp"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_btn_action_pill"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="Speak"
+                    android:src="@android:drawable/ic_btn_speak_now"
+                    app:tint="#FF7A00" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Speak"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Type Pill Button -->
+            <LinearLayout
+                android:id="@+id/btn_home_type"
+                android:layout_width="144dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="14dp"
+                android:background="@drawable/bg_btn_action_pill"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="Type"
+                    android:src="@android:drawable/ic_input_get"
+                    app:tint="#38BDF8" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Type"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Companion Mode Badge / Toggle Strip -->
+        <TextView
+            android:id="@+id/txt_companion_toggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Companion Mode: OFF · Tap to configure"
+            android:textColor="#475569"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- Hidden / Developer Mode Drawer Section -->
+    <LinearLayout
+        android:id="@+id/developer_mode_sheet"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FA0B0F17"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <Button
-                android:id="@+id/btn_bootstrap"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="2"
-                android:text="INSTALL / BOOTSTRAP" />
-
-            <Button
-                android:id="@+id/btn_auth"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1.4"
-                android:text="OPEN AUTH" />
-
-            <Button
-                android:id="@+id/btn_stop"
+            <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="STOP" />
+                android:text="DEVELOPER MODE (INSPECT)"
+                android:textColor="#FF7A00"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btn_close_dev_mode"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:backgroundTint="#1E293B"
+                android:text="CLOSE"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp" />
         </LinearLayout>
 
         <ScrollView
-            android:id="@+id/scroller"
             android:layout_width="match_parent"
-            android:layout_height="180dp"
-            android:layout_marginTop="8dp"
-            android:background="#0A0A0A">
+            android:layout_height="0dp"
+            android:layout_marginTop="12dp"
+            android:layout_weight="1">
 
-            <TextView
-                android:id="@+id/output_view"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
-                android:padding="8dp"
-                android:text="Ready.\n"
-                android:textColor="#9A9A9A"
-                android:textIsSelectable="true"
-                android:textSize="11sp" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ROUTING ARCHITECTURE"
+                    android:textColor="#38BDF8"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Tier 1: Deterministic / Needle (&lt;15ms)\nTier 2: Local LLM / Qwen2.5 (&lt;30s)\nTier 3: Cloud Escalation"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp" />
+
+                <!-- Dev Navigation Links -->
+                <Button
+                    android:id="@+id/btn_dev_agent"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="10dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="Agent Chat Stream &amp; Steps" />
+
+                <Button
+                    android:id="@+id/btn_dev_playground"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="6dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="Canonical Tool Playground" />
+
+                <Button
+                    android:id="@+id/btn_dev_services"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="6dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="Connected Services &amp; Local AI" />
+
+                <Button
+                    android:id="@+id/btn_dev_files"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="6dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="File Manager (Storage)" />
+
+                <Button
+                    android:id="@+id/btn_dev_commander"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="6dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="Commander Console" />
+
+                <Button
+                    android:id="@+id/btn_dev_terminal"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="6dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="Linux Terminal" />
+
+                <Button
+                    android:id="@+id/btn_dev_diagnostics"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="6dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="System Diagnostics" />
+
+                <Button
+                    android:id="@+id/btn_dev_agy"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="6dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="Antigravity Console" />
+
+                <Button
+                    android:id="@+id/btn_dev_permissions"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="6dp"
+                    android:backgroundTint="#1E293B"
+                    android:text="Permissions Manager" />
+            </LinearLayout>
         </ScrollView>
     </LinearLayout>
-</ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

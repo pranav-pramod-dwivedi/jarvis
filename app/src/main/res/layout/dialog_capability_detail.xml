@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#0F172A">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Top Drag Handle / Header -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"
+            android:background="#334155" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/dialog_category"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="DEVICE"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#38BDF8"
+                android:background="#1E293B"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/dialog_risk"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="RISK: LOW"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#10B981"
+                android:background="#064E3B"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/dialog_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Flashlight / Torch"
+            android:textColor="#F8FAFC"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/dialog_id"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="system.torch.on"
+            android:textColor="#60A5FA"
+            android:fontFamily="monospace"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/dialog_desc"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Detailed description of what this capability does"
+            android:textColor="#94A3B8"
+            android:textSize="14sp"
+            android:lineSpacingExtra="2dp" />
+
+        <!-- Backend Info -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="#1E293B"
+            android:padding="12dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="EXECUTION BACKEND"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#64748B" />
+
+            <TextView
+                android:id="@+id/dialog_backend"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Android Hardware CameraManager"
+                android:textColor="#E2E8F0"
+                android:textSize="13sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Aliases -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="NATURAL LANGUAGE ALIASES"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:textColor="#64748B" />
+
+        <TextView
+            android:id="@+id/dialog_aliases"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="#161F30"
+            android:padding="10dp"
+            android:text="• turn on flashlight\n• torch on\n• flashlight on"
+            android:textColor="#CBD5E1"
+            android:textSize="13sp"
+            android:lineSpacingExtra="3dp" />
+
+        <!-- CLI Command -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="CLI / ROUTER SIGNATURE"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:textColor="#64748B" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal"
+            android:background="#111827"
+            android:padding="10dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/dialog_cli"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="jarvis system.torch.on"
+                android:textColor="#38BDF8"
+                android:fontFamily="monospace"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/dialog_btn_copy"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="COPY"
+                android:textSize="11sp"
+                android:textColor="#38BDF8" />
+        </LinearLayout>
+
+        <!-- Test Parameters Input -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="TEST PARAMETERS (JSON or Key=Value)"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:textColor="#64748B" />
+
+        <EditText
+            android:id="@+id/dialog_param_input"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:layout_marginTop="6dp"
+            android:background="#1E293B"
+            android:paddingHorizontal="12dp"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#475569"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:hint="Optional: query=music or value=80" />
+
+        <!-- Run Test Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/dialog_btn_run_test"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="12dp"
+            android:text="⚡ EXECUTE CAPABILITY LIVE"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            app:backgroundTint="#2563EB"
+            app:cornerRadius="10dp" />
+
+        <!-- Output Screen -->
+        <TextView
+            android:id="@+id/dialog_output"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="#000000"
+            android:padding="12dp"
+            android:textColor="#10B981"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:visibility="gone" />
+
+    </LinearLayout>
+</ScrollView>

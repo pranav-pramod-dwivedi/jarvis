@@ -179,6 +179,8 @@ class OpenCodeActivity : AppCompatActivity() {
         findViewById<View>(R.id.btn_perm_always).setOnClickListener { replyPerm("always") }
         findViewById<View>(R.id.btn_perm_reject).setOnClickListener { replyPerm("reject") }
         findViewById<View>(R.id.btn_oc_open_web).setOnClickListener { openWebUi() }
+        findViewById<View>(R.id.btn_oc_test).setOnClickListener { testConnection() }
+        findViewById<View>(R.id.btn_oc_discover).setOnClickListener { discoverAndConnect() }
 
         spinnerAgent.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>, v: View?, pos: Int, id: Long) {
@@ -219,6 +221,108 @@ class OpenCodeActivity : AppCompatActivity() {
         val url = inputServerUrl.text.toString().trim().ifBlank { openCode.config.baseUrl }
         // default = server's own web UI inside WebView (no Chrome). Long-press logic for custom html is in the web page itself.
         startActivity(android.content.Intent(this, OpenCodeWebActivity::class.java).putExtra("baseUrl", url))
+    }
+
+    private fun testConnection() {
+        val url = inputServerUrl.text.toString().trim().ifBlank { "http://127.0.0.1:4096" }
+        serverLabel.text = "Testing $url…"
+        Thread {
+            val results = runDiagnostics(url)
+            runOnUiThread {
+                val sb = StringBuilder("Diagnostics for $url:\n")
+                results.forEach { (name, ok, detail) ->
+                    sb.append(if (ok) "✓ " else "✗ ").append(name)
+                    detail?.let { sb.append(": $it") }
+                    sb.append('\n')
+                }
+                serverLabel.text = if (results.any { it.second }) "OK" else "FAIL"
+                val dialog = AlertDialog.Builder(this)
+                    .setTitle("Connection Test")
+                    .setMessage(sb.toString())
+                    .setPositiveButton("OK", null)
+                    .create()
+                dialog.show()
+            }
+        }.start()
+    }
+
+    private fun runDiagnostics(baseUrl: String): List<Triple<String, Boolean, String?>> {
+        val res = mutableListOf<Triple<String, Boolean, String?>>()
+        val host = java.net.URL(baseUrl).host
+        val port = if (java.net.URL(baseUrl).port > 0) java.net.URL(baseUrl).port else (if (baseUrl.startsWith("https")) 443 else 80)
+        // 1. DNS resolve
+        try {
+            java.net.InetAddress.getAllByName(host)
+            res.add(Triple("DNS resolve", true, null))
+        } catch (e: Exception) {
+            res.add(Triple("DNS resolve", false, e.message))
+        }
+        // 2. TCP connect
+        try {
+            val sock = java.net.Socket()
+            sock.connect(java.net.InetSocketAddress(host, port), 3000)
+            sock.close()
+            res.add(Triple("TCP connect", true, "port $port"))
+        } catch (e: Exception) {
+            res.add(Triple("TCP connect", false, e.message))
+        }
+        // 3. HTTP HEAD
+        try {
+            val conn = java.net.URL(baseUrl + "/").openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "HEAD"
+            conn.connectTimeout = 3000
+            conn.readTimeout = 3000
+            val code = conn.responseCode
+            conn.disconnect()
+            res.add(Triple("HTTP HEAD", code in 200..399, "HTTP $code"))
+        } catch (e: Exception) {
+            res.add(Triple("HTTP HEAD", false, e.message))
+        }
+        // 4. OpenCode API /global/health
+        try {
+            val conn = java.net.URL(baseUrl + "/global/health").openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 3000
+            conn.readTimeout = 3000
+            val code = conn.responseCode
+            val body = if (code in 200..299) conn.inputStream.bufferedReader().readText() else conn.errorStream?.bufferedReader()?.readText() ?: ""
+            conn.disconnect()
+            val ok = code == 200 && body.contains("healthy")
+            res.add(Triple("API /global/health", ok, "HTTP $code"))
+        } catch (e: Exception) {
+            res.add(Triple("API /global/health", false, e.message))
+        }
+        // 5. SSE /global/event
+        try {
+            val conn = java.net.URL(baseUrl + "/global/event").openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 3000
+            conn.readTimeout = 3000
+            conn.setRequestProperty("Accept", "text/event-stream")
+            val code = conn.responseCode
+            conn.disconnect()
+            res.add(Triple("SSE /global/event", code in 200..299, "HTTP $code"))
+        } catch (e: Exception) {
+            res.add(Triple("SSE /global/event", false, e.message))
+        }
+        return res
+    }
+
+    private fun discoverAndConnect() {
+        serverLabel.text = "Discovering servers…"
+        Thread {
+            val found = openCode.process.discoverNetwork()
+            runOnUiThread {
+                if (found.isNotEmpty()) {
+                    inputServerUrl.setText(found.first())
+                    Toast.makeText(this, "Found ${found.size} server(s), using first: ${found.first()}", Toast.LENGTH_SHORT).show()
+                    doConnect()
+                } else {
+                    Toast.makeText(this, "No servers found on local network", Toast.LENGTH_LONG).show()
+                    serverLabel.text = "No servers found"
+                }
+            }
+        }.start()
     }
 
     private fun refreshServerStatus() {

@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29"
         tools:ignore="ScopedStorage" />
@@ -43,6 +45,7 @@
     <!-- phone / sms (optional) -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
@@ -84,6 +87,7 @@
     </queries>
 
     <application
+        android:name=".JarvisApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -96,20 +100,27 @@
         android:usesCleartextTraffic="true">
 
         <activity
-            android:name=".MainActivity"
-            android:launchMode="singleTop"
-            android:exported="true">
+            android:name=".SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".MainActivity"
+            android:launchMode="singleTop"
+            android:exported="true" />
+
+        <activity android:name=".AgyActivity" android:exported="true" />
+        <activity android:name=".AgyWebActivity" android:exported="false" />
         <activity android:name=".OpenCodeActivity" android:exported="false" />
         <activity android:name=".OpenCodeWebActivity" android:exported="false" />
         <activity android:name=".BrowserActivity" android:exported="false" />
-        <activity android:name=".AgentActivity" android:exported="false" />
-        <activity android:name=".DiagnosticsActivity" android:exported="false" />
+        <activity android:name=".AgentActivity" android:exported="true" />
+        <activity android:name=".DiagnosticsActivity" android:exported="true" />
         <activity
             android:name=".PermissionsActivity"
             android:exported="false"
@@ -117,6 +128,15 @@
         <activity android:name=".CommanderActivity" android:exported="false" />
         <activity android:name=".EditorActivity" android:exported="false" />
         <activity android:name=".TerminalActivity" android:exported="false" />
+        <activity android:name=".ConnectedServicesActivity" android:exported="true" />
+        <activity android:name=".ToolPlaygroundActivity" android:exported="true" />
+        <activity 
+            android:name=".registry.CapabilitiesActivity" 
+            android:exported="true"
+            android:windowSoftInputMode="stateHidden" />
+        <activity
+            android:name=".voice.VoiceSettingsActivity"
+            android:exported="true" />
 
         <receiver
             android:name=".TermuxResultReceiver"
@@ -155,6 +175,31 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+
+        <!-- JARVIS Hands-Free Foreground Voice Service -->
+        <service
+            android:name=".voice.JarvisVoiceService"
+            android:exported="true"
+            android:foregroundServiceType="microphone">
+            <intent-filter>
+                <action android:name="com.pr4nav.jarvis.voice.START" />
+                <action android:name="com.pr4nav.jarvis.voice.STOP" />
+                <action android:name="com.pr4nav.jarvis.voice.PAUSE" />
+                <action android:name="com.pr4nav.jarvis.voice.RESUME" />
+                <action android:name="com.pr4nav.jarvis.voice.START_ACTIVE_SESSION" />
+            </intent-filter>
+        </service>
+
+        <!-- Auto-restore service after device reboot -->
+        <receiver
+            android:name=".voice.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".AdminReceiver"

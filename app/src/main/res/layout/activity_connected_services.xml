@@ -1,0 +1,358 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0B0F17"
+    android:fillViewport="true">
+
+    <LinearLayout
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Top Header Bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <ImageButton
+                android:id="@+id/btn_back"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_revert"
+                android:contentDescription="Back" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="CONNECT TO JARVIS"
+                android:textColor="#38BDF8"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Capability Layer &amp; Cloud Ecosystem Orchestrator"
+            android:textColor="#94A3B8"
+            android:textSize="12sp" />
+
+        <!-- Architecture Banner -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="#131B2B"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="⚡ Capability-Based Routing Active"
+                android:textColor="#10B981"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="monospace"
+                android:text="JARVIS → Intent Router → [Music / Nav / Files / Keep / WhatsApp / Maps]\nMulti-intent compound execution enabled."
+                android:textColor="#CBD5E1"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Firebase & Cloud Sync Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="🔥 FIREBASE &amp; CLOUD SYNC"
+            android:textColor="#F59E0B"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="#1E293B"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:id="@+id/firebase_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Status: Connected (Cloud sync enabled)"
+                android:textColor="#10B981"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/input_firebase_project"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
+                android:background="#0F172A"
+                android:fontFamily="monospace"
+                android:hint="Firebase Project ID (e.g. jarvis-ai-assistant)"
+                android:paddingHorizontal="10dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#64748B"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btn_save_firebase"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="#F59E0B"
+                android:text="SAVE FIREBASE CONFIG"
+                android:textColor="#000000"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- In-App Local AI (Qwen2.5-1.5B) Section -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="#131B2B"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🧠 ON-DEVICE LOCAL AI (SLM)"
+                android:textColor="#38BDF8"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/local_ai_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Status: Qwen 2.5 (1.5B Instruct) — Not Downloaded"
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
+
+            <ProgressBar
+                android:id="@+id/local_ai_progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btn_download_local_ai"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#0284C7"
+                    android:text="DOWNLOAD QWEN 2.5"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btn_test_local_ai"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:backgroundTint="#10B981"
+                    android:text="TEST INFERENCE"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Connected Services List -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="CONNECTED CAPABILITY PROVIDERS"
+            android:textColor="#38BDF8"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/services_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical">
+
+            <!-- Spotify -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#1E293B"
+                android:padding="10dp"
+                android:text="🎵 Spotify &amp; YouTube Music — Music / Playlists / Liked Songs"
+                android:textColor="#F8FAFC"
+                android:textSize="12sp" />
+
+            <!-- Google Maps -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="#1E293B"
+                android:padding="10dp"
+                android:text="🗺️ Google Maps — GPS Navigation / Nearest Places / Real-time Route"
+                android:textColor="#F8FAFC"
+                android:textSize="12sp" />
+
+            <!-- Google Drive & Files -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="#1E293B"
+                android:padding="10dp"
+                android:text="📁 Google Drive &amp; Local Storage — Document Search / Notes / PDFs"
+                android:textColor="#F8FAFC"
+                android:textSize="12sp" />
+
+            <!-- Google Calendar -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="#1E293B"
+                android:padding="10dp"
+                android:text="📅 Google Calendar — Schedule / Meetings / Daily Agenda"
+                android:textColor="#F8FAFC"
+                android:textSize="12sp" />
+
+            <!-- Google Keep -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="#1E293B"
+                android:padding="10dp"
+                android:text="📝 Google Keep — Instant Notes / Memory / Shopping Lists"
+                android:textColor="#F8FAFC"
+                android:textSize="12sp" />
+
+            <!-- WhatsApp & Messages -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="#1E293B"
+                android:padding="10dp"
+                android:text="💬 WhatsApp &amp; Messages — Messaging / Contact Resolution"
+                android:textColor="#F8FAFC"
+                android:textSize="12sp" />
+
+            <!-- Gmail -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="#1E293B"
+                android:padding="10dp"
+                android:text="📧 Gmail — Email Inboxes / Instant Drafts"
+                android:textColor="#F8FAFC"
+                android:textSize="12sp" />
+
+            <!-- YouTube -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="#1E293B"
+                android:padding="10dp"
+                android:text="▶️ YouTube — Video Search / Channels / Background Media"
+                android:textColor="#F8FAFC"
+                android:textSize="12sp" />
+
+            <!-- Google Photos & Lens -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="#1E293B"
+                android:padding="10dp"
+                android:text="📷 Google Photos &amp; Lens — Photo Library / Visual Lookup"
+                android:textColor="#F8FAFC"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Quick Interactive Capability Testers -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="TEST CAPABILITY ORCHESTRATION"
+            android:textColor="#38BDF8"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btn_test_compound"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="6dp"
+            android:backgroundTint="#7C3AED"
+            android:text="▶️ Play YouTube video while navigating home"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btn_test_music"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="4dp"
+            android:backgroundTint="#10B981"
+            android:text="🎵 Play something chill (Spotify / YT Music)"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btn_test_nav"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="4dp"
+            android:backgroundTint="#2563EB"
+            android:text="🗺️ Take me to school (Google Maps)"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btn_test_files"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="4dp"
+            android:backgroundTint="#EA580C"
+            android:text="📁 Find my JEE notes (Local + Google Drive)"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+    </LinearLayout>
+</ScrollView>

@@ -1,65 +1,436 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="12dp">
+    android:background="#0B0F17">
 
-    <TextView
+    <!-- Top Glow Header Banner -->
+    <View
+        android:id="@+id/header_glow"
+        android:layout_width="match_parent"
+        android:layout_height="140dp"
+        android:background="@drawable/bg_agent_header_glow"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Top Action Bar -->
+    <LinearLayout
+        android:id="@+id/top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Back"
+            android:src="@android:drawable/ic_menu_revert"
+            app:tint="#F8FAFC" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="JARVIS AI AGENT"
+                    android:textColor="#FFFFFF"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/badge_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_active_pill"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="2dp"
+                    android:text="ONLINE"
+                    android:textColor="#10B981"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/agent_ctx"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Autonomous Automation &amp; Action Platform"
+                android:textColor="#94A3B8"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Quick Menu / All Pages Button -->
+        <ImageButton
+            android:id="@+id/btn_all_pages"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_quick_nav_tab"
+            android:contentDescription="Open Pages Hub"
+            android:src="@android:drawable/ic_dialog_dialer"
+            app:tint="#FF7A00" />
+    </LinearLayout>
+
+    <!-- Horizontal Quick App Navigation Tabs (Linked Pages) -->
+    <HorizontalScrollView
+        android:id="@+id/quick_nav_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="JARVIS AGENT"
-        android:textColor="#CFE8FF"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        android:layout_marginTop="4dp"
+        android:paddingHorizontal="12dp"
+        android:scrollbars="none"
+        app:layout_constraintTop_toBottomOf="@id/top_bar">
 
-    <TextView
-        android:id="@+id/agent_ctx"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:fontFamily="monospace"
-        android:textColor="#6E8CA0"
-        android:textSize="11sp" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
 
+            <TextView
+                android:id="@+id/tab_files"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_quick_nav_tab"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="📁 Files"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tab_services"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_quick_nav_tab"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="⚡ Connected Services"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tab_playground"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_quick_nav_tab"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="🛠️ Playground"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tab_commander"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_quick_nav_tab"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="🎯 Commander"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tab_terminal"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_quick_nav_tab"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="💻 Terminal"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tab_diagnostics"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_quick_nav_tab"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="📊 Diagnostics"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tab_agy"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_quick_nav_tab"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="🚀 Antigravity"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- Main Dynamic Chat & Execution Stream -->
     <ScrollView
         android:id="@+id/agent_scroller"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="8dp"
-        android:layout_weight="1"
-        android:background="#0A0F14">
+        android:layout_marginVertical="8dp"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toTopOf="@id/bottom_container"
+        app:layout_constraintTop_toBottomOf="@id/quick_nav_bar">
 
-        <TextView
-            android:id="@+id/agent_log"
+        <LinearLayout
+            android:id="@+id/messages_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:padding="10dp"
-            android:text="Try:\n• ls\n• read /storage/emulated/0/Download/x.apk\n• find jarvis\n• search TODO\n• write /storage/emulated/0/test.txt hello\n• run uname -a\n• opencode (prompt)\n"
-            android:textColor="#B9D4E8"
-            android:textIsSelectable="true"
-            android:textSize="12sp" />
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="16dp">
+
+            <!-- Welcome Agent Card -->
+            <LinearLayout
+                android:id="@+id/card_welcome"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_chat_agent"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/bg_round_glow" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:text="JARVIS Autonomous Orchestrator"
+                        android:textColor="#FF7A00"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingMultiplier="1.2"
+                    android:text="I am ready to perform system actions, automate phone operations, control media, navigate, and manage storage. What would you like me to do?"
+                    android:textColor="#CBD5E1"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- Dynamic Chat Bubbles & Step Execution Cards go here programmatically -->
+
+            <!-- Active Thinking / Executing Pulse Box (Shown during execution) -->
+            <LinearLayout
+                android:id="@+id/box_thinking"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_thinking_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp"
+                android:visibility="gone">
+
+                <ProgressBar
+                    android:id="@+id/thinking_spinner"
+                    style="?android:attr/progressBarStyleSmall"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:indeterminate="true"
+                    android:indeterminateTint="#FF7A00" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/thinking_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="JARVIS is thinking &amp; executing…"
+                        android:textColor="#FF9E44"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/thinking_detail"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Resolving canonical tools and parameters"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
     </ScrollView>
 
+    <!-- Bottom Input & Prompt Cards Container -->
     <LinearLayout
+        android:id="@+id/bottom_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent">
 
-        <EditText
-            android:id="@+id/agent_input"
-            android:layout_width="0dp"
+        <!-- Suggestion Prompt Cards (Fast Task Selection like Dribbble UI) -->
+        <HorizontalScrollView
+            android:id="@+id/prompt_cards_scroll"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="Ask JARVIS…"
-            android:inputType="text"
-            android:textColor="#E6F2FF"
-            android:textColorHint="#556B7E" />
+            android:layout_marginBottom="8dp"
+            android:paddingHorizontal="14dp"
+            android:scrollbars="none">
 
-        <Button
-            android:id="@+id/agent_send"
-            android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/prompt_card_1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_prompt_chip"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="14dp"
+                    android:text="⚡ Call Akhil"
+                    android:textColor="#F1F5F9"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/prompt_card_2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_prompt_chip"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="14dp"
+                    android:text="🎵 Play chill music"
+                    android:textColor="#F1F5F9"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/prompt_card_3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_prompt_chip"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="14dp"
+                    android:text="🗺️ Take me home"
+                    android:textColor="#F1F5F9"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/prompt_card_4"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_prompt_chip"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="14dp"
+                    android:text="📸 Take screenshot"
+                    android:textColor="#F1F5F9"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/prompt_card_5"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_prompt_chip"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="14dp"
+                    android:text="📁 Find recent downloads"
+                    android:textColor="#F1F5F9"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- Rounded Glow Input Bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="SEND" />
+            android:layout_marginHorizontal="14dp"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_agent_input_bar"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp">
+
+            <ImageButton
+                android:id="@+id/btn_voice_mic"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_btn_mic_orange"
+                android:contentDescription="Voice Speak"
+                android:src="@android:drawable/ic_btn_speak_now"
+                app:tint="#FF7A00" />
+
+            <EditText
+                android:id="@+id/agent_input"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_marginHorizontal="8dp"
+                android:layout_weight="1"
+                android:background="@null"
+                android:hint="Ask JARVIS or give a command…"
+                android:imeOptions="actionSend"
+                android:inputType="textCapSentences"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#64748B"
+                android:textSize="14sp" />
+
+            <ImageButton
+                android:id="@+id/agent_send"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_btn_send_orange"
+                android:contentDescription="Send Command"
+                android:src="@android:drawable/ic_menu_send"
+                app:tint="#FFFFFF" />
+        </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

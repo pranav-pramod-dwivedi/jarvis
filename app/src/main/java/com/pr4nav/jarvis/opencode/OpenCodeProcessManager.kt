@@ -112,19 +112,31 @@ class OpenCodeProcessManager(
         candidates: List<String>,
         credentials: Pair<String, String>? = null
     ): OcResult<ServerState> = synchronized(procLock) {
+        // like Telegram bot /start — try no-auth first (most common), then with creds
         for (base in candidates) {
-            val healthy = tryProbeWithCreds(base, credentials)
-            if (healthy != null && healthy.first) {
-                val state = ServerState(
-                    baseUrl = base,
-                    ownership = Ownership.EXTERNAL,
-                    version = healthy.second,
-                    port = base.substringAfterLast(':').toIntOrNull()
-                )
-                current = state
-                OpenCodeLogger.i(TAG, "adopted external server at $base (v${healthy.second})")
-                onReady?.invoke(state)
-                return@synchronized OcResult.ok(state)
+            val attempts = listOfNotNull(
+                null as Pair<String, String>?, // no-auth — covers `opencode web --port X` without env
+                credentials,
+                // also try stored config creds as last resort
+                runCatching { configSupplier().let { c -> if (!c.password.isNullOrBlank()) c.effectiveUsername to c.password!! else null } }.getOrNull()
+            ).distinct()
+            for (creds in attempts) {
+                val healthy = tryProbeWithCreds(base, creds)
+                if (healthy != null && healthy.first) {
+                    // adopt with the creds that worked
+                    if (creds != null) configSwapHook(configSupplier().withBaseUrl(base).copy(username = creds.first, password = creds.second))
+                    else configSwapHook(configSupplier().withBaseUrl(base).copy(username = null, password = null))
+                    val state = ServerState(
+                        baseUrl = base,
+                        ownership = Ownership.EXTERNAL,
+                        version = healthy.second,
+                        port = base.substringAfterLast(':').toIntOrNull()
+                    )
+                    current = state
+                    OpenCodeLogger.i(TAG, "adopted external server at $base (v${healthy.second}) auth=${creds != null}")
+                    onReady?.invoke(state)
+                    return@synchronized OcResult.ok(state)
+                }
             }
         }
         OcResult.Err(OpenCodeException.unavailable("No OpenCode server found on ${candidates.joinToString()}"))
@@ -295,8 +307,48 @@ class OpenCodeProcessManager(
         const val TAG = "Process"
         const val KEY_PID_MARKER = "owned_server_pid"
 
-        fun defaultCandidates(extraBaseUrls: List<String> = emptyList()): List<String> {
-            return extraBaseUrls + OpenCodeConfig.DEFAULT_PORT_CANDIDATES.map { "http://127.0.0.1:$it" }
+fun defaultCandidates(extraBaseUrls: List<String> = emptyList()): List<String> {
+        val base = OpenCodeConfig.DEFAULT_PORT_CANDIDATES.map { "http://127.0.0.1:$it" }
+        val lan = (1..254).flatMap { octet ->
+            OpenCodeConfig.DEFAULT_PORT_CANDIDATES.map { "http://192.168.$octet:$it" }
         }
+        return (extraBaseUrls + base + lan).distinct()
+    }
+}
+
+    /**
+     * Scan the local network for an OpenCode server. Returns the first healthy baseUrl found.
+     * Like Telegram /start — finds the server automatically.
+     */
+    fun discoverNetwork(): List<String> = synchronized(procLock) {
+        val found = mutableListOf<String>()
+        val deadline = System.currentTimeMillis() + 8_000
+        val ports = OpenCodeConfig.DEFAULT_PORT_CANDIDATES
+        val hosts = listOf("127.0.0.1") + (1..30).map { "192.168.$it" }
+        val threads = mutableListOf<Thread>()
+        val lock = Any()
+        for (host in hosts) {
+            for (port in ports) {
+                if (System.currentTimeMillis() > deadline) break
+                val t = Thread({
+                    val base = "http://$host:$port"
+                    val ok = try {
+                        val cfg = configSupplier().withBaseUrl(base)
+                        configSwapHook(cfg)
+                        val health = client.health()
+                        health is OcResult.Ok && health.value.healthy
+                    } catch (_: Exception) { false }
+                    finally {
+                        try { configSwapHook(configSupplier()) } catch (_: Exception) {}
+                    }
+                    if (ok) synchronized(lock) { found.add(base) }
+                }, "oc-probe-$host-$port")
+                t.isDaemon = true
+                threads.add(t)
+                t.start()
+            }
+        }
+        threads.forEach { try { it.join(2_000) } catch (_: Exception) {} }
+        found.distinct().sorted()
     }
 }

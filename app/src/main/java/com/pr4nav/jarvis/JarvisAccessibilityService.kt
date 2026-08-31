@@ -155,7 +155,12 @@ class JarvisAccessibilityService : AccessibilityService() {
         instance = this
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) {
+        if (event != null) {
+            val pkg = event.packageName?.toString()
+            com.pr4nav.jarvis.companion.CompanionManager.onAccessibilityEvent(this, pkg, event.eventType)
+        }
+    }
 
     override fun onInterrupt() {}
 
