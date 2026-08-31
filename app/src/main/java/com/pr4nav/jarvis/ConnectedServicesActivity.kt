@@ -44,7 +44,10 @@ class ConnectedServicesActivity : AppCompatActivity() {
         val savedGeminiKey = com.pr4nav.jarvis.llm.GeminiCloudLLM.getApiKey(this)
         if (savedGeminiKey.isNotEmpty()) {
             inputGeminiKey.setText(savedGeminiKey)
-            labelGeminiStatus.text = "Status: Gemini Cloud Configured (Ready ✓)"
+            labelGeminiStatus.text = "Status: Direct Gemini API Configured (Ready ✓)"
+            labelGeminiStatus.setTextColor(android.graphics.Color.parseColor("#10B981"))
+        } else {
+            labelGeminiStatus.text = "Status: Autonomous Mode (AGY / Needle / Local SLM Active ✓)"
             labelGeminiStatus.setTextColor(android.graphics.Color.parseColor("#10B981"))
         }
 
@@ -52,13 +55,13 @@ class ConnectedServicesActivity : AppCompatActivity() {
             val key = inputGeminiKey.text.toString().trim()
             com.pr4nav.jarvis.llm.GeminiCloudLLM.setApiKey(this, key)
             if (key.isNotEmpty()) {
-                labelGeminiStatus.text = "Status: Gemini Cloud Configured (Ready ✓)"
+                labelGeminiStatus.text = "Status: Direct Gemini API Configured (Ready ✓)"
                 labelGeminiStatus.setTextColor(android.graphics.Color.parseColor("#10B981"))
                 Toast.makeText(this, "Gemini API Key Saved!", Toast.LENGTH_SHORT).show()
             } else {
-                labelGeminiStatus.text = "Status: API Key Not Set (Using AGY/Termux fallback if active)"
-                labelGeminiStatus.setTextColor(android.graphics.Color.parseColor("#94A3B8"))
-                Toast.makeText(this, "Gemini API Key Cleared", Toast.LENGTH_SHORT).show()
+                labelGeminiStatus.text = "Status: Autonomous Mode (AGY / Needle / Local SLM Active ✓)"
+                labelGeminiStatus.setTextColor(android.graphics.Color.parseColor("#10B981"))
+                Toast.makeText(this, "Gemini API Key Cleared — using AGY Autonomous Mode", Toast.LENGTH_SHORT).show()
             }
         }
 

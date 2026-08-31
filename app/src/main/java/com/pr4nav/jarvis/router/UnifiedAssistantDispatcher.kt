@@ -204,10 +204,8 @@ object UnifiedAssistantDispatcher {
                         "The current time is ${java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date())}."
                     trimmed.lowercase().contains("date") ->
                         "Today is ${java.text.SimpleDateFormat("EEEE, MMMM d", java.util.Locale.getDefault()).format(java.util.Date())}."
-                    GeminiCloudLLM.getApiKey(context).isEmpty() ->
-                        "I couldn't complete that action. For general knowledge and conversational reasoning, please configure your Gemini API key in Connected Services."
                     else ->
-                        "I'm having trouble connecting to cloud intelligence right now. You can ask me to call contacts, open apps, play music, or navigate offline."
+                        "I'm having trouble connecting to autonomous reasoning right now. You can ask me to control device features, open apps, make calls, or navigate offline."
                 }
 
                 onResult(

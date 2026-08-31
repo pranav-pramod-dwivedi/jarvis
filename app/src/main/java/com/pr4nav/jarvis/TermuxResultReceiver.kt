@@ -156,14 +156,41 @@ object Shell {
         val escaped = fullCmd.replace("'", "'\\''")
         return "export PATH=\"/data/data/com.termux/files/usr/bin:\$PATH\"; " +
                "if command -v proot-distro >/dev/null 2>&1; then " +
-               "  proot-distro login ubuntu -- bash -c '$escaped'; " +
+               "  proot-distro login ubuntu -- bash -c '$escaped' < /dev/null; " +
                "else " +
-               "  bash -c '$escaped'; " +
+               "  bash -c '$escaped' < /dev/null; " +
                "fi"
     }
 
     fun ubuntu(command: String, timeoutMs: Long = 30_000): Res {
         return termux(wrapUbuntu(command), timeoutMs, inUbuntu = false, viaName = "ubuntu")
+    }
+
+    /**
+     * Autonomous AGY CLI execution inside PRoot Ubuntu.
+     * Uses Gemini 3.5 Flash (Low) without requiring an API key.
+     * Appends < /dev/null to prevent proot terminal hangs and tries Termux first,
+     * falling back smoothly to root su.
+     */
+    fun agy(prompt: String, timeoutMs: Long = 30_000): Res {
+        val escapedPrompt = prompt.replace("\"", "\\\"").replace("'", "'\\''")
+        val agyCmd = "agy -p \"$escapedPrompt\" --dangerously-skip-permissions --model \"Gemini 3.5 Flash (Low)\""
+        val wrapped = wrapUbuntu(agyCmd)
+
+        // Try TermuxBridge IPC first
+        val termuxRes = termux(wrapped, timeoutMs, inUbuntu = false, viaName = "termux-agy")
+        if (termuxRes.rc == 0 && termuxRes.out.isNotBlank()) {
+            return termuxRes
+        }
+
+        // Fallback to root su directly if TermuxBridge timed out or is unavailable
+        val rootRes = root(wrapped, timeoutMs)
+        return if (rootRes.rc == 0 && rootRes.out.isNotBlank()) {
+            Res(rootRes.out, rootRes.err, rootRes.rc, rootRes.ms, rootRes.timedOut, "root-agy")
+        } else {
+            // Return whichever had more useful info
+            if (termuxRes.out.isNotBlank()) termuxRes else rootRes
+        }
     }
 
     fun termuxRaw(command: String, timeoutMs: Long = 30_000): Res {

@@ -66,6 +66,7 @@ object GeminiCloudLLM {
         val model = getModel(context)
 
         executor.execute {
+            // If Gemini API Key is configured, try direct cloud API for lowest latency
             if (apiKey.isNotEmpty()) {
                 val directResult = queryGeminiApi(apiKey, model, prompt, systemInstruction)
                 if (directResult.isSuccess) {
@@ -74,20 +75,30 @@ object GeminiCloudLLM {
                     onSuccess(cleaned)
                     return@execute
                 } else {
-                    Log.w(TAG, "Gemini API call failed: ${directResult.exceptionOrNull()?.message}, trying AGY fallback...")
+                    Log.w(TAG, "Gemini API call failed: ${directResult.exceptionOrNull()?.message}, falling back to AGY CLI...")
                 }
             }
 
-            // Fallback: Check if AGY daemon is active on port 5050
+            // Fallback / Autonomous Mode: Execute via AGY CLI directly (no API key required)
+            Log.i(TAG, "Executing via AGY CLI in Ubuntu proot...")
+            val agyRes = com.pr4nav.jarvis.Shell.agy(prompt, timeoutMs = 35_000)
+            if (agyRes.rc == 0 && agyRes.out.isNotBlank()) {
+                val cleaned = cleanForSpeech(agyRes.out)
+                onSuccess(cleaned)
+                return@execute
+            }
+
+            // Secondary Fallback: Check if AGY daemon is active on port 5050
             queryAgyFallback(prompt,
                 onSuccess = { agyResponse ->
                     onSuccess(cleanForSpeech(agyResponse))
                 },
                 onError = { agyErr ->
-                    if (apiKey.isEmpty()) {
-                        onError("No Cloud LLM API key configured. Please set your Gemini API key in Connected Services or Voice Settings.")
+                    if (agyRes.out.isNotBlank()) {
+                        onSuccess(cleanForSpeech(agyRes.out))
                     } else {
-                        onError("Cloud AI error: Unable to reach Gemini API (AGY: $agyErr)")
+                        val finalErr = if (agyRes.err.isNotBlank()) agyRes.err else agyErr
+                        onError("AGY intelligence engine unavailable: $finalErr")
                     }
                 }
             )

@@ -442,14 +442,10 @@ class AgentActivity : AppCompatActivity() {
                     onError = { err ->
                         runOnUiThread {
                             hideThinking()
-                            val fallbackMsg = if (com.pr4nav.jarvis.llm.GeminiCloudLLM.getApiKey(this).isEmpty()) {
-                                "I couldn't resolve a local action for \"$q\". To enable conversational answers and general intelligence, add your Gemini API key in Connected Services."
-                            } else {
-                                "Cloud query failed: $err. Try asking me to open an app, make a call, or play music!"
-                            }
+                            val fallbackMsg = "Could not resolve response for \"$q\": $err. Local tools and device controls are fully active."
                             addExecutionStepCard(
                                 title = "Autonomous Reasoning Notice",
-                                steps = listOf("No deterministic tool match", "Cloud query unfulfilled: $err"),
+                                steps = listOf("Autonomous reasoning query unfulfilled: $err"),
                                 isSuccess = false,
                                 finalSummary = fallbackMsg
                             )
