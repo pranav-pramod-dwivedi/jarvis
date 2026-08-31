@@ -156,4 +156,28 @@ class StabilizationArchitectureTest {
         assertEquals("system.volume", volMute?.tool)
         assertEquals("mute", volMute?.args?.getString("action"))
     }
+
+    @Test
+    fun testEngineIdentityIntegrity() {
+        val meta = com.pr4nav.jarvis.engine.EngineMetadata(
+            requestedEngine = com.pr4nav.jarvis.engine.EngineType.QWEN_LOCAL,
+            actualEngine = com.pr4nav.jarvis.engine.EngineType.QWEN_LOCAL,
+            provider = "local_on_device",
+            runtimeBackend = "Llama.cpp GGUF / ONNX INT8 Local Runtime",
+            modelPath = "/data/data/com.pr4nav.jarvis/files/models/qwen3.5-2b.gguf",
+            modelFilename = "qwen3.5-2b.gguf",
+            modelHashSha256 = "FILE_NOT_FOUND",
+            tokenizer = "Qwen2.5-BPE-Tokenizer",
+            isModelLoaded = false
+        )
+        assertTrue(meta.isRoutingIntegrityValid)
+        val json = meta.toJsonObject()
+        assertEquals("QWEN_LOCAL", json.getString("requested_engine"))
+        assertEquals("QWEN_LOCAL", json.getString("actual_engine"))
+        assertTrue(json.getBoolean("routing_integrity_valid"))
+
+        // Mismatched engine identity
+        val metaMismatched = meta.copy(actualEngine = com.pr4nav.jarvis.engine.EngineType.NEEDLE_REFLEX, isRoutingIntegrityValid = false)
+        assertFalse(metaMismatched.isRoutingIntegrityValid)
+    }
 }

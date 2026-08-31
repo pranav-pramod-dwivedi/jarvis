@@ -180,15 +180,32 @@
             android:textSize="13sp"
             android:layout_marginBottom="8dp" />
 
-        <Button
-            android:id="@+id/btn_run_test"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:text="RUN INFERENCE &amp; INSPECT PIPELINE"
-            android:textStyle="bold"
-            android:backgroundTint="#2563EB"
-            android:textColor="#FFFFFF"
-            android:layout_marginBottom="16dp" />
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btn_run_test"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="RUN INFERENCE"
+                android:textStyle="bold"
+                android:backgroundTint="#2563EB"
+                android:textColor="#FFFFFF"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btn_test_identity"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:text="TEST ENGINE IDENTITY"
+                android:textStyle="bold"
+                android:backgroundTint="#D97706"
+                android:textColor="#FFFFFF" />
+        </LinearLayout>
 
         <!-- Pipeline Inspector Output Box -->
         <TextView

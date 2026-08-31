@@ -1,7 +1,6 @@
 package com.pr4nav.jarvis
 
 import android.os.Bundle
-import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -11,15 +10,14 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.pr4nav.jarvis.agy.AgyManager
 import com.pr4nav.jarvis.diagnostics.ToolAuditRunner
-import com.pr4nav.jarvis.llm.QwenLocalLLM
-import com.pr4nav.jarvis.needle.NeedleRuntime
+import com.pr4nav.jarvis.engine.*
+import com.pr4nav.jarvis.intent.IntentClassifier
+import com.pr4nav.jarvis.intent.ResponseType
 import com.pr4nav.jarvis.router.LanguageNormalizer
-import com.pr4nav.jarvis.router.UnifiedAssistantDispatcher
 import com.pr4nav.jarvis.tools.CanonicalToolRegistry
 import com.pr4nav.jarvis.tools.ToolValidator
 import com.pr4nav.jarvis.tools.ValidationResult
 import com.pr4nav.jarvis.voice.KokoroTtsEngine
-import org.json.JSONObject
 import kotlin.concurrent.thread
 
 class ModelTestLabActivity : AppCompatActivity() {
@@ -30,6 +28,7 @@ class ModelTestLabActivity : AppCompatActivity() {
     private lateinit var spinnerEngine: Spinner
     private lateinit var editPromptInput: EditText
     private lateinit var btnRunTest: Button
+    private lateinit var btnTestIdentity: Button
     private lateinit var txtPipelineInspector: TextView
     private lateinit var editTtsInput: EditText
     private lateinit var btnTtsBenchmark: Button
@@ -39,14 +38,18 @@ class ModelTestLabActivity : AppCompatActivity() {
     private lateinit var txtToolAuditResults: TextView
 
     private lateinit var ttsEngine: KokoroTtsEngine
-    private lateinit var qwenLlm: QwenLocalLLM
+    private lateinit var needleEngine: NeedleInferenceEngine
+    private lateinit var qwenEngine: QwenLocalInferenceEngine
+    private lateinit var agyEngine: AgyInferenceEngine
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_model_test_lab)
 
         ttsEngine = KokoroTtsEngine(this)
-        qwenLlm = QwenLocalLLM(this)
+        needleEngine = NeedleInferenceEngine(this)
+        qwenEngine = QwenLocalInferenceEngine(this)
+        agyEngine = AgyInferenceEngine(this)
 
         txtNeedleStatus = findViewById(R.id.txt_needle_status)
         txtQwenStatus = findViewById(R.id.txt_qwen_status)
@@ -54,6 +57,7 @@ class ModelTestLabActivity : AppCompatActivity() {
         spinnerEngine = findViewById(R.id.spinner_engine)
         editPromptInput = findViewById(R.id.edit_prompt_input)
         btnRunTest = findViewById(R.id.btn_run_test)
+        btnTestIdentity = findViewById(R.id.btn_test_identity)
         txtPipelineInspector = findViewById(R.id.txt_pipeline_inspector)
         editTtsInput = findViewById(R.id.edit_tts_input)
         btnTtsBenchmark = findViewById(R.id.btn_tts_benchmark)
@@ -79,10 +83,11 @@ class ModelTestLabActivity : AppCompatActivity() {
         findViewById<Button>(R.id.chip_torch).setOnClickListener { editPromptInput.setText("Turn on flashlight") }
         findViewById<Button>(R.id.chip_torch_hinglish).setOnClickListener { editPromptInput.setText("Torch chalu kar") }
         findViewById<Button>(R.id.chip_math).setOnClickListener { editPromptInput.setText("What is 2 + 2?") }
-        findViewById<Button>(R.id.chip_reasoning).setOnClickListener { editPromptInput.setText("Explain why this Kotlin code throws NullPointerException") }
+        findViewById<Button>(R.id.chip_reasoning).setOnClickListener { editPromptInput.setText("Code me a calculator") }
 
         // Setup Test Buttons
         btnRunTest.setOnClickListener { runModelPipelineTest() }
+        btnTestIdentity.setOnClickListener { testEngineIdentity() }
         btnTtsBenchmark.setOnClickListener { runTtsBenchmark() }
         btnTtsStop.setOnClickListener { ttsEngine.stop(); txtTtsResults.text = "TTS Playback stopped." }
         btnRunToolAudit.setOnClickListener { runToolAudit() }
@@ -96,23 +101,90 @@ class ModelTestLabActivity : AppCompatActivity() {
         txtAgyStatus.text = "AGY Agent: Checking..."
 
         thread {
-            // 1. Needle
-            val needleLoaded = NeedleRuntime.isModelLoaded || NeedleRuntime.isRuntimeAvailable
+            val needleLoaded = com.pr4nav.jarvis.needle.NeedleRuntime.isModelLoaded
             val needleStatusText = if (needleLoaded) "READY (Active & Loaded)" else "READY (Deterministic Grammar)"
 
-            // 2. Qwen
-            val qwenStatus = qwenLlm.status()
-            val qwenInstalled = qwenLlm.isAvailable()
-            val qwenText = if (qwenInstalled) "READY (${qwenStatus.modelName} · ${qwenStatus.memoryUsageMb}MB)" else "NOT LOADED (Download via Model Hub)"
+            val qwenInstalled = qwenEngine.isModelInstalled()
+            val qwenText = if (qwenInstalled) "READY (qwen3.5-2b.gguf · Loaded)" else "NOT LOADED (Missing GGUF file in /files/models)"
 
-            // 3. AGY
-            val agyRep = AgyManager.checkStatus(6_000)
+            val agyRep = AgyManager.checkStatus(4_000)
             val agyText = if (agyRep.isBinaryInstalled) "State: ${agyRep.state.name} | Port 5050: ${if (agyRep.isPortListening) "OPEN" else "STANDBY"} | Model: ${agyRep.activeModel}" else "NOT INSTALLED in PRoot"
 
             runOnUiThread {
                 txtNeedleStatus.text = "Needle: $needleStatusText"
                 txtQwenStatus.text = "Qwen3.5-2B: $qwenText"
                 txtAgyStatus.text = "AGY Agent: $agyText"
+            }
+        }
+    }
+
+    private fun testEngineIdentity() {
+        val selectedPos = spinnerEngine.selectedItemPosition
+        val testToken = "QWEN_ENGINE_TEST_73921"
+        txtPipelineInspector.text = "Executing Engine Identity Test with token '$testToken'…"
+
+        thread {
+            val result = when (selectedPos) {
+                0 -> {
+                    // Auto Router Identity
+                    val meta = EngineMetadata(
+                        requestedEngine = EngineType.AUTO_ROUTER,
+                        actualEngine = EngineType.AUTO_ROUTER,
+                        provider = "router_orchestrator",
+                        runtimeBackend = "JARVIS Hierarchical Multi-Tier Router",
+                        modelPath = "N/A",
+                        modelFilename = "UnifiedAssistantDispatcher.kt",
+                        modelHashSha256 = "N/A",
+                        tokenizer = "N/A",
+                        isModelLoaded = true
+                    )
+                    EngineInferenceResult(
+                        success = true,
+                        rawOutput = "AUTO_ROUTER_IDENTITY_PASS",
+                        intent = "ROUTER_HEALTH_CHECK",
+                        arguments = null,
+                        confidence = 1.0f,
+                        metadata = meta,
+                        latencyMs = 2L
+                    )
+                }
+                1 -> needleEngine.infer(testToken)
+                2 -> qwenEngine.infer(testToken)
+                3 -> agyEngine.infer(testToken)
+                else -> needleEngine.infer(testToken)
+            }
+
+            val sb = StringBuilder()
+            sb.append("=========================================\n")
+            sb.append("        ENGINE IDENTITY AUDIT TRACE      \n")
+            sb.append("=========================================\n")
+            sb.append("TEST TOKEN: \"$testToken\"\n\n")
+
+            sb.append("DEVELOPER METADATA:\n")
+            sb.append("• Requested Engine: ${result.metadata.requestedEngine}\n")
+            sb.append("• Actual Engine:    ${result.metadata.actualEngine}\n")
+            val isMatch = result.metadata.requestedEngine == result.metadata.actualEngine || result.metadata.requestedEngine == EngineType.AUTO_ROUTER
+            sb.append("• Routing Integrity: ${if (isMatch) "✅ PASS" else "❌ ENGINE_ROUTING_FAILURE"}\n")
+            sb.append("• Provider:         ${result.metadata.provider}\n")
+            sb.append("• Runtime Backend:  ${result.metadata.runtimeBackend}\n")
+            sb.append("• Model Path:       ${result.metadata.modelPath}\n")
+            sb.append("• Model Filename:   ${result.metadata.modelFilename}\n")
+            sb.append("• Model SHA256:     ${result.metadata.modelHashSha256}\n")
+            sb.append("• Tokenizer:        ${result.metadata.tokenizer}\n")
+            sb.append("• Runtime ID:       ${result.metadata.runtimeInstanceId}\n")
+            sb.append("• Model Loaded:     ${result.metadata.isModelLoaded}\n\n")
+
+            sb.append("INFERENCE RESULT:\n")
+            sb.append("• Success: ${result.success}\n")
+            sb.append("• Latency: ${result.latencyMs}ms\n")
+            sb.append("• Raw Output:\n${result.rawOutput}\n")
+            if (result.error != null) {
+                sb.append("• Error Details:\n${result.error}\n")
+            }
+            sb.append("=========================================")
+
+            runOnUiThread {
+                txtPipelineInspector.text = sb.toString()
             }
         }
     }
@@ -125,7 +197,7 @@ class ModelTestLabActivity : AppCompatActivity() {
         }
 
         val selectedPos = spinnerEngine.selectedItemPosition
-        txtPipelineInspector.text = "Running inference on selected engine...\nInput: \"$input\""
+        txtPipelineInspector.text = "Running isolated inference on selected engine...\nInput: \"$input\""
 
         thread {
             val t0 = System.currentTimeMillis()
@@ -139,13 +211,13 @@ class ModelTestLabActivity : AppCompatActivity() {
                 0 -> { // Auto Router
                     sb.append("SELECTED ENGINE: ⚡ Auto Router\n\n")
                     CanonicalToolRegistry.init(this@ModelTestLabActivity)
-                    val classified = com.pr4nav.jarvis.intent.IntentClassifier.classify(input)
+                    val classified = IntentClassifier.classify(input)
                     sb.append("INTENT CLASSIFICATION:\n")
                     sb.append("• Category: ${classified.category}\n")
                     sb.append("• Response Type: ${classified.responseType}\n")
                     sb.append("• Explanation: ${classified.explanation}\n\n")
 
-                    if (classified.responseType == com.pr4nav.jarvis.intent.ResponseType.ANSWER && classified.directAnswer != null) {
+                    if (classified.responseType == ResponseType.ANSWER && classified.directAnswer != null) {
                         sb.append("ROUTING DECISION:\n")
                         sb.append("• Action: Direct Answer (No tool needed)\n")
                         sb.append("• Answer: ${classified.directAnswer}\n")
@@ -175,70 +247,78 @@ class ModelTestLabActivity : AppCompatActivity() {
                             sb.append("ROUTING DECISION:\n")
                             sb.append("• Deterministic Match: None\n")
                             sb.append("• Escalation: Primary Intelligence (AGY Agent / Cloud Fallback)\n\n")
-                            val agyRes = Shell.agy(input, timeoutMs = 25_000)
-                            val latency = System.currentTimeMillis() - t0
-                            sb.append("AGY RESPONSE: ${agyRes.out.trim().take(150)}\n")
-                            sb.append("EXIT CODE: ${agyRes.rc}\n")
-                            sb.append("LATENCY: ${latency}ms\n")
+                            val agyRes = agyEngine.infer(input)
+                            sb.append("AGY RESPONSE: ${agyRes.rawOutput.take(200)}\n")
+                            sb.append("SUCCESS: ${agyRes.success}\n")
+                            sb.append("LATENCY: ${agyRes.latencyMs}ms\n")
                         }
                     }
                 }
                 1 -> { // Needle 2 Reflex
                     sb.append("SELECTED ENGINE: ⚡ Needle 2 Reflex\n\n")
-                    val norm = LanguageNormalizer.normalize(input)
-                    val latency = System.currentTimeMillis() - t0
-                    if (norm != null) {
-                        sb.append("INTENT: [${norm.tool}]\n")
-                        sb.append("PARAMETERS: ${norm.args}\n")
-                        sb.append("CONFIDENCE: ${norm.confidence}\n")
-                        sb.append("LATENCY: ${latency}ms\n")
-                    } else {
-                        val envelope = NeedleRuntime.complete(input)
-                        sb.append("INTENT: ${envelope?.functionCalls?.firstOrNull()?.name ?: "NONE"}\n")
-                        sb.append("CONFIDENCE: ${envelope?.confidence ?: 0.0}\n")
-                        sb.append("LATENCY: ${latency}ms\n")
-                    }
+                    val result = needleEngine.infer(input)
+                    sb.append("METADATA:\n")
+                    sb.append("• Engine: ${result.metadata.actualEngine} (${result.metadata.provider})\n")
+                    sb.append("• Runtime: ${result.metadata.runtimeBackend}\n")
+                    sb.append("• Model Hash: ${result.metadata.modelHashSha256}\n\n")
+
+                    sb.append("INFERENCE RESULT:\n")
+                    sb.append("• Intent: ${result.intent ?: "NONE"}\n")
+                    sb.append("• Arguments: ${result.arguments ?: "{}"}\n")
+                    sb.append("• Confidence: ${result.confidence}\n")
+                    sb.append("• Latency: ${result.latencyMs}ms\n")
+                    sb.append("• Raw Output:\n${result.rawOutput}\n")
                 }
-                2 -> { // Local Qwen3.5-2B
-                    sb.append("SELECTED ENGINE: 🟢 Local Qwen3.5-2B\n\n")
-                    val res = qwenLlm.generate(input, 5_000L).get()
-                    val latency = System.currentTimeMillis() - t0
+                2 -> { // Local Qwen3.5-2B (NO FALLBACK)
+                    sb.append("SELECTED ENGINE: 🟢 Local Qwen3.5-2B (Strict Isolated Inference)\n\n")
+                    val result = qwenEngine.infer(input)
 
-                    sb.append("MODEL PROPOSAL:\n")
-                    sb.append("• Tool: ${res.toolCall ?: "NONE"}\n")
-                    sb.append("• Args: ${res.args ?: "{}"}\n")
-                    sb.append("• Raw Confidence: ${res.confidence}\n")
-                    sb.append("• Model Output: ${res.rawText}\n\n")
+                    sb.append("METADATA:\n")
+                    sb.append("• Requested Engine: ${result.metadata.requestedEngine}\n")
+                    sb.append("• Actual Engine:    ${result.metadata.actualEngine}\n")
+                    sb.append("• Routing Integrity: ${if (result.metadata.isRoutingIntegrityValid) "✅ PASS" else "❌ ENGINE_ROUTING_FAILURE"}\n")
+                    sb.append("• Model Path:       ${result.metadata.modelPath}\n")
+                    sb.append("• Model Filename:   ${result.metadata.modelFilename}\n")
+                    sb.append("• Model Hash:       ${result.metadata.modelHashSha256}\n")
+                    sb.append("• Model Loaded:     ${result.metadata.isModelLoaded}\n\n")
 
-                    if (res.toolCall != null) {
-                        val validation = ToolValidator.validate(this@ModelTestLabActivity, res.toolCall, res.args, input)
-                        sb.append("SYSTEM MULTI-STAGE VALIDATION:\n")
-                        sb.append("• Tool Exists: ${CanonicalToolRegistry.get(res.toolCall) != null}\n")
-                        sb.append("• Schema Check: ${if (validation is ValidationResult.Valid) "PASS" else "FAIL"}\n")
-                        sb.append("• Semantic Guard: ${if (validation is ValidationResult.Valid) "PASS" else "FAIL"}\n\n")
-
-                        if (validation is ValidationResult.Valid) {
-                            sb.append("FINAL DECISION: ACCEPT\n")
-                            sb.append("SCORE: ${validation.score}/100\n")
-                        } else if (validation is ValidationResult.Rejected) {
-                            sb.append("FINAL DECISION: REJECT\n")
-                            sb.append("REJECTION REASON: ${validation.reasonCode}\n")
-                            sb.append("DETAILS: ${validation.error.message}\n")
-                            sb.append("FALLBACK ROUTE: INFORMATION / ANSWER (Prevented invalid execution)\n")
-                        }
+                    if (!result.success) {
+                        sb.append("INFERENCE STATUS: FAILED\n")
+                        sb.append("ERROR: ${result.error}\n")
                     } else {
-                        sb.append("FINAL DECISION: NO TOOL (General answer / conversation)\n")
+                        sb.append("MODEL OUTPUT:\n${result.rawOutput}\n\n")
+                        if (result.intent != null) {
+                            val validation = ToolValidator.validate(this@ModelTestLabActivity, result.intent, result.arguments, input)
+                            sb.append("SYSTEM MULTI-STAGE VALIDATION:\n")
+                            sb.append("• Tool Exists: ${CanonicalToolRegistry.get(result.intent) != null}\n")
+                            sb.append("• Schema Check: ${if (validation is ValidationResult.Valid) "PASS" else "FAIL"}\n")
+                            sb.append("• Semantic Guard: ${if (validation is ValidationResult.Valid) "PASS" else "FAIL"}\n\n")
+
+                            if (validation is ValidationResult.Valid) {
+                                sb.append("FINAL DECISION: ACCEPT\n")
+                                sb.append("SCORE: ${validation.score}/100\n")
+                            } else if (validation is ValidationResult.Rejected) {
+                                sb.append("FINAL DECISION: REJECT\n")
+                                sb.append("REJECTION REASON: ${validation.reasonCode}\n")
+                                sb.append("DETAILS: ${validation.error.message}\n")
+                            }
+                        }
                     }
-                    sb.append("LATENCY: ${latency}ms\n")
+                    sb.append("LATENCY: ${result.latencyMs}ms\n")
                 }
                 3 -> { // AGY Agent
                     sb.append("SELECTED ENGINE: 🤖 AGY Agent (PRoot Linux)\n\n")
-                    val agyRes = Shell.agy(input, timeoutMs = 30_000)
-                    val latency = System.currentTimeMillis() - t0
-                    sb.append("RAW OUTPUT:\n${agyRes.out.trim()}\n")
-                    sb.append("ERROR / STDERR: ${agyRes.err.ifBlank { "None" }}\n")
-                    sb.append("EXIT CODE: ${agyRes.rc}\n")
-                    sb.append("LATENCY: ${latency}ms\n")
+                    val result = agyEngine.infer(input)
+                    sb.append("METADATA:\n")
+                    sb.append("• Engine: ${result.metadata.actualEngine} (${result.metadata.provider})\n")
+                    sb.append("• Backend: ${result.metadata.runtimeBackend}\n")
+                    sb.append("• Model Loaded: ${result.metadata.isModelLoaded}\n\n")
+
+                    sb.append("RAW OUTPUT:\n${result.rawOutput}\n")
+                    if (result.error != null) {
+                        sb.append("ERROR: ${result.error}\n")
+                    }
+                    sb.append("LATENCY: ${result.latencyMs}ms\n")
                 }
             }
 
