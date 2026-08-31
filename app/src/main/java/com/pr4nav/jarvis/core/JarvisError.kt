@@ -5,6 +5,11 @@ import org.json.JSONObject
 enum class ErrorType {
     UNREGISTERED_TOOL,
     INVALID_SCHEMA,
+    MISSING_PARAMETER,
+    INVALID_PARAMETER,
+    CATEGORY_MISMATCH,
+    SEMANTIC_MISMATCH,
+    CONTEXT_MISSING,
     PERMISSION_DENIED,
     BACKEND_UNAVAILABLE,
     BACKEND_BROKEN,
@@ -43,6 +48,22 @@ data class JarvisError(
             backend = "ROUTER",
             recoverable = false,
             suggestedAction = "Select a registered tool from CanonicalToolRegistry schema"
+        )
+
+        fun categoryMismatch(tool: String, expectedCategory: String, actualCategory: String) = JarvisError(
+            errorType = ErrorType.CATEGORY_MISMATCH,
+            message = "Tool '$tool' belongs to category '$actualCategory' but request intent requires '$expectedCategory'",
+            backend = "VALIDATOR",
+            recoverable = true,
+            suggestedAction = "Select a tool matching the intended category or escalate to information engine"
+        )
+
+        fun semanticMismatch(tool: String, reason: String) = JarvisError(
+            errorType = ErrorType.SEMANTIC_MISMATCH,
+            message = "Tool '$tool' rejected by semantic guard: $reason",
+            backend = "VALIDATOR",
+            recoverable = true,
+            suggestedAction = "Do not force informational or non-matching queries into this tool"
         )
 
         fun invalidSchema(message: String) = JarvisError(

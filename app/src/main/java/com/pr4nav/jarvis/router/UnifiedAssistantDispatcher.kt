@@ -73,6 +73,29 @@ object UnifiedAssistantDispatcher {
 
         val isConversationalOrInformational = LanguageNormalizer.isInformational(trimmed)
 
+        // Intent Classification & Answer / Information Pre-check
+        val classified = com.pr4nav.jarvis.intent.IntentClassifier.classify(trimmed)
+
+        // 0. Direct Math & Conversational Answer Path (<5ms)
+        if (classified.responseType == com.pr4nav.jarvis.intent.ResponseType.ANSWER && classified.directAnswer != null) {
+            val latency = System.currentTimeMillis() - t0
+            val answer = classified.directAnswer
+            val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: Direct Deterministic Answer\n• Category: ${classified.category}\n• Latency: ${latency}ms\n</think>"
+            onChunk?.invoke(answer)
+            onResult(
+                UnifiedExecutionResult(
+                    handled = true,
+                    source = ExecutionSource.DETERMINISTIC_NEEDLE,
+                    speechResponse = answer,
+                    fullSummary = "$thinkTrace\n\n⚡ [Deterministic Answer · ${latency}ms]\n$answer",
+                    thinkingTrace = thinkTrace,
+                    modelName = "JARVIS Core",
+                    latencyMs = latency
+                )
+            )
+            return
+        }
+
         // =========================================================================
         // Tier 1: Deterministic Fast-Path (<15ms)
         // =========================================================================
@@ -81,35 +104,38 @@ object UnifiedAssistantDispatcher {
 
             val normalized = LanguageNormalizer.normalize(trimmed)
             if (normalized != null && normalized.confidence >= 0.90f) {
-                try {
-                    onStatus?.invoke("⚡ Executing canonical tool [${normalized.tool}]...")
-                    val toolRes = CanonicalToolRegistry.execute(context, normalized.tool, normalized.args)
-                    com.pr4nav.jarvis.context.ConversationalContext.updateContext(normalized.tool, normalized.args)
-                    val summary = if (toolRes.success) {
-                        toolRes.data?.toString() ?: "Completed ${normalized.tool}."
-                    } else {
-                        toolRes.error?.message ?: "Failed to execute ${normalized.tool}."
-                    }
-                    val latency = System.currentTimeMillis() - t0
-                    val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: High-confidence deterministic rule matched\n• Model: Needle 2 Engine\n• Action: Executed canonical tool [${normalized.tool}]\n• Args: ${normalized.args}\n</think>"
+                val validation = com.pr4nav.jarvis.tools.ToolValidator.validate(context, normalized.tool, normalized.args, trimmed)
+                if (validation is com.pr4nav.jarvis.tools.ValidationResult.Valid) {
+                    try {
+                        onStatus?.invoke("⚡ Executing canonical tool [${normalized.tool}]...")
+                        val toolRes = CanonicalToolRegistry.execute(context, normalized.tool, normalized.args)
+                        com.pr4nav.jarvis.context.ConversationalContext.updateContext(normalized.tool, normalized.args)
+                        val summary = if (toolRes.success) {
+                            toolRes.data?.toString() ?: "Completed ${normalized.tool}."
+                        } else {
+                            toolRes.error?.message ?: "Failed to execute ${normalized.tool}."
+                        }
+                        val latency = System.currentTimeMillis() - t0
+                        val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: Direct deterministic match [${normalized.tool}]\n• Qwen: SKIPPED (Deterministic priority)\n• AGY: SKIPPED\n• Args: ${normalized.args}\n</think>"
 
-                    Log.i(TAG, "Tier 1: Needle deterministic match [${normalized.tool}] in ${latency}ms")
-                    onChunk?.invoke(summary)
-                    onResult(
-                        UnifiedExecutionResult(
-                            handled = true,
-                            source = ExecutionSource.DETERMINISTIC_NEEDLE,
-                            speechResponse = summary,
-                            fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Deterministic · ${latency}ms]\n$summary",
-                            thinkingTrace = thinkTrace,
-                            modelName = "Needle 2 Engine",
-                            toolResult = toolRes,
-                            latencyMs = latency
+                        Log.i(TAG, "Tier 1: Direct deterministic match [${normalized.tool}] in ${latency}ms")
+                        onChunk?.invoke(summary)
+                        onResult(
+                            UnifiedExecutionResult(
+                                handled = true,
+                                source = ExecutionSource.DETERMINISTIC_NEEDLE,
+                                speechResponse = summary,
+                                fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Deterministic · ${latency}ms]\n$summary",
+                                thinkingTrace = thinkTrace,
+                                modelName = "Needle 2 Engine",
+                                toolResult = toolRes,
+                                latencyMs = latency
+                            )
                         )
-                    )
-                    return
-                } catch (e: Exception) {
-                    Log.w(TAG, "Deterministic execution failed: ${e.message}", e)
+                        return
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Deterministic execution failed: ${e.message}", e)
+                    }
                 }
             }
 
@@ -123,15 +149,18 @@ object UnifiedAssistantDispatcher {
                     val future = qwen.generate(trimmed, timeoutMs = 4_000L)
                     val llmRes = future.get(4_000L, TimeUnit.MILLISECONDS)
 
-                    if (llmRes.toolCall != null &&
-                        llmRes.toolCall != "escalate" &&
-                        llmRes.confidence >= 0.75f &&
-                        CanonicalToolRegistry.get(llmRes.toolCall) != null
-                    ) {
-                        onStatus?.invoke("🟢 Executing [${llmRes.toolCall}] via Qwen3.5-2B...")
-                        val args = llmRes.args ?: JSONObject()
-                        val toolDef = CanonicalToolRegistry.get(llmRes.toolCall)
-                        if (toolDef != null) {
+                    if (llmRes.toolCall != null && llmRes.toolCall != "escalate") {
+                        val validation = com.pr4nav.jarvis.tools.ToolValidator.validate(
+                            context,
+                            llmRes.toolCall,
+                            llmRes.args ?: JSONObject(),
+                            trimmed
+                        )
+
+                        if (validation is com.pr4nav.jarvis.tools.ValidationResult.Valid) {
+                            onStatus?.invoke("🟢 Executing [${llmRes.toolCall}] via Qwen3.5-2B...")
+                            val args = llmRes.args ?: JSONObject()
+                            val toolDef = validation.toolDef
                             val execRes = toolDef.executeWithTimeout(context, args)
                             val summary = if (execRes.success) {
                                 execRes.data?.toString() ?: "Executed ${llmRes.toolCall}."
@@ -139,7 +168,7 @@ object UnifiedAssistantDispatcher {
                                 execRes.error?.message ?: "Execution failed."
                             }
                             val latency = System.currentTimeMillis() - t0
-                            val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Evaluator: 🟢 Local Qwen3.5-2B\n• Decision: Valid on-device capability found [${llmRes.toolCall}]\n• Confidence: ${(llmRes.confidence * 100).toInt()}%\n• Execution: Success\n</think>"
+                            val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Evaluator: 🟢 Local Qwen3.5-2B\n• Decision: Validated on-device capability [${llmRes.toolCall}]\n• Score: ${validation.score}/100\n• Execution: Success\n</think>"
 
                             onChunk?.invoke(summary)
                             onResult(
@@ -155,6 +184,8 @@ object UnifiedAssistantDispatcher {
                                 )
                             )
                             return
+                        } else if (validation is com.pr4nav.jarvis.tools.ValidationResult.Rejected) {
+                            Log.w(TAG, "Qwen proposed tool [${llmRes.toolCall}] REJECTED by semantic guard: ${validation.error.message}")
                         }
                     }
                 } catch (e: Exception) {

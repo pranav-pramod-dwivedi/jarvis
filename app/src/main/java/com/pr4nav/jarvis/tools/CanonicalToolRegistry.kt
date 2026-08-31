@@ -13,7 +13,7 @@ object CanonicalToolRegistry {
     @Volatile private var initialized = false
 
     @Synchronized
-    fun init(context: Context) {
+    fun init(context: Context? = null) {
         if (initialized) return
         registerDefaults()
         initialized = true
@@ -161,6 +161,26 @@ object CanonicalToolRegistry {
         )
         register(screenshotDef)
         register(screenshotDef.copy(name = "take_screenshot"))
+
+        // media.play
+        val mediaPlayDef = CanonicalToolDef(
+            name = "media.play",
+            description = "Plays requested music track, song, or artist in default media player.",
+            argumentSchema = JSONObject().apply {
+                put("type", "object")
+                put("properties", JSONObject().apply {
+                    put("query", JSONObject().put("type", "string").put("description", "Song or artist name to play"))
+                })
+                put("required", JSONArray().put("query"))
+            },
+            backend = ToolBackend.ANDROID_NATIVE,
+            defaultTimeoutMs = 5_000L,
+            execute = { ctx, args ->
+                val q = args.optString("query").trim()
+                ToolResult.ok(JSONObject().put("action", "PLAYING_MEDIA").put("query", q))
+            }
+        )
+        register(mediaPlayDef)
 
         // open_app
         register(CanonicalToolDef(

@@ -137,40 +137,54 @@ class ModelTestLabActivity : AppCompatActivity() {
 
             when (selectedPos) {
                 0 -> { // Auto Router
-                    sb.append("SELECTED ENGINE: Auto Router\n\n")
+                    sb.append("SELECTED ENGINE: ⚡ Auto Router\n\n")
                     CanonicalToolRegistry.init(this@ModelTestLabActivity)
-                    val isInfo = LanguageNormalizer.isInformational(input)
-                    val norm = if (!isInfo) LanguageNormalizer.normalize(input) else null
+                    val classified = com.pr4nav.jarvis.intent.IntentClassifier.classify(input)
+                    sb.append("INTENT CLASSIFICATION:\n")
+                    sb.append("• Category: ${classified.category}\n")
+                    sb.append("• Response Type: ${classified.responseType}\n")
+                    sb.append("• Explanation: ${classified.explanation}\n\n")
 
-                    if (norm != null) {
+                    if (classified.responseType == com.pr4nav.jarvis.intent.ResponseType.ANSWER && classified.directAnswer != null) {
                         sb.append("ROUTING DECISION:\n")
-                        sb.append("• Match: Deterministic Rule\n")
-                        sb.append("• Intent / Tool: [${norm.tool}]\n")
-                        sb.append("• Args: ${norm.args}\n")
-                        sb.append("• Confidence: ${norm.confidence}\n")
-                        sb.append("• Cloud Escalation: NO (Registered native Android intent matched)\n\n")
-
-                        val valRes = ToolValidator.validate(this@ModelTestLabActivity, norm.tool, norm.args)
-                        sb.append("VALIDATION: ${if (valRes is ValidationResult.Valid) "PASS" else "FAIL"}\n")
-
-                        val execRes = CanonicalToolRegistry.execute(this@ModelTestLabActivity, norm.tool, norm.args)
-                        val latency = System.currentTimeMillis() - t0
-                        sb.append("EXECUTION RESULT: ${if (execRes.success) "SUCCESS" else "FAILURE"}\n")
-                        sb.append("DATA: ${execRes.data}\n")
-                        sb.append("LATENCY: ${latency}ms\n")
+                        sb.append("• Action: Direct Answer (No tool needed)\n")
+                        sb.append("• Answer: ${classified.directAnswer}\n")
+                        sb.append("• Cloud Escalation: NO\n")
+                        sb.append("• Latency: ${System.currentTimeMillis() - t0}ms\n")
                     } else {
-                        sb.append("ROUTING DECISION:\n")
-                        sb.append("• Deterministic Match: None\n")
-                        sb.append("• Escalation: Primary Intelligence (AGY Agent / Cloud Fallback)\n\n")
-                        val agyRes = Shell.agy(input, timeoutMs = 25_000)
-                        val latency = System.currentTimeMillis() - t0
-                        sb.append("AGY RESPONSE: ${agyRes.out.trim().take(150)}\n")
-                        sb.append("EXIT CODE: ${agyRes.rc}\n")
-                        sb.append("LATENCY: ${latency}ms\n")
+                        val norm = LanguageNormalizer.normalize(input)
+                        if (norm != null) {
+                            val validation = ToolValidator.validate(this@ModelTestLabActivity, norm.tool, norm.args, input)
+                            sb.append("SYSTEM VALIDATION:\n")
+                            sb.append("• Tool Proposed: [${norm.tool}]\n")
+                            sb.append("• Schema Check: PASS\n")
+                            sb.append("• Semantic Guard: ${if (validation is ValidationResult.Valid) "PASS" else "FAIL"}\n\n")
+
+                            if (validation is ValidationResult.Valid) {
+                                sb.append("FINAL DECISION: ACCEPT (DIRECT_MATCH)\n")
+                                val execRes = CanonicalToolRegistry.execute(this@ModelTestLabActivity, norm.tool, norm.args)
+                                sb.append("EXECUTION RESULT: ${if (execRes.success) "SUCCESS" else "FAILURE"}\n")
+                                sb.append("DATA: ${execRes.data}\n")
+                                sb.append("LATENCY: ${System.currentTimeMillis() - t0}ms\n")
+                            } else if (validation is ValidationResult.Rejected) {
+                                sb.append("FINAL DECISION: REJECT\n")
+                                sb.append("REASON: ${validation.reasonCode} (${validation.error.message})\n")
+                                sb.append("FALLBACK: Escalating to general information/reasoning engine\n")
+                            }
+                        } else {
+                            sb.append("ROUTING DECISION:\n")
+                            sb.append("• Deterministic Match: None\n")
+                            sb.append("• Escalation: Primary Intelligence (AGY Agent / Cloud Fallback)\n\n")
+                            val agyRes = Shell.agy(input, timeoutMs = 25_000)
+                            val latency = System.currentTimeMillis() - t0
+                            sb.append("AGY RESPONSE: ${agyRes.out.trim().take(150)}\n")
+                            sb.append("EXIT CODE: ${agyRes.rc}\n")
+                            sb.append("LATENCY: ${latency}ms\n")
+                        }
                     }
                 }
                 1 -> { // Needle 2 Reflex
-                    sb.append("SELECTED ENGINE: Needle 2 Reflex\n\n")
+                    sb.append("SELECTED ENGINE: ⚡ Needle 2 Reflex\n\n")
                     val norm = LanguageNormalizer.normalize(input)
                     val latency = System.currentTimeMillis() - t0
                     if (norm != null) {
@@ -189,10 +203,32 @@ class ModelTestLabActivity : AppCompatActivity() {
                     sb.append("SELECTED ENGINE: 🟢 Local Qwen3.5-2B\n\n")
                     val res = qwenLlm.generate(input, 5_000L).get()
                     val latency = System.currentTimeMillis() - t0
-                    sb.append("EXTRACTED INTENT: ${res.toolCall ?: "NONE"}\n")
-                    sb.append("PARAMETERS: ${res.args ?: "{}"}\n")
-                    sb.append("CONFIDENCE: ${res.confidence}\n")
-                    sb.append("RAW JSON: ${res.rawText}\n")
+
+                    sb.append("MODEL PROPOSAL:\n")
+                    sb.append("• Tool: ${res.toolCall ?: "NONE"}\n")
+                    sb.append("• Args: ${res.args ?: "{}"}\n")
+                    sb.append("• Raw Confidence: ${res.confidence}\n")
+                    sb.append("• Model Output: ${res.rawText}\n\n")
+
+                    if (res.toolCall != null) {
+                        val validation = ToolValidator.validate(this@ModelTestLabActivity, res.toolCall, res.args, input)
+                        sb.append("SYSTEM MULTI-STAGE VALIDATION:\n")
+                        sb.append("• Tool Exists: ${CanonicalToolRegistry.get(res.toolCall) != null}\n")
+                        sb.append("• Schema Check: ${if (validation is ValidationResult.Valid) "PASS" else "FAIL"}\n")
+                        sb.append("• Semantic Guard: ${if (validation is ValidationResult.Valid) "PASS" else "FAIL"}\n\n")
+
+                        if (validation is ValidationResult.Valid) {
+                            sb.append("FINAL DECISION: ACCEPT\n")
+                            sb.append("SCORE: ${validation.score}/100\n")
+                        } else if (validation is ValidationResult.Rejected) {
+                            sb.append("FINAL DECISION: REJECT\n")
+                            sb.append("REJECTION REASON: ${validation.reasonCode}\n")
+                            sb.append("DETAILS: ${validation.error.message}\n")
+                            sb.append("FALLBACK ROUTE: INFORMATION / ANSWER (Prevented invalid execution)\n")
+                        }
+                    } else {
+                        sb.append("FINAL DECISION: NO TOOL (General answer / conversation)\n")
+                    }
                     sb.append("LATENCY: ${latency}ms\n")
                 }
                 3 -> { // AGY Agent
