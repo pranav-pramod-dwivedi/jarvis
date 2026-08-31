@@ -121,6 +121,7 @@
         <activity android:name=".BrowserActivity" android:exported="false" />
         <activity android:name=".AgentActivity" android:exported="true" />
         <activity android:name=".DiagnosticsActivity" android:exported="true" />
+        <activity android:name=".ModelTestLabActivity" android:exported="true" />
         <activity
             android:name=".PermissionsActivity"
             android:exported="false"

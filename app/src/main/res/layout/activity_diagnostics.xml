@@ -51,6 +51,15 @@
     </ScrollView>
 
     <Button
+        android:id="@+id/btn_open_test_lab"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="OPEN UNIVERSAL MODEL TEST LAB"
+        android:backgroundTint="#2563EB"
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="8dp" />
+
+    <Button
         android:id="@+id/diag_refresh"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

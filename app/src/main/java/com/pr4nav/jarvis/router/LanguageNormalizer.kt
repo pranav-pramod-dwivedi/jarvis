@@ -40,7 +40,65 @@ object LanguageNormalizer {
     )
 
     init {
-        // --- 0. open_settings & structured subpage settings ---
+        // --- 0. system.torch (Flashlight / Torch / Light) ---
+        // English: "turn on flashlight", "torch on", "switch on flashlight", "turn on the torch", "flash on", "turn off flashlight", "torch off"
+        // Hindi / Hinglish: "torch chalu kar", "light on kar", "torch on kar", "bhai torch chala de", "torch jala do", "flashlight jala do", "torch band karo", "light off kar", "torch bandh kar yaar"
+        registerRule(
+            listOf(
+                "^(?:can you |please |bhai )?(?:turn on|switch on|enable|start)\\s+(?:the\\s+)?(?:flashlight|torch|flash|light)(?:\\s+pls|\\s+please)?$",
+                "^(?:flashlight|torch|flash|light)\\s+(?:on|chalu|start|enable)(?:\\s+karo|\\s+kar|\\s+do|\\s+kar do)?$",
+                "^(?:torch|flashlight|light)\\s+(?:chalu|on|jalao|jala do|laga do|chala de|chala do)(?:\\s+yaar)?$",
+                "^bhai\\s+(?:torch|flashlight|light)\\s+(?:chala de|jala do|on kar do|laga de)$",
+                "^(?:light|flash)\\s+on\\s+kar$"
+            )
+        ) { m ->
+            NormalizedToolCall("system.torch", JSONObject().put("state", true), 1.0f, m.group(0) ?: "")
+        }
+
+        registerRule(
+            listOf(
+                "^(?:can you |please |bhai )?(?:turn off|switch off|disable|stop)\\s+(?:the\\s+)?(?:flashlight|torch|flash|light)(?:\\s+pls|\\s+please)?$",
+                "^(?:flashlight|torch|flash|light)\\s+(?:off|band|stop|disable)(?:\\s+karo|\\s+kar|\\s+do|\\s+kar do)?$",
+                "^(?:torch|flashlight|light)\\s+(?:band|off|bujhao|bujha do)(?:\\s+yaar)?$",
+                "^torch\\s+bandh\\s+kar\\s+yaar$",
+                "^bhai\\s+(?:torch|flashlight|light)\\s+(?:band kar do|off kar do|bujha de)$",
+                "^(?:light|flash)\\s+off\\s+kar$"
+            )
+        ) { m ->
+            NormalizedToolCall("system.torch", JSONObject().put("state", false), 1.0f, m.group(0) ?: "")
+        }
+
+        // --- 0.1 system.volume (Volume controls) ---
+        // English: "increase volume", "volume up", "decrease volume", "volume down", "mute", "phone silent kar do"
+        // Hindi / Hinglish: "volume badha", "awaaz badhao", "volume kam karo", "awaaz kam karo", "phone thoda silent kar"
+        registerRule(
+            listOf(
+                "^(?:can you |please )?(?:increase|raise|turn up|boost)\\s+(?:the\\s+)?(?:volume|sound|media volume)$",
+                "^(?:volume|awaaz|sound)\\s+(?:up|badhao|badha do|badha|tez karo|increase karo)$"
+            )
+        ) { m ->
+            NormalizedToolCall("system.volume", JSONObject().put("action", "raise"), 0.99f, m.group(0) ?: "")
+        }
+
+        registerRule(
+            listOf(
+                "^(?:can you |please )?(?:decrease|lower|turn down|reduce)\\s+(?:the\\s+)?(?:volume|sound|media volume)$",
+                "^(?:volume|awaaz|sound)\\s+(?:down|kam karo|kam kar do|kam kar|ghatao|decrease karo)$"
+            )
+        ) { m ->
+            NormalizedToolCall("system.volume", JSONObject().put("action", "lower"), 0.99f, m.group(0) ?: "")
+        }
+
+        registerRule(
+            listOf(
+                "^(?:mute|silence|silent)(?:\\s+phone|\\s+device|\\s+media)?$",
+                "^(?:phone|device)?\\s*(?:thoda\\s+)?(?:silent\\s+kar(?:\\s+do)?|mute\\s+kar(?:\\s+do)?)$"
+            )
+        ) { m ->
+            NormalizedToolCall("system.volume", JSONObject().put("action", "mute"), 0.99f, m.group(0) ?: "")
+        }
+
+        // --- 0.2 open_settings & structured subpage settings ---
         // English: "open settings", "open wifi settings", "show wifi settings", "go to wifi settings", "open device wifi settings"
         // Hindi / Hinglish: "settings kholo", "wifi settings kholo", "wifi setting kholo", "wifi settings open karo"
         registerRule(

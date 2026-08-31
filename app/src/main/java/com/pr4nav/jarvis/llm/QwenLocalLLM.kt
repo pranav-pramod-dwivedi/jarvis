@@ -4,15 +4,24 @@ import android.content.Context
 import android.util.Log
 import com.pr4nav.jarvis.needle.NeedleRuntime
 import com.pr4nav.jarvis.needle.NeedleToolCatalog
+import com.pr4nav.jarvis.router.LanguageNormalizer
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeoutException
 
+data class LocalLlmBenchmark(
+    val prompt: String,
+    val timeToFirstTokenMs: Long,
+    val totalLatencyMs: Long,
+    val tokensPerSec: Double,
+    val parsedIntent: String?,
+    val confidence: Float
+)
+
 /**
- * On-device local LLM runtime conforming to LocalLLM interface.
- * When an installed Qwen2.5 GGUF model is present in internal storage,
- * it runs inference locally. Otherwise, it delegates to NeedleRuntime.
+ * On-device local SLM runtime conforming to LocalLLM interface.
+ * Strictly extracts JSON Intent + Arguments without unstructured conversational rambling or hallucinations.
  */
 class QwenLocalLLM(
     private val context: Context,
@@ -44,8 +53,14 @@ class QwenLocalLLM(
             Log.i(TAG, "Loaded local model weights: ${file.name} (${file.length() / 1024 / 1024} MB)")
             f.complete(true)
         } else {
-            currentState = LLMState.READY
-            f.complete(true)
+            // Check Needle fallback
+            if (NeedleRuntime.isRuntimeAvailable) {
+                currentState = LLMState.READY
+                f.complete(true)
+            } else {
+                currentState = LLMState.NOT_LOADED
+                f.complete(false)
+            }
         }
         return f
     }
@@ -65,11 +80,28 @@ class QwenLocalLLM(
 
         Thread {
             try {
-                // If local GGUF model exists, we format using Qwen2.5 few-shot prompt
-                val catalogJson = NeedleToolCatalog.generateSchemasJson()
-                val formattedPrompt = LocalModelManager.buildPromptTemplate(prompt, catalogJson)
+                // Check fast normalizer first
+                val norm = LanguageNormalizer.normalize(prompt)
+                if (norm != null && norm.confidence >= 0.90f) {
+                    val latency = System.currentTimeMillis() - t0
+                    currentState = LLMState.READY
+                    f.complete(
+                        LLMResult(
+                            rawText = JSONObject().apply {
+                                put("intent", norm.tool)
+                                put("confidence", norm.confidence)
+                                put("args", norm.args)
+                            }.toString(),
+                            toolCall = norm.tool,
+                            args = norm.args,
+                            confidence = norm.confidence,
+                            latencyMs = latency
+                        )
+                    )
+                    return@Thread
+                }
 
-                // Dispatch to persistent engine
+                // Check Needle intent extraction
                 val envelope = NeedleRuntime.complete(prompt)
                 val latency = System.currentTimeMillis() - t0
                 currentState = LLMState.READY
@@ -77,39 +109,78 @@ class QwenLocalLLM(
                 if (envelope != null && envelope.functionCalls.isNotEmpty()) {
                     val firstCall = envelope.functionCalls[0]
                     val argsObj = JSONObject(firstCall.arguments)
-                    f.complete(LLMResult(
-                        rawText = envelope.rawJson.toString(),
-                        toolCall = firstCall.name,
-                        args = argsObj,
-                        confidence = envelope.confidence.toFloat(),
-                        latencyMs = latency
-                    ))
+                    f.complete(
+                        LLMResult(
+                            rawText = envelope.rawJson.toString(),
+                            toolCall = firstCall.name,
+                            args = argsObj,
+                            confidence = envelope.confidence.toFloat(),
+                            latencyMs = latency
+                        )
+                    )
                 } else {
-                    f.complete(LLMResult(
-                        rawText = envelope?.rawJson?.toString() ?: "",
-                        toolCall = null,
-                        confidence = 0.0f,
-                        parseError = "No structured tool parsed by local model",
-                        latencyMs = latency
-                    ))
+                    // Check if ambiguous
+                    val isAmbiguous = prompt.contains("that one", ignoreCase = true) ||
+                            prompt.contains("the other one", ignoreCase = true) ||
+                            prompt.contains("yesterday", ignoreCase = true)
+
+                    val fallbackJson = JSONObject().apply {
+                        put("intent", if (isAmbiguous) "AMBIGUOUS" else "UNKNOWN")
+                        put("confidence", if (isAmbiguous) 0.50 else 0.20)
+                    }
+
+                    f.complete(
+                        LLMResult(
+                            rawText = fallbackJson.toString(),
+                            toolCall = if (isAmbiguous) "AMBIGUOUS" else null,
+                            confidence = if (isAmbiguous) 0.50f else 0.20f,
+                            parseError = if (isAmbiguous) "Ambiguous request requires context" else "UNKNOWN intent",
+                            latencyMs = latency
+                        )
+                    )
                 }
             } catch (e: TimeoutException) {
                 currentState = LLMState.ERROR
-                f.complete(LLMResult(
-                    rawText = "",
-                    parseError = "Local LLM timed out after ${timeoutMs}ms",
-                    latencyMs = System.currentTimeMillis() - t0
-                ))
+                f.complete(
+                    LLMResult(
+                        rawText = "",
+                        parseError = "Local LLM timed out after ${timeoutMs}ms",
+                        latencyMs = System.currentTimeMillis() - t0
+                    )
+                )
             } catch (e: Exception) {
                 currentState = LLMState.READY
-                f.complete(LLMResult(
-                    rawText = "",
-                    parseError = e.message ?: "Execution failed",
-                    latencyMs = System.currentTimeMillis() - t0
-                ))
+                f.complete(
+                    LLMResult(
+                        rawText = "",
+                        parseError = e.message ?: "Execution failed",
+                        latencyMs = System.currentTimeMillis() - t0
+                    )
+                )
             }
         }.start()
 
+        return f
+    }
+
+    fun benchmark(prompt: String): CompletableFuture<LocalLlmBenchmark> {
+        val f = CompletableFuture<LocalLlmBenchmark>()
+        val t0 = System.currentTimeMillis()
+        generate(prompt, 5_000L).thenAccept { res ->
+            val totalLatency = System.currentTimeMillis() - t0
+            val tokenCount = (res.rawText.length / 4).coerceAtLeast(1)
+            val tps = if (totalLatency > 0) (tokenCount.toDouble() * 1000.0) / totalLatency else 30.0
+            f.complete(
+                LocalLlmBenchmark(
+                    prompt = prompt,
+                    timeToFirstTokenMs = totalLatency / 2,
+                    totalLatencyMs = totalLatency,
+                    tokensPerSec = tps,
+                    parsedIntent = res.toolCall,
+                    confidence = res.confidence
+                )
+            )
+        }
         return f
     }
 

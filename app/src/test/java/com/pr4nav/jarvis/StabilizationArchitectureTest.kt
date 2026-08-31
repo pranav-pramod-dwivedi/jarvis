@@ -2,6 +2,7 @@ package com.pr4nav.jarvis
 
 import com.pr4nav.jarvis.agy.AgyManager
 import com.pr4nav.jarvis.core.*
+import com.pr4nav.jarvis.router.LanguageNormalizer
 import com.pr4nav.jarvis.tools.CanonicalToolRegistry
 import com.pr4nav.jarvis.tools.ToolValidator
 import com.pr4nav.jarvis.tools.ValidationResult
@@ -110,5 +111,49 @@ class StabilizationArchitectureTest {
         assertEquals("UNREGISTERED_TOOL", json.getString("error_type"))
         assertTrue(json.getString("message").contains("invented_action"))
         assertNotNull(json.getString("suggested_action"))
+    }
+
+    @Test
+    fun testFlashlightAndDeviceIntentNormalization() {
+        // English
+        val torchOnEn = LanguageNormalizer.normalize("turn on flashlight")
+        assertNotNull(torchOnEn)
+        assertEquals("system.torch", torchOnEn?.tool)
+        assertTrue(torchOnEn?.args?.getBoolean("state") == true)
+
+        val torchOffEn = LanguageNormalizer.normalize("turn off flashlight")
+        assertNotNull(torchOffEn)
+        assertEquals("system.torch", torchOffEn?.tool)
+        assertTrue(torchOffEn?.args?.getBoolean("state") == false)
+
+        // Hinglish / Hindi
+        val torchOnHi = LanguageNormalizer.normalize("torch chalu kar")
+        assertNotNull(torchOnHi)
+        assertEquals("system.torch", torchOnHi?.tool)
+        assertTrue(torchOnHi?.args?.getBoolean("state") == true)
+
+        val torchOnHi2 = LanguageNormalizer.normalize("light on kar")
+        assertNotNull(torchOnHi2)
+        assertEquals("system.torch", torchOnHi2?.tool)
+
+        val torchOnHi3 = LanguageNormalizer.normalize("bhai torch chala de")
+        assertNotNull(torchOnHi3)
+        assertEquals("system.torch", torchOnHi3?.tool)
+
+        val torchOffHi = LanguageNormalizer.normalize("torch bandh kar yaar")
+        assertNotNull(torchOffHi)
+        assertEquals("system.torch", torchOffHi?.tool)
+        assertTrue(torchOffHi?.args?.getBoolean("state") == false)
+
+        // Volume
+        val volUp = LanguageNormalizer.normalize("volume badha")
+        assertNotNull(volUp)
+        assertEquals("system.volume", volUp?.tool)
+        assertEquals("raise", volUp?.args?.getString("action"))
+
+        val volMute = LanguageNormalizer.normalize("phone thoda silent kar")
+        assertNotNull(volMute)
+        assertEquals("system.volume", volMute?.tool)
+        assertEquals("mute", volMute?.args?.getString("action"))
     }
 }

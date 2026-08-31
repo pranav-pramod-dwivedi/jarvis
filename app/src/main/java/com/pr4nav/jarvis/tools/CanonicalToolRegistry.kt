@@ -50,6 +50,118 @@ object CanonicalToolRegistry {
     }
 
     private fun registerDefaults() {
+        // system.torch (and aliases: torch, flashlight_on, flashlight_off, set_flashlight)
+        val torchDef = CanonicalToolDef(
+            name = "system.torch",
+            description = "Turns the device flashlight/torch on or off.",
+            argumentSchema = JSONObject().apply {
+                put("type", "object")
+                put("properties", JSONObject().apply {
+                    put("state", JSONObject().put("type", "boolean").put("description", "true to turn on, false to turn off"))
+                })
+                put("required", JSONArray().put("state"))
+            },
+            backend = ToolBackend.ANDROID_NATIVE,
+            supportedBackends = setOf(ToolBackend.ANDROID_NATIVE),
+            defaultTimeoutMs = 3_000L,
+            verify = { _, args, res ->
+                res.success
+            },
+            execute = { _, args ->
+                val state = args.optBoolean("state", true)
+                val capRes = com.pr4nav.jarvis.capabilities.DeviceCapability.torch(state)
+                if (capRes.success) {
+                    ToolResult.ok(
+                        JSONObject().apply {
+                            put("action", "TORCH_TOGGLED")
+                            put("state", if (state) "on" else "off")
+                            put("message", if (state) "Flashlight turned on." else "Flashlight turned off.")
+                        }
+                    )
+                } else {
+                    ToolResult.failure("TORCH_ERROR", capRes.error ?: "Torch failed")
+                }
+            }
+        )
+        register(torchDef)
+        register(torchDef.copy(name = "torch"))
+        register(torchDef.copy(name = "set_flashlight"))
+        register(torchDef.copy(name = "flashlight_on", execute = { ctx, _ -> torchDef.execute(ctx, JSONObject().put("state", true)) }))
+        register(torchDef.copy(name = "flashlight_off", execute = { ctx, _ -> torchDef.execute(ctx, JSONObject().put("state", false)) }))
+
+        // system.volume
+        val volumeDef = CanonicalToolDef(
+            name = "system.volume",
+            description = "Adjusts device volume (raise, lower, mute, unmute).",
+            argumentSchema = JSONObject().apply {
+                put("type", "object")
+                put("properties", JSONObject().apply {
+                    put("action", JSONObject().put("type", "string").put("description", "raise, lower, or mute"))
+                })
+            },
+            backend = ToolBackend.ANDROID_NATIVE,
+            defaultTimeoutMs = 3_000L,
+            execute = { ctx, args ->
+                val action = args.optString("action", "raise").lowercase()
+                val am = ctx.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+                when (action) {
+                    "raise", "up" -> {
+                        am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_RAISE, android.media.AudioManager.FLAG_SHOW_UI)
+                        ToolResult.ok(JSONObject().put("action", "VOLUME_RAISED"))
+                    }
+                    "lower", "down" -> {
+                        am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_LOWER, android.media.AudioManager.FLAG_SHOW_UI)
+                        ToolResult.ok(JSONObject().put("action", "VOLUME_LOWERED"))
+                    }
+                    "mute" -> {
+                        am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_MUTE, android.media.AudioManager.FLAG_SHOW_UI)
+                        ToolResult.ok(JSONObject().put("action", "VOLUME_MUTED"))
+                    }
+                    else -> {
+                        am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_RAISE, android.media.AudioManager.FLAG_SHOW_UI)
+                        ToolResult.ok(JSONObject().put("action", "VOLUME_ADJUSTED"))
+                    }
+                }
+            }
+        )
+        register(volumeDef)
+        register(volumeDef.copy(name = "volume"))
+
+        // system.battery & get_battery
+        val batteryDef = CanonicalToolDef(
+            name = "system.battery",
+            description = "Checks device battery level and charging state.",
+            argumentSchema = JSONObject().apply { put("type", "object") },
+            backend = ToolBackend.ANDROID_NATIVE,
+            defaultTimeoutMs = 2_000L,
+            execute = { _, _ ->
+                val (pct, charging) = com.pr4nav.jarvis.capabilities.DeviceCapability.battery()
+                ToolResult.ok(
+                    JSONObject().apply {
+                        put("level", pct)
+                        put("charging", charging)
+                        put("message", "Battery is at $pct% (${if (charging) "charging" else "discharging"}).")
+                    }
+                )
+            }
+        )
+        register(batteryDef)
+        register(batteryDef.copy(name = "get_battery"))
+
+        // system.screenshot & take_screenshot
+        val screenshotDef = CanonicalToolDef(
+            name = "system.screenshot",
+            description = "Captures a device screenshot.",
+            argumentSchema = JSONObject().apply { put("type", "object") },
+            backend = ToolBackend.ANDROID_NATIVE,
+            defaultTimeoutMs = 5_000L,
+            execute = { ctx, _ ->
+                ToolResult.ok(JSONObject().put("action", "SCREENSHOT_REQUESTED"))
+            }
+        )
+        register(screenshotDef)
+        register(screenshotDef.copy(name = "take_screenshot"))
+
         // open_app
         register(CanonicalToolDef(
             name = "open_app",

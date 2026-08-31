@@ -28,7 +28,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
     private var speechRecognizer: SpeechRecognizer? = null
-    private val kokoroTts: KokoroTtsEngine by lazy { KokoroTtsEngine.getInstance(context) }
+    private val kokoroTts: KokoroTtsEngine by lazy { KokoroTtsEngine(context) }
     @Volatile var isListening = false
         private set
 
@@ -223,7 +223,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
 
     fun destroy() {
         try {
-            kokoroTts.destroy()
+            kokoroTts.stop()
             speechRecognizer?.destroy()
             speechRecognizer = null
             tts?.stop()

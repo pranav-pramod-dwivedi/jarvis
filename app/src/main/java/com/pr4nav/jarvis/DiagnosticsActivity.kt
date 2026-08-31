@@ -20,9 +20,11 @@ class DiagnosticsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_diagnostics)
         view = findViewById(R.id.diag_view)
-        findViewById<android.view.View>(R.id.btn_back)?.setOnClickListener { finish() }
         findViewById<Button>(R.id.diag_refresh).setOnClickListener { runChecks() }
         findViewById<Button>(R.id.diag_refresh).text = "RE-RUN CHECKS"
+        findViewById<Button>(R.id.btn_open_test_lab)?.setOnClickListener {
+            startActivity(Intent(this, ModelTestLabActivity::class.java))
+        }
         runChecks()
     }
 
