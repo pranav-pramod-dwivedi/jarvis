@@ -74,6 +74,20 @@ class AgentActivity : AppCompatActivity() {
         }
 
         updateCtx()
+        handleWakeWordIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleWakeWordIntent(intent)
+    }
+
+    private fun handleWakeWordIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("from_wake_word", false) == true) {
+            val wakeWord = intent.getStringExtra("wake_word") ?: "Jarvis"
+            showThinking("🎙 $wakeWord is listening…", "Hands-free session active. Speak your command.")
+        }
     }
 
     override fun onResume() {

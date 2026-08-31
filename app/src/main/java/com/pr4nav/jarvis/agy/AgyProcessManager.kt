@@ -107,7 +107,7 @@ class AgyProcessManager(
         executor.execute {
             val cmd = "export PATH=\"/data/data/com.termux/files/usr/bin:\$PATH\"; " +
                       "if command -v proot-distro >/dev/null 2>&1; then " +
-                      "  proot-distro login ubuntu -- bash -c 'pkill -f \"agy.*--remote-control\" || pkill -f agy || true'; " +
+                      "  proot-distro login ubuntu -- /bin/bash -c 'pkill -f \"agy.*--remote-control\" || pkill -f agy || true'; " +
                       "fi; " +
                       "pkill -f \"agy.*--remote-control\" || pkill -f agy || true; echo STOPPED"
             TermuxBridge.execute("agy-stop", cmd, timeoutMs = 8_000)
@@ -122,7 +122,7 @@ class AgyProcessManager(
     private fun buildStartCommand(): String {
         return "export PATH=\"/data/data/com.termux/files/usr/bin:\$PATH\"; " +
                "if command -v proot-distro >/dev/null 2>&1; then " +
-               "  proot-distro login ubuntu -- bash -c 'export PATH=\"/root/.local/bin:/usr/local/bin:\$PATH\"; nohup agy --remote-control --hub-port ${config.port} --host 0.0.0.0 >/root/.agy-serve.log 2>&1 || nohup agy --remote-control --hub-port ${config.port} >/root/.agy-serve.log 2>&1 &'; " +
+               "  proot-distro login ubuntu -- /bin/bash -c 'export PATH=\"/root/.local/bin:/usr/local/bin:\$PATH\"; nohup agy --remote-control --hub-port ${config.port} --host 0.0.0.0 >/root/.agy-serve.log 2>&1 || nohup agy --remote-control --hub-port ${config.port} >/root/.agy-serve.log 2>&1 &'; " +
                "else " +
                "  nohup agy --remote-control --hub-port ${config.port} --host 0.0.0.0 >/tmp/agy-serve.log 2>&1 || nohup agy --remote-control --hub-port ${config.port} >/tmp/agy-serve.log 2>&1 &; " +
                "fi"

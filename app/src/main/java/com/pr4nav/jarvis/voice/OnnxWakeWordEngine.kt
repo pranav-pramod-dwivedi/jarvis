@@ -55,6 +55,7 @@ class OnnxWakeWordEngine : WakeWordEngine {
     @Volatile var lastProbability: Float = 0.0f
         private set
 
+    private var contextRef: java.lang.ref.WeakReference<Context>? = null
     private var logThrottleCounter = 0
 
     init {
@@ -82,6 +83,7 @@ class OnnxWakeWordEngine : WakeWordEngine {
     }
 
     override fun initialize(context: Context): Boolean {
+        contextRef = java.lang.ref.WeakReference(context.applicationContext)
         try {
             val melFile = copyAssetToFile(context, "melspectrogram.onnx")
             val embFile = copyAssetToFile(context, "embedding_model.onnx")
@@ -225,10 +227,10 @@ class OnnxWakeWordEngine : WakeWordEngine {
                     .format(prob, latency, prob >= 0.50f))
             }
 
-            // Threshold evaluation (0.35f sensitive default to capture natural speech variants)
-            val threshold = 0.35f
+            // Threshold evaluation (0.28f default sensitivity to capture natural speech variants like "Jarvis", "JAR-vis")
+            val threshold = contextRef?.get()?.let { VoiceAssistantPreferences.getWakeConfidenceThreshold(it) } ?: 0.28f
             if (prob >= threshold) {
-                Log.i(TAG, "★ WAKE_DETECTED! Confirmed 'Jarvis' wake word (Prob: %.4f, Latency: %dms, Peak: %d)".format(prob, latency, peak))
+                Log.i(TAG, "★ WAKE_DETECTED! Confirmed 'Jarvis' wake word (Prob: %.4f, Threshold: %.2f, Latency: %dms, Peak: %d)".format(prob, threshold, latency, peak))
                 // Reset rolling buffers after detection
                 resetBuffers()
                 return true

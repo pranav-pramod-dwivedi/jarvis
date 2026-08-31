@@ -213,6 +213,19 @@ class JarvisVoiceService : Service() {
                     if (currentState == VoiceState.IDLE) {
                         VoiceInstrumentation.onWakeWordConfirmed(wakeWord, currentState.name)
                         updateState(VoiceState.WAKE_DETECTED, "Wake word confirmed: $wakeWord")
+
+                        // Open AgentActivity chat screen automatically
+                        try {
+                            val chatIntent = Intent(applicationContext, com.pr4nav.jarvis.AgentActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                                putExtra("from_wake_word", true)
+                                putExtra("wake_word", wakeWord)
+                            }
+                            applicationContext.startActivity(chatIntent)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to launch chat screen on wake word: ${e.message}")
+                        }
+
                         startDeliberateListeningSession("Wake word confirmed: $wakeWord")
                     }
                 }
@@ -374,7 +387,9 @@ class JarvisVoiceService : Service() {
 
         // 2. Wake-word check
         val hasWake = WakeWordEngine.containsWakeWord(text)
-        val shouldExecute = hasWake || inConversationWindow
+        // If wake-word was confirmed by on-device neural engine to trigger this STT session,
+        // or user explicitly included "Jarvis", or in conversation follow-up window:
+        val shouldExecute = hasWake || inConversationWindow || (currentState == VoiceState.LISTENING || currentState == VoiceState.WAKE_DETECTED)
 
         if (!shouldExecute) {
             // Speech recognized did NOT contain wake word -> False activation

@@ -155,9 +155,14 @@ object Shell {
                        "echo '# Termux Agent Directives\\nYou are an autonomous AI Agent operating directly inside Termux on Android.\\nWhen asked to open apps or URLs, execute: am start -a android.intent.action.VIEW -d [url] or termux-open-url [url].\\nExecute commands directly with run_command.' > /root/GEMINI.md; fi; "
         val fullCmd = "export PATH=\"/root/.local/bin:/usr/local/bin:\$PATH\"; $initRule $command"
         val escaped = fullCmd.replace("'", "'\\''")
-        return "export PATH=\"/data/data/com.termux/files/usr/bin:\$PATH\"; " +
-               "if command -v proot-distro >/dev/null 2>&1; then " +
-               "  proot-distro login ubuntu -- bash -c '$escaped' < /dev/null; " +
+        return "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; " +
+               "export PREFIX=\"/data/data/com.termux/files/usr\"; " +
+               "export HOME=\"/data/data/com.termux/files/home\"; " +
+               "unset LD_PRELOAD; " +
+               "if [ -x /data/data/com.termux/files/usr/bin/proot-distro ] || command -v proot-distro >/dev/null 2>&1; then " +
+               "  /data/data/com.termux/files/usr/bin/proot-distro login ubuntu -- /bin/bash -c '$escaped' < /dev/null; " +
+               "elif [ -x /data/data/com.termux/files/usr/bin/bash ]; then " +
+               "  /data/data/com.termux/files/usr/bin/bash -c '$escaped' < /dev/null; " +
                "else " +
                "  sh -c '$escaped' < /dev/null; " +
                "fi"
