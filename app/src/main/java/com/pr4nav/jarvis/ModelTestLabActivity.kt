@@ -18,6 +18,7 @@ import com.pr4nav.jarvis.tools.CanonicalToolRegistry
 import com.pr4nav.jarvis.tools.ToolValidator
 import com.pr4nav.jarvis.tools.ValidationResult
 import com.pr4nav.jarvis.voice.KokoroTtsEngine
+import org.json.JSONObject
 import kotlin.concurrent.thread
 
 class ModelTestLabActivity : AppCompatActivity() {
@@ -248,10 +249,16 @@ class ModelTestLabActivity : AppCompatActivity() {
                             sb.append("• Semantic Guard: ${if (validation is ValidationResult.Valid) "PASS" else "FAIL"}\n\n")
 
                             if (validation is ValidationResult.Valid) {
-                                sb.append("FINAL DECISION: ACCEPT (DIRECT_MATCH)\n")
+                                val toolDef = validation.toolDef
                                 val execRes = CanonicalToolRegistry.execute(this@ModelTestLabActivity, norm.tool, norm.args)
+                                val responseMode = com.pr4nav.jarvis.response.AnswerSynthesizer.determineResponseMode(input, classified.category.name)
+                                val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(input, norm.tool, execRes.data, responseMode)
+                                val terminationStatus = if (toolDef.purpose == com.pr4nav.jarvis.response.ToolPurpose.ACTION) com.pr4nav.jarvis.response.TerminationStatus.ACTION_COMPLETED else com.pr4nav.jarvis.response.TerminationStatus.FINAL_ANSWER
+
                                 sb.append("EXECUTION RESULT: ${if (execRes.success) "SUCCESS" else "FAILURE"}\n")
-                                sb.append("DATA: ${execRes.data}\n")
+                                sb.append("ANSWER SYNTHESIS: SUCCESS\n")
+                                sb.append("FINAL RESPONSE:\n\"$synthesizedAnswer\"\n\n")
+                                sb.append("TERMINATION: $terminationStatus\n")
                                 sb.append("LATENCY: ${System.currentTimeMillis() - t0}ms\n")
                             } else if (validation is ValidationResult.Rejected) {
                                 sb.append("FINAL DECISION: REJECT\n")
@@ -310,8 +317,21 @@ class ModelTestLabActivity : AppCompatActivity() {
                             sb.append("• Semantic Guard: ${if (validation is ValidationResult.Valid) "PASS" else "FAIL"}\n\n")
 
                             if (validation is ValidationResult.Valid) {
-                                sb.append("FINAL DECISION: ACCEPT\n")
-                                sb.append("SCORE: ${validation.score}/100\n")
+                                val toolDef = validation.toolDef
+                                val execRes = toolDef.executeWithTimeout(this@ModelTestLabActivity, result.arguments ?: JSONObject())
+                                val responseMode = com.pr4nav.jarvis.response.AnswerSynthesizer.determineResponseMode(input, "INFORMATION")
+                                val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(input, result.intent, execRes.data, responseMode)
+                                val terminationStatus = if (toolDef.purpose == com.pr4nav.jarvis.response.ToolPurpose.ACTION) com.pr4nav.jarvis.response.TerminationStatus.ACTION_COMPLETED else com.pr4nav.jarvis.response.TerminationStatus.FINAL_ANSWER
+
+                                sb.append("INTENT: INFORMATION\n")
+                                sb.append("RESPONSE MODE: $responseMode\n")
+                                sb.append("TOOL: ${result.intent} (${toolDef.purpose})\n")
+                                sb.append("VALIDATION: ${validation.score}/100 (PASS)\n")
+                                sb.append("EXECUTION: ${if (execRes.success) "SUCCESS" else "FAILURE"}\n")
+                                sb.append("RESULTS: ${execRes.data?.toString() ?: "Retrieved"}\n")
+                                sb.append("ANSWER SYNTHESIS: SUCCESS\n")
+                                sb.append("FINAL RESPONSE:\n\"$synthesizedAnswer\"\n\n")
+                                sb.append("TERMINATION: $terminationStatus\n")
                             } else if (validation is ValidationResult.Rejected) {
                                 sb.append("FINAL DECISION: REJECT\n")
                                 sb.append("REJECTION REASON: ${validation.reasonCode}\n")

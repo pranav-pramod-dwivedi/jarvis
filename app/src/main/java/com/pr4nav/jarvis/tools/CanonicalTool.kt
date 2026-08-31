@@ -149,6 +149,7 @@ data class CanonicalToolDef(
     val description: String,
     val argumentSchema: JSONObject,
     val backend: ToolBackend = ToolBackend.ANDROID_NATIVE,
+    val purpose: com.pr4nav.jarvis.response.ToolPurpose = com.pr4nav.jarvis.response.ToolPurpose.ACTION,
     val supportedBackends: Set<ToolBackend> = setOf(backend),
     val fallbackChain: List<ToolBackend> = emptyList(),
     val isIdempotent: Boolean = true,

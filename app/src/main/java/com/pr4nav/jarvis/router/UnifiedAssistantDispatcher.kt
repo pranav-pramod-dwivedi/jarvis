@@ -110,22 +110,21 @@ object UnifiedAssistantDispatcher {
                         onStatus?.invoke("⚡ Executing canonical tool [${normalized.tool}]...")
                         val toolRes = CanonicalToolRegistry.execute(context, normalized.tool, normalized.args)
                         com.pr4nav.jarvis.context.ConversationalContext.updateContext(normalized.tool, normalized.args)
-                        val summary = if (toolRes.success) {
-                            toolRes.data?.toString() ?: "Completed ${normalized.tool}."
-                        } else {
-                            toolRes.error?.message ?: "Failed to execute ${normalized.tool}."
-                        }
+                        val toolDef = CanonicalToolRegistry.get(normalized.tool)
+                        val responseMode = com.pr4nav.jarvis.response.AnswerSynthesizer.determineResponseMode(trimmed, classified.category.name)
+                        val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, normalized.tool, toolRes.data, responseMode)
+                        val terminationStatus = if (toolDef?.purpose == com.pr4nav.jarvis.response.ToolPurpose.ACTION) com.pr4nav.jarvis.response.TerminationStatus.ACTION_COMPLETED else com.pr4nav.jarvis.response.TerminationStatus.FINAL_ANSWER
                         val latency = System.currentTimeMillis() - t0
-                        val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: Direct deterministic match [${normalized.tool}]\n• Qwen: SKIPPED (Deterministic priority)\n• AGY: SKIPPED\n• Args: ${normalized.args}\n</think>"
+                        val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: Direct deterministic match [${normalized.tool}]\n• Purpose: ${toolDef?.purpose ?: com.pr4nav.jarvis.response.ToolPurpose.ACTION}\n• Termination: $terminationStatus\n• Qwen: SKIPPED (Deterministic priority)\n• AGY: SKIPPED\n• Args: ${normalized.args}\n</think>"
 
-                        Log.i(TAG, "Tier 1: Direct deterministic match [${normalized.tool}] in ${latency}ms")
-                        onChunk?.invoke(summary)
+                        Log.i(TAG, "Tier 1: Direct deterministic match [${normalized.tool}] in ${latency}ms -> $synthesizedAnswer")
+                        onChunk?.invoke(synthesizedAnswer)
                         onResult(
                             UnifiedExecutionResult(
                                 handled = true,
                                 source = ExecutionSource.DETERMINISTIC_NEEDLE,
-                                speechResponse = summary,
-                                fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Deterministic · ${latency}ms]\n$summary",
+                                speechResponse = synthesizedAnswer,
+                                fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Deterministic · ${latency}ms]\n$synthesizedAnswer",
                                 thinkingTrace = thinkTrace,
                                 modelName = "Needle 2 Engine",
                                 toolResult = toolRes,
@@ -162,21 +161,19 @@ object UnifiedAssistantDispatcher {
                             val args = llmRes.args ?: JSONObject()
                             val toolDef = validation.toolDef
                             val execRes = toolDef.executeWithTimeout(context, args)
-                            val summary = if (execRes.success) {
-                                execRes.data?.toString() ?: "Executed ${llmRes.toolCall}."
-                            } else {
-                                execRes.error?.message ?: "Execution failed."
-                            }
+                            val responseMode = com.pr4nav.jarvis.response.AnswerSynthesizer.determineResponseMode(trimmed, classified.category.name)
+                            val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, llmRes.toolCall, execRes.data, responseMode)
+                            val terminationStatus = if (toolDef.purpose == com.pr4nav.jarvis.response.ToolPurpose.ACTION) com.pr4nav.jarvis.response.TerminationStatus.ACTION_COMPLETED else com.pr4nav.jarvis.response.TerminationStatus.FINAL_ANSWER
                             val latency = System.currentTimeMillis() - t0
-                            val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Evaluator: 🟢 Local Qwen3.5-2B\n• Decision: Validated on-device capability [${llmRes.toolCall}]\n• Score: ${validation.score}/100\n• Execution: Success\n</think>"
+                            val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Evaluator: 🟢 Local Qwen3.5-2B\n• Decision: Validated on-device capability [${llmRes.toolCall}]\n• Purpose: ${toolDef.purpose}\n• Termination: $terminationStatus\n• Score: ${validation.score}/100\n• Execution: Success\n</think>"
 
-                            onChunk?.invoke(summary)
+                            onChunk?.invoke(synthesizedAnswer)
                             onResult(
                                 UnifiedExecutionResult(
                                     handled = true,
                                     source = ExecutionSource.LOCAL_LLM,
-                                    speechResponse = summary,
-                                    fullSummary = "$thinkTrace\n\n🟢 [Local: Qwen3.5-2B · ${latency}ms]\n$summary",
+                                    speechResponse = synthesizedAnswer,
+                                    fullSummary = "$thinkTrace\n\n🟢 [Local: Qwen3.5-2B · ${latency}ms]\n$synthesizedAnswer",
                                     thinkingTrace = thinkTrace,
                                     modelName = "🟢 Local Qwen3.5-2B",
                                     toolResult = execRes,
