@@ -3,21 +3,15 @@ package com.pr4nav.jarvis.router
 import android.content.Context
 import android.util.Log
 import com.pr4nav.jarvis.llm.GeminiCloudLLM
-import com.pr4nav.jarvis.llm.LocalLLM
-import com.pr4nav.jarvis.llm.LocalModelManager
-import com.pr4nav.jarvis.llm.QwenLocalLLM
 import com.pr4nav.jarvis.tools.CanonicalToolRegistry
 import com.pr4nav.jarvis.tools.ToolResult
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 
 enum class ExecutionSource(val label: String, val badge: String) {
-    DETERMINISTIC_NEEDLE("Needle 2 Deterministic", "⚡ [Needle 2 Deterministic]"),
+    DETERMINISTIC_NEEDLE("Needle 2 Reflex", "⚡ [Needle 2 Reflex]"),
     AGY_AGENT("AGY Autonomous Agent", "🤖 [AGY Agent (PRoot Linux)]"),
-    LOCAL_LLM("🟢 Local Qwen2.5-1.5B", "🟢 [Local: Qwen2.5-1.5B]"),
     CLOUD_LLM("Gemini 2.0 Flash (Cloud)", "☁️ [Gemini 2.0 Flash (Cloud)]"),
-    FALLBACK("Local Fallback", "⚙️ [Local System Fallback]")
+    FALLBACK("System Fallback", "⚙️ [System Fallback]")
 }
 
 data class UnifiedExecutionResult(
@@ -56,11 +50,10 @@ data class UnifiedExecutionResult(
 
 /**
  * Unified Autonomous Assistant Dispatcher.
- * Executes the user-aligned reasoning hierarchy:
- *
+ * Architecture:
  * 1. Tier 1: Deterministic Needle 2 Reflex (<15ms) for device actions & tool execution.
- * 2. Tier 2 (PRIMARY): AGY Autonomous Agent (PRoot Ubuntu :5050 / `agy -p`) & Local Qwen3.5-2B SLM.
- * 3. Tier 3 (FALLBACK ONLY): Cloud Gemini 2.0 Flash used ONLY when AGY has no confidence or takes >30s.
+ * 2. Tier 2: AGY Autonomous Agent (PRoot Ubuntu :5050 / `agy -p`).
+ * 3. Tier 3: Gemini Cloud LLM (Full reasoning + shell command execution; zero refusals).
  */
 object UnifiedAssistantDispatcher {
 
@@ -138,7 +131,7 @@ object UnifiedAssistantDispatcher {
                         val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, normalized.tool, toolRes.data, responseMode)
                         val terminationStatus = if (toolDef?.purpose == com.pr4nav.jarvis.response.ToolPurpose.ACTION) com.pr4nav.jarvis.response.TerminationStatus.ACTION_COMPLETED else com.pr4nav.jarvis.response.TerminationStatus.FINAL_ANSWER
                         val latency = System.currentTimeMillis() - t0
-                        val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: Direct deterministic match [${normalized.tool}]\n• Purpose: ${toolDef?.purpose ?: com.pr4nav.jarvis.response.ToolPurpose.ACTION}\n• Termination: $terminationStatus\n• Qwen: SKIPPED (Deterministic priority)\n• AGY: SKIPPED\n• Args: ${normalized.args}\n</think>"
+                        val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: Direct deterministic match [${normalized.tool}]\n• Purpose: ${toolDef?.purpose ?: com.pr4nav.jarvis.response.ToolPurpose.ACTION}\n• Termination: $terminationStatus\n• AGY: SKIPPED\n• Args: ${normalized.args}\n</think>"
 
                         Log.i(TAG, "Tier 1: Direct deterministic match [${normalized.tool}] in ${latency}ms -> $synthesizedAnswer")
                         onChunk?.invoke(synthesizedAnswer)
@@ -147,9 +140,9 @@ object UnifiedAssistantDispatcher {
                                 handled = true,
                                 source = ExecutionSource.DETERMINISTIC_NEEDLE,
                                 speechResponse = synthesizedAnswer,
-                                fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Deterministic · ${latency}ms]\n$synthesizedAnswer",
+                                fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesizedAnswer",
                                 thinkingTrace = thinkTrace,
-                                modelName = "Needle 2 Engine",
+                                modelName = "Needle 2 Reflex",
                                 toolResult = toolRes,
                                 latencyMs = latency
                             )
@@ -160,69 +153,16 @@ object UnifiedAssistantDispatcher {
                     }
                 }
             }
-
-            // Check Local Qwen2.5-1.5B if installed
-            val qwen = QwenLocalLLM(context)
-            val activeModelId = LocalModelManager.getActiveModelId(context)
-            if (LocalModelManager.isModelInstalled(context, activeModelId)) {
-                try {
-                    Log.i(TAG, "Checking Local Qwen2.5-1.5B SLM...")
-                    onStatus?.invoke("🟢 Asking Local Qwen2.5-1.5B on-device model...")
-                    val future = qwen.generate(trimmed, timeoutMs = 4_000L)
-                    val llmRes = future.get(4_000L, TimeUnit.MILLISECONDS)
-
-                    if (llmRes.toolCall != null && llmRes.toolCall != "escalate") {
-                        val validation = com.pr4nav.jarvis.tools.ToolValidator.validate(
-                            context,
-                            llmRes.toolCall,
-                            llmRes.args ?: JSONObject(),
-                            trimmed
-                        )
-
-                        if (validation is com.pr4nav.jarvis.tools.ValidationResult.Valid) {
-                            onStatus?.invoke("🟢 Executing [${llmRes.toolCall}] via Qwen2.5-1.5B...")
-                            val args = llmRes.args ?: JSONObject()
-                            val toolDef = validation.toolDef
-                            val execRes = toolDef.executeWithTimeout(context, args)
-                            val responseMode = com.pr4nav.jarvis.response.AnswerSynthesizer.determineResponseMode(trimmed, classified.category.name)
-                            val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, llmRes.toolCall, execRes.data, responseMode)
-                            val terminationStatus = if (toolDef.purpose == com.pr4nav.jarvis.response.ToolPurpose.ACTION) com.pr4nav.jarvis.response.TerminationStatus.ACTION_COMPLETED else com.pr4nav.jarvis.response.TerminationStatus.FINAL_ANSWER
-                            val latency = System.currentTimeMillis() - t0
-                            val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Evaluator: 🟢 Local Qwen2.5-1.5B\n• Decision: Validated on-device capability [${llmRes.toolCall}]\n• Purpose: ${toolDef.purpose}\n• Termination: $terminationStatus\n• Score: ${validation.score}/100\n• Execution: Success\n</think>"
-
-                            onChunk?.invoke(synthesizedAnswer)
-                            onResult(
-                                UnifiedExecutionResult(
-                                    handled = true,
-                                    source = ExecutionSource.LOCAL_LLM,
-                                    speechResponse = synthesizedAnswer,
-                                    fullSummary = "$thinkTrace\n\n🟢 [Local: Qwen2.5-1.5B · ${latency}ms]\n$synthesizedAnswer",
-                                    thinkingTrace = thinkTrace,
-                                    modelName = "🟢 Local Qwen2.5-1.5B",
-                                    toolResult = execRes,
-                                    latencyMs = latency
-                                )
-                            )
-                            return
-                        } else if (validation is com.pr4nav.jarvis.tools.ValidationResult.Rejected) {
-                            Log.w(TAG, "Qwen proposed tool [${llmRes.toolCall}] REJECTED by semantic guard: ${validation.error.message}")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Local Qwen2.5-1.5B check passed: ${e.message}")
-                }
-            }
         }
 
         // =========================================================================
-        // Tier 2 (PRIMARY): Query AGY Autonomous Agent (:5050 Daemon & PRoot CLI)
+        // Tier 2: Query AGY Autonomous Agent (:5050 Daemon & PRoot CLI)
         // =========================================================================
-        Log.i(TAG, "Tier 2: Querying AGY Autonomous Agent as PRIMARY intelligence...")
+        Log.i(TAG, "Tier 2: Querying AGY Autonomous Agent...")
         onStatus?.invoke("🤖 Querying AGY Autonomous Agent (PRoot Linux)...")
 
         Thread {
             try {
-                val agyClient = com.pr4nav.jarvis.agy.AgyClient()
                 var agyAnswer = ""
                 var agySuccess = false
 
@@ -261,14 +201,14 @@ object UnifiedAssistantDispatcher {
                     return@Thread
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "AGY Primary query timed out or failed (${e.message}), escalating to Cloud LLM fallback...")
+                Log.w(TAG, "AGY query timed out or failed (${e.message}), escalating to Cloud LLM...")
             }
 
             // =========================================================================
-            // Tier 3 (FALLBACK ONLY): Google Gemini Cloud API (Only if AGY unavailable / >30s)
+            // Tier 3: Google Gemini Cloud API (Full reasoning + Command execution)
             // =========================================================================
-            Log.i(TAG, "Tier 3: AGY unavailable or timed out; escalating to Cloud LLM Fallback (Gemini 2.0 Flash)...")
-            onStatus?.invoke("☁️ Falling back to Google Gemini 2.0 Flash (Cloud)...")
+            Log.i(TAG, "Tier 3: Querying Gemini Cloud LLM...")
+            onStatus?.invoke("☁️ Querying Google Gemini Cloud LLM...")
 
             val historyContext = com.pr4nav.jarvis.context.ConversationalContext.getRecentHistory(4)
             val fullPromptWithHistory = if (historyContext.isNotBlank()) {
@@ -288,28 +228,28 @@ object UnifiedAssistantDispatcher {
                     val latency = System.currentTimeMillis() - t0
                     com.pr4nav.jarvis.context.ConversationalContext.recordTurn(trimmed, cloudSpeech)
 
-                    val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Primary (AGY): Timed out or unreachable\n• Fallback: Google Gemini 2.0 Flash (Cloud)\n• Latency: ${latency}ms\n</think>"
+                    val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Engine: Google Gemini 2.0 Flash (Cloud)\n• Latency: ${latency}ms\n</think>"
 
-                    Log.i(TAG, "Tier 3: Cloud Gemini 2.0 Flash fallback responded in ${latency}ms")
+                    Log.i(TAG, "Tier 3: Cloud Gemini 2.0 Flash responded in ${latency}ms")
                     onResult(
                         UnifiedExecutionResult(
                             handled = true,
                             source = ExecutionSource.CLOUD_LLM,
                             speechResponse = cloudSpeech,
-                            fullSummary = "$thinkTrace\n\n☁️ [Gemini 2.0 Flash (Cloud Fallback) · ${latency}ms]\n$cloudSpeech",
+                            fullSummary = "$thinkTrace\n\n☁️ [Gemini 2.0 Flash (Cloud) · ${latency}ms]\n$cloudSpeech",
                             thinkingTrace = thinkTrace,
-                            modelName = "Gemini 2.0 Flash (Cloud Fallback)",
+                            modelName = "Gemini 2.0 Flash (Cloud)",
                             latencyMs = latency
                         )
                     )
                 },
                 onError = { errMsg ->
                     val latency = System.currentTimeMillis() - t0
-                    Log.e(TAG, "Cloud fallback failed: $errMsg")
+                    Log.e(TAG, "Cloud LLM failed: $errMsg")
 
                     val helpfulFallback = when {
                         trimmed.lowercase().contains("who are you") || trimmed.lowercase().contains("what is your name") ->
-                            "I am JARVIS, your personal autonomous on-device AI assistant."
+                            "I am JARVIS, your personal autonomous AI assistant."
                         trimmed.lowercase().contains("how are you") ->
                             "All systems are operating at peak performance, sir. How can I assist you today?"
                         trimmed.lowercase().contains("hi") || trimmed.lowercase().contains("hello") || trimmed.lowercase().contains("hey") ->
@@ -319,10 +259,10 @@ object UnifiedAssistantDispatcher {
                         trimmed.lowercase().contains("date") ->
                             "Today is ${java.text.SimpleDateFormat("EEEE, MMMM d", java.util.Locale.getDefault()).format(java.util.Date())}."
                         else ->
-                            "I am operating in local offline mode right now. You can ask me to open apps, control volume, trigger flashlight, manage files, or check device status."
+                            "I am ready. You can ask me to open apps, control volume, toggle flashlight, run shell commands, or query information."
                     }
 
-                    val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Primary (AGY) & Cloud: Unavailable ($errMsg)\n• Fallback: Native system conversational handler\n</think>"
+                    val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Status: Native system conversational handler\n</think>"
                     onChunk?.invoke(helpfulFallback)
 
                     onResult(
@@ -330,9 +270,9 @@ object UnifiedAssistantDispatcher {
                             handled = false,
                             source = ExecutionSource.FALLBACK,
                             speechResponse = helpfulFallback,
-                            fullSummary = "$thinkTrace\n\n⚙️ [Local System Fallback · ${latency}ms]\n$helpfulFallback",
+                            fullSummary = "$thinkTrace\n\n⚙️ [System Fallback · ${latency}ms]\n$helpfulFallback",
                             thinkingTrace = thinkTrace,
-                            modelName = "Local System Fallback",
+                            modelName = "System Fallback",
                             latencyMs = latency
                         )
                     )
@@ -341,4 +281,3 @@ object UnifiedAssistantDispatcher {
         }.start()
     }
 }
-

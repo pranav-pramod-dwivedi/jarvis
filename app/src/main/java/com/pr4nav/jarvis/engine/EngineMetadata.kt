@@ -7,14 +7,9 @@ import java.util.UUID
 
 enum class EngineType {
     NEEDLE_REFLEX,
-    QWEN_LOCAL,
     AGY_AGENT,
+    CLOUD_LLM,
     AUTO_ROUTER
-}
-
-enum class QwenExecutionMode {
-    RAW_QWEN_ONLY,
-    QWEN_TOOL_MODE
 }
 
 data class FallbackChainStep(
@@ -25,17 +20,17 @@ data class FallbackChainStep(
 )
 
 data class EngineProvenanceTrace(
-    val engine: String = "QWEN_LOCAL",
-    val model: String = "qwen3.5-2b-instruct-q4.gguf",
-    val modelHash: String,
-    val runtime: String = "Llama.cpp / GGUF Local Runtime",
-    val promptSource: String = "RAW_QWEN_CHAT",
-    val preprocessor: String = "NONE",
-    val postprocessor: String = "NONE",
-    val toolRouter: String = "DISABLED",
-    val needle: String = "DISABLED",
-    val agy: String = "DISABLED",
-    val cloud: String = "DISABLED"
+    val engine: String = "NEEDLE_REFLEX",
+    val model: String = "needle2-onnx",
+    val modelHash: String = "N/A",
+    val runtime: String = "ONNX / Reflex Runtime",
+    val promptSource: String = "DIRECT_INTENT",
+    val preprocessor: String = "LANGUAGE_NORMALIZER",
+    val postprocessor: String = "CANONICAL_VALIDATOR",
+    val toolRouter: String = "ENABLED",
+    val needle: String = "ACTIVE",
+    val agy: String = "STANDBY",
+    val cloud: String = "STANDBY"
 ) {
     fun toFormattedTrace(): String = """
 ENGINE:
@@ -142,6 +137,6 @@ data class EngineInferenceResult(
     val ttftMs: Long = 0L,
     val prefillTokPerSec: Double = 0.0,
     val decodeTokPerSec: Double = 0.0,
-    val stopReason: String = "EOS_TOKEN (<|im_end|>, ID 151645)",
-    val chatTemplateName: String = "ChatML"
+    val stopReason: String = "EOS_TOKEN",
+    val chatTemplateName: String = "Standard"
 )

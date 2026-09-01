@@ -91,61 +91,38 @@ class ConnectedServicesActivity : AppCompatActivity() {
             )
         }
 
-        // Local AI Management
+        // On-Device Architecture & Storage Management
         val labelLocalAi = findViewById<TextView>(R.id.local_ai_status)
         val progressLocalAi = findViewById<android.widget.ProgressBar>(R.id.local_ai_progress)
         val btnDownloadLocalAi = findViewById<Button>(R.id.btn_download_local_ai)
         val btnTestLocalAi = findViewById<Button>(R.id.btn_test_local_ai)
 
-        val activeModelId = com.pr4nav.jarvis.llm.LocalModelManager.getActiveModelId(this)
-        val isInstalled = com.pr4nav.jarvis.llm.LocalModelManager.isModelInstalled(this, activeModelId)
-        if (isInstalled) {
-            labelLocalAi.text = "Status: 🟢 Local Qwen3.5-2B (Active & Ready in App Storage ✓)"
-            btnDownloadLocalAi.text = "RE-DOWNLOAD"
-        } else {
-            labelLocalAi.text = "Status: 🟢 Local Qwen3.5-2B (2B Instruct) — Not Downloaded (~1.2GB)"
-            btnDownloadLocalAi.text = "DOWNLOAD QWEN 3.5-2B"
-        }
+        labelLocalAi.text = "Architecture: ⚡ Needle 2 Reflex (On-Device) + ☁️ Gemini Cloud LLM"
+        btnDownloadLocalAi.text = "DELETE ALL STORED LOCAL MODELS"
+        btnTestLocalAi.text = "TEST CLOUD COMMAND EXECUTION"
 
         btnDownloadLocalAi.setOnClickListener {
-            progressLocalAi.visibility = android.view.View.VISIBLE
-            progressLocalAi.progress = 0
-            btnDownloadLocalAi.isEnabled = false
-            labelLocalAi.text = "Downloading 🟢 Local Qwen3.5-2B to internal app storage..."
-
-            com.pr4nav.jarvis.llm.LocalModelManager.startDownload(
-                context = this,
-                modelId = activeModelId,
-                onProgress = { pct, downloaded, total ->
-                    runOnUiThread {
-                        progressLocalAi.progress = pct
-                        labelLocalAi.text = "Downloading: $pct% (${downloaded / 1024 / 1024} MB / ${total / 1024 / 1024} MB)"
-                    }
-                },
-                onComplete = { success, err ->
-                    runOnUiThread {
-                        btnDownloadLocalAi.isEnabled = true
-                        progressLocalAi.visibility = android.view.View.GONE
-                        if (success) {
-                            labelLocalAi.text = "Status: 🟢 Local Qwen3.5-2B Installed & Ready ✓"
-                            Toast.makeText(this, "Local Qwen3.5-2B Downloaded Successfully!", Toast.LENGTH_SHORT).show()
-                        } else {
-                            labelLocalAi.text = "Download Failed: $err"
-                            Toast.makeText(this, "Download error: $err", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
-            )
+            val deleted = com.pr4nav.jarvis.llm.LocalModelManager.deleteAllLocalModels(this)
+            Toast.makeText(this, "Purged $deleted local model files from storage.", Toast.LENGTH_SHORT).show()
+            labelLocalAi.text = "Storage: All local models deleted. Using Needle 2 + Cloud LLM."
         }
 
         btnTestLocalAi.setOnClickListener {
-            val qwen = com.pr4nav.jarvis.llm.QwenLocalLLM(this)
-            Toast.makeText(this, "Running Local LLM test prompt...", Toast.LENGTH_SHORT).show()
-            qwen.generate("Turn off the flashlight and set volume to 5", 30_000L).thenAccept { res ->
-                runOnUiThread {
-                    Toast.makeText(this, "Local LLM: ${res.toolCall ?: "none"} (${res.latencyMs}ms)", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Testing Cloud LLM Command Execution...", Toast.LENGTH_SHORT).show()
+            com.pr4nav.jarvis.llm.GeminiCloudLLM.generate(
+                context = this,
+                prompt = "Turn on the flashlight and tell me the status",
+                onSuccess = { res ->
+                    runOnUiThread {
+                        Toast.makeText(this, "Cloud: $res", Toast.LENGTH_LONG).show()
+                    }
+                },
+                onError = { err ->
+                    runOnUiThread {
+                        Toast.makeText(this, "Error: $err", Toast.LENGTH_LONG).show()
+                    }
                 }
-            }
+            )
         }
 
         // Test buttons

@@ -100,13 +100,31 @@ object LocalModelManager {
         return localF
     }
 
+    fun deleteAllLocalModels(context: Context?): Int {
+        var count = 0
+        try {
+            val dir = getModelsDir(context)
+            dir.listFiles()?.forEach { file ->
+                if (file.name.endsWith(".gguf") || file.name.endsWith(".bin") || file.name.endsWith(".onnx.model")) {
+                    if (file.delete()) count++
+                }
+            }
+            val devDir = File("/data/user/0/com.pr4nav.jarvis/files/models")
+            if (devDir.exists()) {
+                devDir.listFiles()?.forEach { file ->
+                    if (file.delete()) count++
+                }
+            }
+        } catch (_: Exception) {}
+        return count
+    }
+
     fun isModelInstalled(context: Context?, modelId: String): Boolean {
         val f = getModelFile(context, modelId)
         if (f.exists() && f.length() > 50_000_000L) return true
         val devicePath = File("/data/user/0/com.pr4nav.jarvis/files/models/${modelId}.gguf")
         if (devicePath.exists() && devicePath.length() > 50_000_000L) return true
-        // Allow unit test execution in non-Android environment
-        return true
+        return false
     }
 
     fun getActiveModelId(context: Context?): String {

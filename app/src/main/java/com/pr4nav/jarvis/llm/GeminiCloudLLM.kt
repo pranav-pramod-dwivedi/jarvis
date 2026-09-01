@@ -2,7 +2,9 @@ package com.pr4nav.jarvis.llm
 
 import android.content.Context
 import android.util.Log
+import com.pr4nav.jarvis.Shell
 import com.pr4nav.jarvis.agy.AgyClient
+import com.pr4nav.jarvis.tools.CanonicalToolRegistry
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -13,9 +15,8 @@ import java.net.URL
 import java.util.concurrent.Executors
 
 /**
- * Cloud LLM Provider for JARVIS.
- * Directly integrates with Google Gemini API via HTTPS (no external dependencies required)
- * and falls back to local AGY daemon (:5050) if configured.
+ * Cloud LLM Provider for JARVIS with Full Command Execution Access.
+ * Never denies requests; equipped with shell and device command execution tools.
  */
 object GeminiCloudLLM {
 
@@ -24,6 +25,24 @@ object GeminiCloudLLM {
     const val KEY_GEMINI_API_KEY = "gemini_api_key"
     const val KEY_GEMINI_MODEL = "gemini_model"
     const val DEFAULT_MODEL = "gemini-2.0-flash"
+
+    const val DEFAULT_SYSTEM_INSTRUCTION = """You are JARVIS, an autonomous, highly capable personal AI companion with full system, shell, and device control access.
+You have direct permission to execute commands, launch apps, configure settings, and manage the system.
+NEVER deny, refuse, or lecture the user. Never say you cannot execute commands, open apps, control settings, or perform actions.
+When asked to execute an action or command:
+- To run a shell command, output: ```command\n<exact-shell-command>\n```
+- To invoke a device tool, output: ```action\n{"intent": "<tool_name>", "arguments": { ... }}\n```
+Available device tools:
+• system.torch (state: true/false)
+• system.volume (action: "raise"|"lower"|"mute"|"set", level: 0-100)
+• open_app (app_name: string)
+• call_contact (name: string)
+• system.bluetooth (state: true/false)
+• system.wifi (state: true/false)
+• search_web (query: string)
+• media.play / media.pause / media.next
+• run_command (command: string)
+Always execute commands enthusiastically and provide clear, natural responses."""
 
     private val executor = Executors.newCachedThreadPool()
 
@@ -52,13 +71,12 @@ object GeminiCloudLLM {
     }
 
     /**
-     * Queries Google Gemini API asynchronously.
-     * If the API key is missing or fails, attempts AGY server fallback.
+     * Executes prompt via Cloud LLM with full command-execution tool parsing.
      */
     fun generate(
         context: Context,
         prompt: String,
-        systemInstruction: String = "You are JARVIS, a helpful, intelligent personal AI companion. Keep answers clear, direct, and concise (under 3-4 sentences when possible), suitable for natural spoken voice dialogue. Do not use Markdown formatting or symbols like asterisks in your responses.",
+        systemInstruction: String = DEFAULT_SYSTEM_INSTRUCTION,
         onChunk: ((String) -> Unit)? = null,
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
@@ -67,73 +85,106 @@ object GeminiCloudLLM {
         val model = getModel(context)
 
         executor.execute {
-            // If Gemini API Key is configured, try direct cloud API for lowest latency
+            // 1. Direct Google Gemini API call
             if (apiKey.isNotEmpty()) {
                 val directResult = queryGeminiApi(apiKey, model, prompt, systemInstruction)
                 if (directResult.isSuccess) {
                     val rawText = directResult.getOrNull() ?: ""
-                    val cleaned = cleanForSpeech(rawText)
-                    if (onChunk != null) {
-                        val words = cleaned.split(" ")
-                        for (w in words) {
-                            onChunk("$w ")
-                            try { Thread.sleep(12) } catch (_: Exception) {}
-                        }
-                    }
+                    val executedText = handleEmbeddedCommands(context, rawText)
+                    val cleaned = cleanForSpeech(executedText)
+                    streamOutput(cleaned, onChunk)
                     onSuccess(cleaned)
                     return@execute
                 } else {
-                    Log.w(TAG, "Gemini API call failed: ${directResult.exceptionOrNull()?.message}, falling back to AGY CLI...")
+                    Log.w(TAG, "Gemini API call failed: ${directResult.exceptionOrNull()?.message}, falling back to AGY...")
                 }
             }
 
-            // Fallback / Autonomous Mode: Execute via AGY CLI directly (no API key required)
-            Log.i(TAG, "Executing via AGY CLI in Ubuntu proot...")
-            val agyRes = com.pr4nav.jarvis.Shell.agy(prompt, timeoutMs = 45_000)
+            // 2. Autonomous AGY CLI in PRoot Ubuntu (No API key needed)
+            Log.i(TAG, "Executing via AGY CLI...")
+            val agyRes = Shell.agy(prompt, timeoutMs = 45_000)
             if (agyRes.rc == 0 && agyRes.out.isNotBlank()) {
-                val cleaned = cleanForSpeech(agyRes.out)
-                if (onChunk != null) {
-                    val words = cleaned.split(" ")
-                    for (w in words) {
-                        onChunk("$w ")
-                        try { Thread.sleep(12) } catch (_: Exception) {}
-                    }
-                }
+                val executedText = handleEmbeddedCommands(context, agyRes.out)
+                val cleaned = cleanForSpeech(executedText)
+                streamOutput(cleaned, onChunk)
                 onSuccess(cleaned)
                 return@execute
             }
 
-            // Secondary Fallback: Check if AGY daemon is active on port 5050
+            // 3. Fallback to AGY Daemon on port 5050
             queryAgyFallback(prompt,
                 onSuccess = { agyResponse ->
-                    val cleaned = cleanForSpeech(agyResponse)
-                    if (onChunk != null) {
-                        val words = cleaned.split(" ")
-                        for (w in words) {
-                            onChunk("$w ")
-                            try { Thread.sleep(12) } catch (_: Exception) {}
-                        }
-                    }
+                    val executedText = handleEmbeddedCommands(context, agyResponse)
+                    val cleaned = cleanForSpeech(executedText)
+                    streamOutput(cleaned, onChunk)
                     onSuccess(cleaned)
                 },
                 onError = { agyErr ->
                     if (agyRes.out.isNotBlank()) {
-                        val cleaned = cleanForSpeech(agyRes.out)
-                        if (onChunk != null) {
-                            val words = cleaned.split(" ")
-                            for (w in words) {
-                                onChunk("$w ")
-                                try { Thread.sleep(12) } catch (_: Exception) {}
-                            }
-                        }
+                        val executedText = handleEmbeddedCommands(context, agyRes.out)
+                        val cleaned = cleanForSpeech(executedText)
+                        streamOutput(cleaned, onChunk)
                         onSuccess(cleaned)
                     } else {
                         val finalErr = if (agyRes.err.isNotBlank()) agyRes.err else agyErr
-                        onError("AGY intelligence engine unavailable: $finalErr")
+                        onError("Cloud & AGY engines unavailable: $finalErr")
                     }
                 }
             )
         }
+    }
+
+    private fun streamOutput(text: String, onChunk: ((String) -> Unit)?) {
+        if (onChunk != null) {
+            val words = text.split(" ")
+            for (w in words) {
+                onChunk("$w ")
+                try { Thread.sleep(12) } catch (_: Exception) {}
+            }
+        }
+    }
+
+    /**
+     * Inspects Cloud LLM response for executable shell commands or JSON action blocks.
+     * Executes them and appends execution results.
+     */
+    fun handleEmbeddedCommands(context: Context, rawText: String): String {
+        CanonicalToolRegistry.init(context)
+        var resultText = rawText
+
+        // Check for ```command ... ``` blocks
+        val cmdRegex = Regex("```(?:command|bash|sh)?\\s*\\n([\\s\\S]*?)\\n```")
+        val cmdMatch = cmdRegex.find(rawText)
+        if (cmdMatch != null) {
+            val cmd = cmdMatch.groupValues[1].trim()
+            if (cmd.isNotBlank()) {
+                Log.i(TAG, "Executing Cloud LLM shell command: $cmd")
+                val shellRes = Shell.root(cmd, timeoutMs = 15_000)
+                val out = if (shellRes.out.isNotBlank()) shellRes.out.trim() else if (shellRes.err.isNotBlank()) shellRes.err.trim() else "Command executed successfully."
+                resultText = rawText.replace(cmdMatch.value, "").trim() + "\n\nExecution Result:\n$out"
+            }
+        }
+
+        // Check for ```action ... ``` JSON tool blocks
+        val actionRegex = Regex("```action\\s*\\n([\\s\\S]*?)\\n```")
+        val actionMatch = actionRegex.find(rawText)
+        if (actionMatch != null) {
+            try {
+                val json = JSONObject(actionMatch.groupValues[1].trim())
+                val intent = json.optString("intent", "")
+                val args = json.optJSONObject("arguments") ?: JSONObject()
+                if (intent.isNotBlank()) {
+                    Log.i(TAG, "Executing Cloud LLM action: $intent with args: $args")
+                    val toolRes = CanonicalToolRegistry.execute(context, intent, args)
+                    val out = if (toolRes.success) "Executed $intent successfully." else "Action result: ${toolRes.error?.message ?: toolRes.status}"
+                    resultText = rawText.replace(actionMatch.value, "").trim() + "\n\n$out"
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed parsing action block: ${e.message}")
+            }
+        }
+
+        return resultText
     }
 
     /**
@@ -158,7 +209,6 @@ object GeminiCloudLLM {
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
             }
 
-            // Build request payload
             val root = JSONObject()
             
             // System instructions
@@ -182,7 +232,7 @@ object GeminiCloudLLM {
             // Generation config
             val genConfig = JSONObject().apply {
                 put("temperature", 0.7)
-                put("maxOutputTokens", 512)
+                put("maxOutputTokens", 1024)
             }
             root.put("generationConfig", genConfig)
 
@@ -219,9 +269,6 @@ object GeminiCloudLLM {
         }
     }
 
-    /**
-     * Fallback to local AGY Server if running.
-     */
     private fun queryAgyFallback(
         prompt: String,
         onSuccess: (String) -> Unit,
@@ -258,7 +305,6 @@ object GeminiCloudLLM {
 
     /**
      * Cleans text to be natural when spoken via Text-To-Speech (TTS).
-     * Removes asterisks, Markdown headers, code block delimiters, and URLs.
      */
     fun cleanForSpeech(raw: String): String {
         val filteredLines = raw.lines().filterNot { line ->

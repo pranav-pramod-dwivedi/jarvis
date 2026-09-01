@@ -78,18 +78,18 @@ class ModelHubActivity : AppCompatActivity() {
         }
 
         btnDownloadQwen.setOnClickListener {
-            startQwenDownload()
+            val deleted = com.pr4nav.jarvis.llm.LocalModelManager.deleteAllLocalModels(this)
+            Toast.makeText(this, "Purged $deleted local model files from storage.", Toast.LENGTH_SHORT).show()
+            refreshStatus()
         }
 
         btnVerifyQwen.setOnClickListener {
-            verifyAndTestQwen()
+            verifyAndTestCloud()
         }
 
         btnDownloadAll.setOnClickListener {
             startDownload(ModelDownloadManager.MODEL_WAKEWORD) {
-                startDownload(ModelDownloadManager.MODEL_KOKORO_TTS) {
-                    startQwenDownload()
-                }
+                startDownload(ModelDownloadManager.MODEL_KOKORO_TTS)
             }
         }
 
@@ -139,26 +139,29 @@ class ModelHubActivity : AppCompatActivity() {
         )
     }
 
-    private fun verifyAndTestQwen() {
-        badgeQwen.text = "VERIFYING…"
+    private fun verifyAndTestCloud() {
+        badgeQwen.text = "TESTING CLOUD…"
         badgeQwen.setTextColor(Color.parseColor("#38BDF8"))
-        kotlin.concurrent.thread {
-            val activeModelId = com.pr4nav.jarvis.llm.LocalModelManager.getActiveModelId(this)
-            val integrity = com.pr4nav.jarvis.llm.LocalModelManager.checkFileIntegrity(this, activeModelId)
-            mainHandler.post {
-                if (integrity.isReady) {
-                    badgeQwen.text = "READY ✓"
+        com.pr4nav.jarvis.llm.GeminiCloudLLM.generate(
+            context = this,
+            prompt = "What is the status of the system?",
+            onSuccess = { res ->
+                mainHandler.post {
+                    badgeQwen.text = "ONLINE ✓"
                     badgeQwen.setTextColor(Color.parseColor("#10B981"))
-                    txtQwenDetails.text = "Path: ${integrity.statusText}\nSHA256: ${integrity.sha256.take(16)}..."
-                    Toast.makeText(this, "GGUF integrity verified! Ready for on-device inference.", Toast.LENGTH_SHORT).show()
-                } else {
-                    badgeQwen.text = "NOT READY"
-                    badgeQwen.setTextColor(Color.parseColor("#EF4444"))
-                    txtQwenDetails.text = "Status: ${integrity.statusText}"
-                    Toast.makeText(this, "Model not ready: ${integrity.statusText}", Toast.LENGTH_LONG).show()
+                    txtQwenDetails.text = "Cloud Response:\n$res"
+                    Toast.makeText(this, "Cloud LLM online and operational!", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onError = { err ->
+                mainHandler.post {
+                    badgeQwen.text = "STANDBY"
+                    badgeQwen.setTextColor(Color.parseColor("#F59E0B"))
+                    txtQwenDetails.text = "Autonomous Mode: $err"
+                    Toast.makeText(this, "Cloud: $err", Toast.LENGTH_SHORT).show()
                 }
             }
-        }
+        )
     }
 
     private fun startDownload(modelId: String, onDone: (() -> Unit)? = null) {
@@ -234,20 +237,14 @@ class ModelHubActivity : AppCompatActivity() {
             txtKokoroSize.text = "Required size: ~98 MB"
         }
 
-        // Qwen GGUF status
-        val activeModelId = com.pr4nav.jarvis.llm.LocalModelManager.getActiveModelId(this)
-        val qwenIntegrity = com.pr4nav.jarvis.llm.LocalModelManager.checkFileIntegrity(this, activeModelId)
-        if (qwenIntegrity.isReady) {
-            badgeQwen.text = "INSTALLED ✓"
-            badgeQwen.setTextColor(Color.parseColor("#10B981"))
-            btnDownloadQwen.text = "Reinstall"
-            txtQwenDetails.text = "File: $activeModelId.gguf · Size: %.1f MB".format(qwenIntegrity.sizeBytes / (1024.0 * 1024.0))
-        } else {
-            badgeQwen.text = "NOT INSTALLED"
-            badgeQwen.setTextColor(Color.parseColor("#EF4444"))
-            btnDownloadQwen.text = "Download"
-            txtQwenDetails.text = "Status: ${qwenIntegrity.statusText}"
-        }
+        // Cloud LLM & Storage status
+        val cloudConfigured = com.pr4nav.jarvis.llm.GeminiCloudLLM.isConfigured(this)
+        val cloudModel = com.pr4nav.jarvis.llm.GeminiCloudLLM.getModel(this)
+        badgeQwen.text = if (cloudConfigured) "CONFIGURED ✓" else "CLOUD MANAGED"
+        badgeQwen.setTextColor(Color.parseColor(if (cloudConfigured) "#10B981" else "#38BDF8"))
+        btnDownloadQwen.text = "Delete Local Models"
+        btnVerifyQwen.text = "Test Cloud"
+        txtQwenDetails.text = "Cloud Model: $cloudModel · Direct Command Access: ENABLED"
     }
 
     override fun onDestroy() {

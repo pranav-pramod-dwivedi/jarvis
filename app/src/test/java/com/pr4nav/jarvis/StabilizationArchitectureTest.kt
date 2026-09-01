@@ -160,20 +160,20 @@ class StabilizationArchitectureTest {
     @Test
     fun testEngineIdentityIntegrity() {
         val meta = com.pr4nav.jarvis.engine.EngineMetadata(
-            requestedEngine = com.pr4nav.jarvis.engine.EngineType.QWEN_LOCAL,
-            actualEngine = com.pr4nav.jarvis.engine.EngineType.QWEN_LOCAL,
-            provider = "local_on_device",
-            runtimeBackend = "Llama.cpp GGUF / ONNX INT8 Local Runtime",
-            modelPath = "/data/data/com.pr4nav.jarvis/files/models/qwen3.5-2b.gguf",
-            modelFilename = "qwen3.5-2b.gguf",
-            modelHashSha256 = "FILE_NOT_FOUND",
-            tokenizer = "Qwen2.5-BPE-Tokenizer",
-            isModelLoaded = false
+            requestedEngine = com.pr4nav.jarvis.engine.EngineType.CLOUD_LLM,
+            actualEngine = com.pr4nav.jarvis.engine.EngineType.CLOUD_LLM,
+            provider = "google_cloud",
+            runtimeBackend = "Gemini 2.0 Flash HTTPS API",
+            modelPath = "https://generativelanguage.googleapis.com",
+            modelFilename = "gemini-2.0-flash",
+            modelHashSha256 = "CLOUD_MANAGED",
+            tokenizer = "Gemini-BPE-Tokenizer",
+            isModelLoaded = true
         )
         assertTrue(meta.isRoutingIntegrityValid)
         val json = meta.toJsonObject()
-        assertEquals("QWEN_LOCAL", json.getString("requested_engine"))
-        assertEquals("QWEN_LOCAL", json.getString("actual_engine"))
+        assertEquals("CLOUD_LLM", json.getString("requested_engine"))
+        assertEquals("CLOUD_LLM", json.getString("actual_engine"))
         assertTrue(json.getBoolean("routing_integrity_valid"))
 
         // Mismatched engine identity
