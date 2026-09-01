@@ -204,8 +204,11 @@ Keep answers concise, direct, and helpful."""
         messages.put(JSONObject().put("role", "user").put("content", userPrompt))
 
         var finalAnswer = ""
+        val modelName = fetchLlamaModelName(baseUrl) ?: "lmstudio-community/Qwen3.5-2B-GGUF:Q4_K_M"
+
         for (iteration in 1..4) {
             val payload = JSONObject().apply {
+                put("model", modelName)
                 put("messages", messages)
                 put("temperature", 0.4)
                 put("max_tokens", 512)
@@ -218,8 +221,8 @@ Keep answers concise, direct, and helpful."""
                 val url = URL(endpoint)
                 conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
-                    connectTimeout = 4_000
-                    readTimeout = 45_000
+                    connectTimeout = 8_000
+                    readTimeout = 90_000
                     doOutput = true
                     doInput = true
                     setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -232,6 +235,8 @@ Keep answers concise, direct, and helpful."""
 
                 val code = conn.responseCode
                 if (code !in 200..299) {
+                    val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $code"
+                    Log.w(TAG, "llama serve returned $code: $err")
                     return null
                 }
 
@@ -242,7 +247,8 @@ Keep answers concise, direct, and helpful."""
                     val msgObj = choices.getJSONObject(0).optJSONObject("message")
                     replyContent = msgObj?.optString("content", "")?.trim() ?: ""
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.w(TAG, "llama serve request failed: ${e.message}")
                 return null
             } finally {
                 conn?.disconnect()
@@ -311,6 +317,32 @@ Keep answers concise, direct, and helpful."""
         val mdMatcher = mdPattern.matcher(text)
         if (mdMatcher.find()) {
             return mdMatcher.group(1)
+        }
+        return null
+    }
+
+    private fun fetchLlamaModelName(baseUrl: String): String? {
+        val endpoint = "${baseUrl.rstrip('/')}/v1/models"
+        var conn: HttpURLConnection? = null
+        try {
+            val url = URL(endpoint)
+            conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 3_000
+                readTimeout = 5_000
+            }
+            if (conn.responseCode in 200..299) {
+                val raw = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+                val json = JSONObject(raw)
+                val data = json.optJSONArray("data")
+                if (data != null && data.length() > 0) {
+                    val m = data.getJSONObject(0).optString("id", "")
+                    if (m.isNotBlank()) return m
+                }
+            }
+        } catch (_: Exception) {}
+        finally {
+            conn?.disconnect()
         }
         return null
     }
