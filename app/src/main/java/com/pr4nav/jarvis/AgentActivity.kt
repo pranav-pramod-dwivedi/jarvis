@@ -85,6 +85,10 @@ class AgentActivity : AppCompatActivity() {
             startVoiceListening()
         }
 
+        agentCtx.setOnClickListener {
+            showModeSelectorDialog()
+        }
+
         updateCtx()
         handleWakeWordIntent(intent)
     }
@@ -190,8 +194,50 @@ class AgentActivity : AppCompatActivity() {
     }
 
     private fun updateCtx() {
+        val mode = com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.getAgentMode(this)
         val termuxState = if (Shell.termuxReachable()) "UP" else "DOWN"
-        agentCtx.text = "cwd: ${SessionState.dir} · storage: ${Fs.accessLevel} · termux: $termuxState"
+        agentCtx.text = "Mode: ${mode.displayName} (Tap to change) · termux: $termuxState"
+    }
+
+    private fun showModeSelectorDialog() {
+        val modes = com.pr4nav.jarvis.router.AgentExecutionMode.values()
+        val items = modes.map { "${it.displayName}\n${it.description}" }.toTypedArray()
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Select Intelligence & Router Mode")
+            .setItems(items) { _, which ->
+                val chosen = modes[which]
+                com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.setAgentMode(this, chosen)
+                updateCtx()
+                Toast.makeText(this, "Switched to ${chosen.displayName}", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Agent URL") { _, _ ->
+                showConfigureQwenUrlDialog()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun showConfigureQwenUrlDialog() {
+        val currentUrl = com.pr4nav.jarvis.llm.QwenAgentClient.getAgentUrl(this)
+        val edit = EditText(this).apply {
+            setText(currentUrl)
+            hint = "http://127.0.0.1:8081"
+            setPadding(40, 30, 40, 30)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Qwen Python Agent Server URL")
+            .setMessage("Set endpoint running `python3 server/agent.py` (Default: http://127.0.0.1:8081)")
+            .setView(edit)
+            .setPositiveButton("Save") { _, _ ->
+                val newUrl = edit.text.toString().trim()
+                if (newUrl.isNotBlank()) {
+                    com.pr4nav.jarvis.llm.QwenAgentClient.setAgentUrl(this, newUrl)
+                    Toast.makeText(this, "Saved: $newUrl", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun setupQuickNavTabs() {

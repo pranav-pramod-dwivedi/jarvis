@@ -97,14 +97,52 @@ class ConnectedServicesActivity : AppCompatActivity() {
         val btnDownloadLocalAi = findViewById<Button>(R.id.btn_download_local_ai)
         val btnTestLocalAi = findViewById<Button>(R.id.btn_test_local_ai)
 
-        labelLocalAi.text = "Architecture: ⚡ Needle 2 Reflex (On-Device) + ☁️ Gemini Cloud LLM"
-        btnDownloadLocalAi.text = "DELETE ALL STORED LOCAL MODELS"
+        val activeMode = com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.getAgentMode(this)
+        labelLocalAi.text = "Active Mode: ${activeMode.displayName} (Tap to change)"
+        btnDownloadLocalAi.text = "SWITCH ROUTER MODE"
         btnTestLocalAi.text = "TEST CLOUD COMMAND EXECUTION"
 
+        fun refreshModeLabel() {
+            val m = com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.getAgentMode(this)
+            labelLocalAi.text = "Active Mode: ${m.displayName}\n${m.description}"
+        }
+        refreshModeLabel()
+
         btnDownloadLocalAi.setOnClickListener {
-            val deleted = com.pr4nav.jarvis.llm.LocalModelManager.deleteAllLocalModels(this)
-            Toast.makeText(this, "Purged $deleted local model files from storage.", Toast.LENGTH_SHORT).show()
-            labelLocalAi.text = "Storage: All local models deleted. Using Needle 2 + Cloud LLM."
+            val modes = com.pr4nav.jarvis.router.AgentExecutionMode.values()
+            val items = modes.map { "${it.displayName}\n${it.description}" }.toTypedArray()
+
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Select Intelligence & Router Mode")
+                .setItems(items) { _, which ->
+                    val chosen = modes[which]
+                    com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.setAgentMode(this, chosen)
+                    refreshModeLabel()
+                    Toast.makeText(this, "Active Mode: ${chosen.displayName}", Toast.LENGTH_SHORT).show()
+                }
+                .setNeutralButton("Agent URL") { _, _ ->
+                    val currentUrl = com.pr4nav.jarvis.llm.QwenAgentClient.getAgentUrl(this)
+                    val edit = EditText(this).apply {
+                        setText(currentUrl)
+                        hint = "http://127.0.0.1:8081"
+                        setPadding(40, 30, 40, 30)
+                    }
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("Qwen Python Agent Server URL")
+                        .setMessage("Endpoint running `python3 server/agent.py` (Default: http://127.0.0.1:8081)")
+                        .setView(edit)
+                        .setPositiveButton("Save") { _, _ ->
+                            val newUrl = edit.text.toString().trim()
+                            if (newUrl.isNotBlank()) {
+                                com.pr4nav.jarvis.llm.QwenAgentClient.setAgentUrl(this, newUrl)
+                                Toast.makeText(this, "Saved: $newUrl", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
 
         btnTestLocalAi.setOnClickListener {

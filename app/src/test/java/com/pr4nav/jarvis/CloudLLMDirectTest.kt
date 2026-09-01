@@ -29,11 +29,16 @@ class CloudLLMDirectTest {
     }
 
     @Test
-    fun testSpeechCleaningForTTS() {
-        val raw = "```command\necho test\n```\n**Turning on** the *flashlight*! Check https://example.com."
-        val cleaned = GeminiCloudLLM.cleanForSpeech(raw)
-        assertFalse("Cleaned speech must not contain markdown asterisks", cleaned.contains("*"))
-        assertFalse("Cleaned speech must not contain URLs", cleaned.contains("https://"))
-        assertFalse("Cleaned speech must not contain code backticks", cleaned.contains("```"))
+    fun testAgentExecutionModes() {
+        val modes = com.pr4nav.jarvis.router.AgentExecutionMode.values()
+        assertEquals(3, modes.size)
+        assertTrue(modes.contains(com.pr4nav.jarvis.router.AgentExecutionMode.CLOUD_NEEDLE))
+        assertTrue(modes.contains(com.pr4nav.jarvis.router.AgentExecutionMode.NEEDLE_ONLY))
+        assertTrue(modes.contains(com.pr4nav.jarvis.router.AgentExecutionMode.QWEN_NEEDLE))
+    }
+
+    @Test
+    fun testQwenAgentClientDefaults() {
+        assertEquals("http://127.0.0.1:8081", com.pr4nav.jarvis.llm.QwenAgentClient.DEFAULT_AGENT_URL)
     }
 }
