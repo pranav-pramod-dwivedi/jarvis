@@ -39,6 +39,6 @@ class CloudLLMDirectTest {
 
     @Test
     fun testQwenAgentClientDefaults() {
-        assertEquals("http://127.0.0.1:8081", com.pr4nav.jarvis.llm.QwenAgentClient.DEFAULT_AGENT_URL)
+        assertEquals("http://127.0.0.1:8080", com.pr4nav.jarvis.llm.QwenAgentClient.DEFAULT_AGENT_URL)
     }
 }
