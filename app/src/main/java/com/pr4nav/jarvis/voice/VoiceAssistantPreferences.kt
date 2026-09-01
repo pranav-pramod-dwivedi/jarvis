@@ -19,6 +19,7 @@ object VoiceAssistantPreferences {
     const val KEY_BARGE_IN_ENABLED = "barge_in_enabled"
     const val KEY_START_ON_BOOT = "start_on_boot"
     const val KEY_WAKE_CONFIDENCE = "wake_confidence_threshold" // default 0.50f
+    const val KEY_USE_KOKORO_TTS = "use_kokoro_tts" // default false (Android Native HD TTS is clean & crystal clear)
 
     fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -71,6 +72,12 @@ object VoiceAssistantPreferences {
 
     fun setLanguage(context: Context, lang: String) =
         getPrefs(context).edit().putString(KEY_LANGUAGE, lang).apply()
+
+    fun isKokoroTtsEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_USE_KOKORO_TTS, false)
+
+    fun setKokoroTtsEnabled(context: Context, enabled: Boolean) =
+        getPrefs(context).edit().putBoolean(KEY_USE_KOKORO_TTS, enabled).apply()
 
     /**
      * Checks if the app is exempt from battery optimizations.

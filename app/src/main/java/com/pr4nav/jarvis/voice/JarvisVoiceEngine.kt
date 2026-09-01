@@ -56,34 +56,44 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
             stopSpeaking()
         }
 
-        // 1. Prioritize on-device Neural Kokoro-82M INT8 ONNX TTS
-        if (KokoroTtsEngine.isModelInstalled(context)) {
-            Log.i(TAG, "Speaking via Neural Kokoro-82M INT8 ONNX Engine: \"$text\"")
-            kokoroTts.speak(text, speed = 1.0f, interrupt = interrupt, onDone = onDone)
-            return
-        }
-
-        // 2. Fallback to Android System TextToSpeech
-        if (!isTtsReady || tts == null) {
+        val cleanText = com.pr4nav.jarvis.response.UserResponseSanitizer.sanitizeForSpeech(text)
+        if (cleanText.isBlank()) {
             onDone?.invoke()
             return
         }
 
-        val utteranceId = "JARVIS_TTS_${System.currentTimeMillis()}"
-        if (onDone != null) {
-            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(id: String?) {}
-                override fun onDone(id: String?) {
-                    if (id == utteranceId) onDone()
-                }
-                @Deprecated("Deprecated in Java")
-                override fun onError(id: String?) {
-                    if (id == utteranceId) onDone()
-                }
-            })
+        // 1. Neural Kokoro-82M INT8 ONNX TTS (Only if user explicitly enabled in settings)
+        val useKokoro = VoiceAssistantPreferences.isKokoroTtsEnabled(context) && KokoroTtsEngine.isModelInstalled(context)
+        if (useKokoro) {
+            Log.i(TAG, "Speaking via Neural Kokoro-82M INT8 ONNX Engine: \"$cleanText\"")
+            kokoroTts.speak(cleanText, speed = 1.0f, interrupt = interrupt, onDone = onDone)
+            return
         }
 
-        tts?.speak(text, if (interrupt) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, utteranceId)
+        // 2. Android High-Definition Native TextToSpeech (Clean, Natural, Crystal-Clear Voice)
+        if (!isTtsReady || tts == null) {
+            Log.w(TAG, "Android TTS engine not ready yet")
+            onDone?.invoke()
+            return
+        }
+
+        val speechRate = VoiceAssistantPreferences.getSpeechRate(context)
+        tts?.setSpeechRate(speechRate)
+        tts?.setPitch(1.0f)
+
+        val utteranceId = "JARVIS_TTS_${System.currentTimeMillis()}"
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(id: String?) {}
+            override fun onDone(id: String?) {
+                if (id == utteranceId) onDone?.invoke()
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(id: String?) {
+                if (id == utteranceId) onDone?.invoke()
+            }
+        })
+
+        tts?.speak(cleanText, if (interrupt) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, utteranceId)
     }
 
     fun stopSpeaking() {
