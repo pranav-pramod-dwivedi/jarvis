@@ -211,7 +211,7 @@ Keep answers concise, direct, and helpful."""
                 put("model", modelName)
                 put("messages", messages)
                 put("temperature", 0.4)
-                put("max_tokens", 512)
+                put("max_tokens", 1024)
                 put("stream", false)
             }
 
@@ -303,20 +303,35 @@ Keep answers concise, direct, and helpful."""
         if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
             try {
                 val j = JSONObject(trimmed)
-                if (j.optString("tool") == "shell") {
-                    return j.optString("command")
+                if (j.has("command")) {
+                    return j.getString("command")
                 }
             } catch (_: Exception) {}
         }
-        val pattern = Pattern.compile("\\{\\s*\"tool\"\\s*:\\s*\"shell\"\\s*,\\s*\"command\"\\s*:\\s*\"(.*?)\"\\s*\\}", Pattern.DOTALL)
+        val pattern = Pattern.compile("\\{\\s*\"(?:tool|action)\"\\s*:\\s*\"shell\"\\s*,\\s*\"command\"\\s*:\\s*\"(.*?)\"\\s*\\}", Pattern.DOTALL)
         val matcher = pattern.matcher(text)
         if (matcher.find()) {
             return matcher.group(1)
         }
-        val mdPattern = Pattern.compile("```(?:json)?\\s*\\{\\s*\"tool\"\\s*:\\s*\"shell\"\\s*,\\s*\"command\"\\s*:\\s*\"(.*?)\"\\s*\\}\\s*```", Pattern.DOTALL)
+        val cmdPattern = Pattern.compile("\\{\\s*\"command\"\\s*:\\s*\"(.*?)\"\\s*\\}", Pattern.DOTALL)
+        val cmdMatcher = cmdPattern.matcher(text)
+        if (cmdMatcher.find()) {
+            return cmdMatcher.group(1)
+        }
+        val mdPattern = Pattern.compile("```(?:json)?\\s*\\{\\s*\"(?:tool|action)\"\\s*:\\s*\"shell\"\\s*,\\s*\"command\"\\s*:\\s*\"(.*?)\"\\s*\\}\\s*```", Pattern.DOTALL)
         val mdMatcher = mdPattern.matcher(text)
         if (mdMatcher.find()) {
             return mdMatcher.group(1)
+        }
+        val codeBlockPattern = Pattern.compile("```(?:command|bash|sh|shell)\\s*([\\s\\S]*?)\\s*```", Pattern.DOTALL)
+        val codeBlockMatcher = codeBlockPattern.matcher(text)
+        if (codeBlockMatcher.find()) {
+            return codeBlockMatcher.group(1)?.trim()
+        }
+        val funcPattern = Pattern.compile("(?:shell|run_command)\\s*\\(\\s*[\"'](.*?)[\"']\\s*\\)", Pattern.DOTALL)
+        val funcMatcher = funcPattern.matcher(text)
+        if (funcMatcher.find()) {
+            return funcMatcher.group(1)?.trim()
         }
         return null
     }
