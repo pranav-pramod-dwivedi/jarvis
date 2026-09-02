@@ -145,9 +145,10 @@ class DiagnosticsActivity : AppCompatActivity() {
             sb.append(line("✓", "Hardware Battery API", "$batPct% (${if (charging) "Charging" else "Discharging"})"))
             sb.append(line("✓", "Hardware Torch API", "READY"))
 
-            // shell
-            val local = Shell.local("echo hi")
-            sb.append(line(if (local.out.contains("hi")) "✓" else "✗", "Local shell", "rc=${local.rc}"))
+            // Router & Diagnostics Log
+            sb.append("\n--- JARVIS MULTI-LAYER ROUTER ---\n")
+            sb.append(com.pr4nav.jarvis.router.RouterDiagnostics.toFullDiagnosticsReport())
+            sb.append("---------------------------------\n")
 
             runOnUiThread { view.text = sb.toString() }
         }

@@ -37,8 +37,10 @@ object VoiceAssistantPreferences {
         }
     }
 
-    fun getWakeConfidenceThreshold(context: Context): Float =
-        getPrefs(context).getFloat(KEY_WAKE_CONFIDENCE, 0.30f)
+    fun getWakeConfidenceThreshold(context: Context): Float {
+        val stored = getPrefs(context).getFloat(KEY_WAKE_CONFIDENCE, 0.22f)
+        return if (stored > 0.24f) 0.22f else stored
+    }
 
     fun setWakeConfidenceThreshold(context: Context, threshold: Float) =
         getPrefs(context).edit().putFloat(KEY_WAKE_CONFIDENCE, threshold).apply()

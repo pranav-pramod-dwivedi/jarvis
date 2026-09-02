@@ -50,6 +50,8 @@ object CanonicalToolRegistry {
     }
 
     private fun registerDefaults() {
+        SiriAssistantToolCatalog.registerAll(::register)
+
         // system.torch (and aliases: torch, flashlight_on, flashlight_off, set_flashlight)
         val torchDef = CanonicalToolDef(
             name = "system.torch",
@@ -209,11 +211,13 @@ object CanonicalToolRegistry {
                     try {
                         intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                         ctx.startActivity(intent)
+                        val friendlyLabel = target?.label ?: com.pr4nav.jarvis.response.AnswerSynthesizer.cleanFriendlyAppName(targetPkg)
                         ToolResult.ok(
                             JSONObject().apply {
                                 put("action", "APP_LAUNCHED")
-                                put("label", target?.label ?: targetPkg)
+                                put("label", friendlyLabel)
                                 put("package", targetPkg)
+                                put("message", "Opening $friendlyLabel.")
                             }
                         )
                     } catch (e: Exception) {
@@ -349,6 +353,10 @@ object CanonicalToolRegistry {
                     }
                     is com.pr4nav.jarvis.capabilities.ContactResolutionResult.Ambiguous -> {
                         val names = resolution.matches.map { "${it.name} (${it.number})" }
+                        val candidates = resolution.matches.mapIndexed { idx, c ->
+                            com.pr4nav.jarvis.context.CandidateItem(idx + 1, c.name, c.number)
+                        }
+                        com.pr4nav.jarvis.context.ContextManager.setCandidateList("call_contact", candidates)
                         return@CanonicalToolDef ToolResult.ambiguous(
                             "Multiple contacts found for '$target'",
                             names
@@ -638,6 +646,10 @@ object CanonicalToolRegistry {
             execute = { _, args ->
                 val cmd = args.optString("command").trim()
                 if (cmd.isEmpty()) return@CanonicalToolDef ToolResult.invalidArguments("Command cannot be empty")
+                val guardErr = com.pr4nav.jarvis.CmdGuard.check(cmd)
+                if (guardErr != null) {
+                    return@CanonicalToolDef ToolResult.failure("FORBIDDEN", "Command blocked by safety policy: $guardErr")
+                }
                 val inUbuntu = args.optBoolean("inUbuntu", true)
 
                 // Try Termux/Ubuntu execution first
@@ -719,6 +731,64 @@ object CanonicalToolRegistry {
                 if (res.success) ToolResult.ok(res.data ?: res.summary) else ToolResult.failure("WIFI_FAILED", res.summary)
             }
         ))
+
+        // system.bluetooth & set_bluetooth
+        val bluetoothDef = CanonicalToolDef(
+            name = "system.bluetooth",
+            description = "Turns the device Bluetooth on or off.",
+            argumentSchema = JSONObject().apply {
+                put("type", "object")
+                put("properties", JSONObject().apply {
+                    put("state", JSONObject().put("type", "boolean").put("description", "true to enable Bluetooth, false to disable"))
+                })
+                put("required", JSONArray().put("state"))
+            },
+            backend = ToolBackend.ANDROID_NATIVE,
+            defaultTimeoutMs = 5_000L,
+            execute = { ctx, args ->
+                val state = args.optBoolean("state", true)
+                try {
+                    val bm = ctx.getSystemService(android.bluetooth.BluetoothManager::class.java)
+                    val adapter = bm?.adapter
+                    if (adapter == null) {
+                        return@CanonicalToolDef ToolResult.notSupported("Bluetooth", "Device does not have Bluetooth hardware")
+                    }
+
+                    var success = false
+                    try {
+                        @Suppress("DEPRECATION")
+                        success = if (state) adapter.enable() else adapter.disable()
+                    } catch (_: SecurityException) {}
+
+                    if (!success) {
+                        val shRes = com.pr4nav.jarvis.Shell.root("cmd bluetooth ${if (state) "enable" else "disable"}")
+                        if (shRes.rc == 0) {
+                            success = true
+                        }
+                    }
+
+                    if (success) {
+                        ToolResult.ok(
+                            JSONObject().apply {
+                                put("action", if (state) "BLUETOOTH_ENABLED" else "BLUETOOTH_DISABLED")
+                                put("state", if (state) "ON" else "OFF")
+                                put("message", if (state) "Bluetooth enabled." else "Bluetooth disabled.")
+                            }
+                        )
+                    } else {
+                        val intent = android.content.Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        ctx.startActivity(intent)
+                        ToolResult.requiresUser("BLUETOOTH_SETTINGS_OPENED", "Opened Bluetooth settings to toggle state.")
+                    }
+                } catch (e: Exception) {
+                    ToolResult.failure("BT_ERROR", e.message ?: "Failed controlling Bluetooth")
+                }
+            }
+        )
+        register(bluetoothDef)
+        register(bluetoothDef.copy(name = "set_bluetooth"))
 
         // get_bluetooth
         register(CanonicalToolDef(
@@ -826,6 +896,21 @@ object CanonicalToolRegistry {
                 val action = args.optString("action")
                 val res = CapabilityRegistry.execute("device.settings", mapOf("action" to action), ctx)
                 if (res.success) ToolResult.ok(res.summary) else ToolResult.failure("PAGE_FAILED", res.summary)
+            }
+        ))
+
+        // jarvis_environment
+        register(CanonicalToolDef(
+            name = "jarvis_environment",
+            description = "Discovers real system environment, storage mounts, and toolchain state.",
+            argumentSchema = JSONObject().apply {
+                put("type", "object")
+                put("properties", JSONObject())
+            },
+            defaultTimeoutMs = 10_000L,
+            execute = { ctx, _ ->
+                val snap = com.pr4nav.jarvis.environment.JarvisEnvironment.getSnapshot(ctx, forceRefresh = true)
+                ToolResult.ok(snap.toJson())
             }
         ))
 

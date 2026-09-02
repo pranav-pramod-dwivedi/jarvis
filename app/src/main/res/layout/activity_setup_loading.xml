@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/setup_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:keepScreenOn="true">
+
+    <!-- Fullscreen Looping Video Rotated 90° (from Figma Design) -->
+    <FrameLayout
+        android:id="@+id/video_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center">
+
+        <androidx.media3.ui.PlayerView
+            android:id="@+id/setup_player_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
+
+    <!-- Bottom Left Text Overlay (from Figma Design) -->
+    <LinearLayout
+        android:id="@+id/bottom_text_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:orientation="vertical"
+        android:layout_marginStart="32dp"
+        android:layout_marginBottom="48dp"
+        android:elevation="8dp">
+
+        <com.pr4nav.jarvis.ui.MetallicShineTextView
+            android:id="@+id/tv_setup_shimmer_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/dm_sans"
+            android:text="Setting up for the first time..."
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:letterSpacing="-0.02" />
+
+        <TextView
+            android:id="@+id/tv_setup_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:fontFamily="@font/dm_sans"
+            android:text="Please wait, this will take a couple of seconds only"
+            android:textColor="#73FFFFFF"
+            android:textSize="11sp"
+            android:letterSpacing="0.01" />
+    </LinearLayout>
+</FrameLayout>

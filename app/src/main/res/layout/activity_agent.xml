@@ -348,6 +348,28 @@
                         android:textColor="#94A3B8"
                         android:textSize="11sp" />
                 </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_race_agy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_btn_action_pill"
+                    android:paddingHorizontal="10dp"
+                    android:text="⚡ Race AGY"
+                    android:textColor="#38BDF8"
+                    android:textSize="11sp" />
+
+                <Button
+                    android:id="@+id/btn_cancel_task"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_btn_action_pill"
+                    android:paddingHorizontal="10dp"
+                    android:text="✕ Cancel"
+                    android:textColor="#EF4444"
+                    android:textSize="11sp" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

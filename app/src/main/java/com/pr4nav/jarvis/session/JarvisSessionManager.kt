@@ -28,13 +28,13 @@ data class SessionMessage(
 
 data class JarvisSession(
     val id: String,
-    val title: String, // Named by Date and Time of creation ONLY (e.g. "01 Sep 2026, 01:36:15 AM")
+    var title: String,
     val type: SessionType,
     val createdAtMs: Long,
     var lastUsedMs: Long,
     val messages: MutableList<SessionMessage> = mutableListOf(),
     var workingDir: String = "/sdcard",
-    var modelUsed: String = "Qwen 2.5 / Gemini Flash"
+    var modelUsed: String = "Groq Compound Mini / AGY"
 )
 
 /**
@@ -239,7 +239,7 @@ object JarvisSessionManager {
         val type = try { SessionType.valueOf(typeStr) } catch (_: Exception) { SessionType.AGENT_CHAT }
         val lastUsed = obj.optLong("lastUsedMs", createdAt)
         val workingDir = obj.optString("workingDir", "/sdcard")
-        val modelUsed = obj.optString("modelUsed", "Qwen 2.5 / Gemini Flash")
+        val modelUsed = obj.optString("modelUsed", "Groq Compound Mini / AGY")
 
         val messages = ArrayList<SessionMessage>()
         val msgArr = obj.optJSONArray("messages")

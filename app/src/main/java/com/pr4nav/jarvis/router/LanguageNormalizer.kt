@@ -59,7 +59,7 @@ object LanguageNormalizer {
     )
 
     private val VOLUME_OBJECTS = listOf(
-        "volume", "awaaz", "sound", "media volume", "speaker", "phone volume", "mobile volume"
+        "volume", "awaaz", "sound", "media volume", "speaker", "phone volume", "mobile volume", "audio", "loud"
     )
 
     private val BRIGHTNESS_OBJECTS = listOf(
@@ -106,7 +106,7 @@ object LanguageNormalizer {
 
     private val INCREASE_ACTIONS = listOf(
         "increase", "turn up", "raise", "boost", "up", "badhao", "badha do", "badha de",
-        "badha", "tez karo", "tez kar", "tez", "high karo", "high kar", "high"
+        "badha", "tez karo", "tez kar", "tez", "high karo", "high kar", "high", "loud", "louder", "make it loud"
     )
 
     private val DECREASE_ACTIONS = listOf(
@@ -211,24 +211,9 @@ object LanguageNormalizer {
         // 1. FLASHLIGHT / TORCH
         val hasTorchObj = FLASHLIGHT_OBJECTS.any { cleaned.contains(it) }
         if (hasTorchObj && !cleaned.contains("screen light") && !cleaned.contains("display light")) {
-            val hasEnable = ENABLE_ACTIONS.any { cleaned.contains(it) }
             val hasDisable = DISABLE_ACTIONS.any { cleaned.contains(it) }
 
-            if (hasEnable && !hasDisable) {
-                val args = JSONObject().put("state", true)
-                val trace = NormalizationTrace(
-                    rawInput = raw,
-                    detectedLanguage = lang,
-                    normalizedText = "torch turn_on",
-                    matchedObject = "FLASHLIGHT",
-                    matchedAction = "ENABLE",
-                    targetTool = "system.torch",
-                    resolvedArgs = args,
-                    confidence = 1.0f,
-                    isDirectMatch = true
-                )
-                return NormalizedToolCall("system.torch", args, 1.0f, raw, trace)
-            } else if (hasDisable) {
+            if (hasDisable) {
                 val args = JSONObject().put("state", false)
                 val trace = NormalizationTrace(
                     rawInput = raw,
@@ -236,6 +221,20 @@ object LanguageNormalizer {
                     normalizedText = "torch turn_off",
                     matchedObject = "FLASHLIGHT",
                     matchedAction = "DISABLE",
+                    targetTool = "system.torch",
+                    resolvedArgs = args,
+                    confidence = 1.0f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("system.torch", args, 1.0f, raw, trace)
+            } else {
+                val args = JSONObject().put("state", true)
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "torch turn_on",
+                    matchedObject = "FLASHLIGHT",
+                    matchedAction = "ENABLE",
                     targetTool = "system.torch",
                     resolvedArgs = args,
                     confidence = 1.0f,
@@ -390,10 +389,57 @@ object LanguageNormalizer {
             return NormalizedToolCall("take_screenshot", args, 0.99f, raw, trace)
         }
 
-        // 7. BLUETOOTH (Query vs Settings)
+        // 7. BLUETOOTH (Enable, Disable, Settings, Query)
         val hasBtObj = BLUETOOTH_OBJECTS.any { cleaned.contains(it) }
         if (hasBtObj) {
-            if (cleaned.contains("settings") || cleaned.contains("setting") || cleaned.contains("kholo") || cleaned.contains("open")) {
+            val isQuery = raw.trim().startsWith("is ", ignoreCase = true) || raw.contains("?") ||
+                    cleaned.contains("status") || cleaned.contains("state") || cleaned.contains("kya") || cleaned.contains("check")
+            val hasEnable = ENABLE_ACTIONS.any { cleaned.contains(it) }
+            val hasDisable = DISABLE_ACTIONS.any { cleaned.contains(it) }
+
+            if (isQuery) {
+                val args = JSONObject()
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "bluetooth get_status",
+                    matchedObject = "BLUETOOTH",
+                    matchedAction = "QUERY",
+                    targetTool = "get_bluetooth",
+                    resolvedArgs = args,
+                    confidence = 0.98f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("get_bluetooth", args, 0.98f, raw, trace)
+            } else if (hasEnable && !hasDisable) {
+                val args = JSONObject().put("state", true)
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "bluetooth enable",
+                    matchedObject = "BLUETOOTH",
+                    matchedAction = "ENABLE",
+                    targetTool = "system.bluetooth",
+                    resolvedArgs = args,
+                    confidence = 0.99f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("system.bluetooth", args, 0.99f, raw, trace)
+            } else if (hasDisable) {
+                val args = JSONObject().put("state", false)
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "bluetooth disable",
+                    matchedObject = "BLUETOOTH",
+                    matchedAction = "DISABLE",
+                    targetTool = "system.bluetooth",
+                    resolvedArgs = args,
+                    confidence = 0.99f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("system.bluetooth", args, 0.99f, raw, trace)
+            } else if (cleaned.contains("settings") || cleaned.contains("setting") || cleaned.contains("kholo") || cleaned.contains("open")) {
                 val args = JSONObject().put("subpage", "bluetooth")
                 val trace = NormalizationTrace(
                     rawInput = raw,
@@ -459,6 +505,24 @@ object LanguageNormalizer {
             }
         }
 
+        // 8b. DEVELOPER SETTINGS
+        if (cleaned.contains("dev setting") || cleaned.contains("developer option") ||
+            cleaned.contains("developer setting") || cleaned == "open dev settings") {
+            val args = JSONObject().put("subpage", "developer")
+            val trace = NormalizationTrace(
+                rawInput = raw,
+                detectedLanguage = lang,
+                normalizedText = "settings open subpage=developer",
+                matchedObject = "SETTINGS",
+                matchedAction = "OPEN",
+                targetTool = "open_settings",
+                resolvedArgs = args,
+                confidence = 0.98f,
+                isDirectMatch = true
+            )
+            return NormalizedToolCall("open_settings", args, 0.98f, raw, trace)
+        }
+
         // 9. FILE OPERATIONS (Read / Delete / Open)
         if (cleaned.startsWith("read file ") || cleaned.startsWith("open file ") || cleaned.startsWith("file read ")) {
             val path = raw.substringAfter("file", "").trim().removePrefix("that").trim()
@@ -521,39 +585,39 @@ object LanguageNormalizer {
         val hasCloseKeyword = cleaned.startsWith("close ") || cleaned.startsWith("stop ") || cleaned.startsWith("kill ") ||
                 cleaned.startsWith("shut down ") || cleaned.endsWith(" band karo") || cleaned.endsWith(" band kar do") ||
                 cleaned.endsWith(" band kar") || cleaned.endsWith(" hatao") || cleaned.endsWith(" rok do") ||
-                cleaned.contains("band karo") || cleaned.contains("band kar")
-        if (hasCloseKeyword && !hasTorchObj && !hasVolObj && !hasBrightObj) {
-            val rawApp = cleaned
-                .removePrefix("close this app")
+                cleaned.endsWith(" roko") || cleaned.endsWith(" off karo") || cleaned.endsWith(" off kar")
+
+        if (hasCloseKeyword && !hasTorchObj && !hasVolObj && !hasBrightObj && !hasBatteryObj && !hasWifiObj && !hasBtObj) {
+            val app = cleaned
                 .removePrefix("close ")
                 .removePrefix("stop ")
                 .removePrefix("kill ")
                 .removePrefix("shut down ")
-                .removeSuffix(" app band karo")
-                .removeSuffix(" app band kar do")
-                .removeSuffix(" app band kar")
-                .removeSuffix(" app hatao")
-                .removeSuffix(" band kar do")
                 .removeSuffix(" band karo")
+                .removeSuffix(" band kar do")
                 .removeSuffix(" band kar")
                 .removeSuffix(" hatao")
                 .removeSuffix(" rok do")
-                .removeSuffix(" app")
+                .removeSuffix(" roko")
+                .removeSuffix(" off karo")
+                .removeSuffix(" off kar")
                 .trim()
-            val targetApp = if (rawApp.isBlank()) "Chrome" else normalizeAppName(rawApp)
-            val args = JSONObject().put("package", targetApp).put("app", targetApp)
-            val trace = NormalizationTrace(
-                rawInput = raw,
-                detectedLanguage = lang,
-                normalizedText = "app close name=$targetApp",
-                matchedObject = "APP",
-                matchedAction = "DISABLE",
-                targetTool = "close_app",
-                resolvedArgs = args,
-                confidence = 0.95f,
-                isDirectMatch = true
-            )
-            return NormalizedToolCall("close_app", args, 0.95f, raw, trace)
+            if (app.isNotBlank()) {
+                val targetApp = normalizeAppName(app)
+                val args = JSONObject().put("app", targetApp).put("package", targetApp)
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "app close name=$targetApp",
+                    matchedObject = "APP",
+                    matchedAction = "DISABLE",
+                    targetTool = "close_app",
+                    resolvedArgs = args,
+                    confidence = 0.95f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("close_app", args, 0.95f, raw, trace)
+            }
         }
 
         // 12. NAVIGATION / MAPS
@@ -623,12 +687,11 @@ object LanguageNormalizer {
                 .removeSuffix(" chala do")
                 .removeSuffix(" chala de")
                 .removeSuffix(" chalao")
-                .removeSuffix(" app")
                 .trim()
-            if (rawApp.isNotBlank() && rawApp.length > 1) {
-                // If it's a known app or short single-word app
-                if (knownApps.contains(rawApp.lowercase(Locale.ROOT)) || !rawApp.contains(" ")) {
-                    val app = normalizeAppName(rawApp)
+            val app = normalizeAppName(rawApp)
+            if (app.isNotBlank()) {
+                val isKnown = knownApps.contains(rawApp.lowercase(Locale.ROOT)) || !rawApp.contains(" ")
+                if (isKnown) {
                     val args = JSONObject().put("app", app).put("package", app)
                     val trace = NormalizationTrace(
                         rawInput = raw,
@@ -651,8 +714,8 @@ object LanguageNormalizer {
             cleaned.startsWith("phone ") || cleaned.startsWith("phone karo ") || cleaned.startsWith("phone lagao ") ||
             cleaned.contains("talk to ") || cleaned.contains("se connect karo") || cleaned.contains("connect karo ") ||
             cleaned.contains("se baat karni hai") || cleaned.contains("on call") || cleaned.contains("on phone") ||
-            cleaned.endsWith(" ko phone lagao") || cleaned.endsWith(" ko phone laga do") || cleaned.endsWith(" ko phone kar") ||
-            cleaned.endsWith(" ko call lagao") || cleaned.endsWith(" ko call karo") || cleaned.endsWith(" ko call kar")) {
+            cleaned.endsWith(" ko phone lagao") || cleaned.endsWith(" ko phone laga do") || cleaned.endsWith(" ko phone laga") || cleaned.endsWith(" ko phone kar") ||
+            cleaned.endsWith(" ko call lagao") || cleaned.endsWith(" ko call laga do") || cleaned.endsWith(" ko call laga") || cleaned.endsWith(" ko call karo") || cleaned.endsWith(" ko call kar")) {
             val contact = cleaned
                 .removePrefix("call ")
                 .removePrefix("dial ")
@@ -669,8 +732,11 @@ object LanguageNormalizer {
                 .removeSuffix(" se connect karo")
                 .removeSuffix(" ko phone lagao")
                 .removeSuffix(" ko phone laga do")
+                .removeSuffix(" ko phone laga")
                 .removeSuffix(" ko phone kar")
                 .removeSuffix(" ko call lagao")
+                .removeSuffix(" ko call laga do")
+                .removeSuffix(" ko call laga")
                 .removeSuffix(" ko call karo")
                 .removeSuffix(" ko call kar")
                 .trim()

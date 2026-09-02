@@ -3,6 +3,8 @@ package com.pr4nav.jarvis.voice
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -28,7 +30,6 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
     private var speechRecognizer: SpeechRecognizer? = null
-    private val kokoroTts: KokoroTtsEngine by lazy { KokoroTtsEngine(context) }
     @Volatile var isListening = false
         private set
 
@@ -43,15 +44,72 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
                 Log.w(TAG, "TTS Language not supported or missing data")
             } else {
                 isTtsReady = true
-                tts?.setSpeechRate(1.05f)
-                tts?.setPitch(0.98f)
+                applyMaleVoice()
+                tts?.setSpeechRate(1.02f)
+                tts?.setPitch(0.92f) // Deep, calm, natural masculine pitch (JARVIS style)
             }
         } else {
             Log.e(TAG, "TTS Initialization failed: status $status")
         }
     }
 
-    fun speak(text: String, interrupt: Boolean = true, onDone: (() -> Unit)? = null) {
+    private fun applyMaleVoice() {
+        try {
+            val voices = tts?.voices
+            if (!voices.isNullOrEmpty()) {
+                // Priority list of British & US Male voices (Paul Bettany / JARVIS style)
+                val preferredMale = voices.firstOrNull { v ->
+                    val name = v.name.lowercase()
+                    val lang = v.locale.language.lowercase()
+                    lang == "en" && (
+                        name.contains("en-gb-x-rjs") || // Iconic British Male (Deep, clear)
+                        name.contains("en-gb-x-gbb") || // British Male
+                        name.contains("en-us-x-iom") || // US Male
+                        name.contains("en-us-x-iob") || // US Male
+                        name.contains("en-us-x-iol") || // US Male
+                        name.contains("en-us-x-tpd")    // US Male
+                    )
+                } ?: voices.firstOrNull { v ->
+                    val name = v.name.lowercase()
+                    v.locale.language.equals("en", ignoreCase = true) && (
+                        name.contains("male") || 
+                        name.contains("-m-") || 
+                        name.contains("george") || 
+                        name.contains("guy") || 
+                        name.contains("david")
+                    )
+                } ?: voices.firstOrNull { v ->
+                    // Fallback to any English voice that is NOT female ("female", "-f-", "sfg", "ahp", "gba")
+                    val name = v.name.lowercase()
+                    v.locale.language.equals("en", ignoreCase = true) && 
+                        !name.contains("female") && 
+                        !name.contains("-f-") && 
+                        !name.contains("sfg") && 
+                        !name.contains("gba") &&
+                        !name.contains("ahp")
+                }
+
+                if (preferredMale != null) {
+                    tts?.voice = preferredMale
+                    Log.i(TAG, "Selected Male TTS Voice: ${preferredMale.name} (${preferredMale.locale})")
+                } else {
+                    Log.w(TAG, "No specific male voice found in ${voices.size} available voices, using pitch 0.92f")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error applying male voice: ${e.message}")
+        }
+    }
+
+    private var wordHighlightRunnable: Runnable? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    fun speak(
+        text: String,
+        interrupt: Boolean = true,
+        onWordSpoken: ((start: Int, end: Int) -> Unit)? = null,
+        onDone: (() -> Unit)? = null
+    ) {
         if (interrupt) {
             stopSpeaking()
         }
@@ -62,50 +120,101 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
             return
         }
 
-        // 1. Neural Kokoro-82M INT8 ONNX TTS (Only if user explicitly enabled in settings)
-        val useKokoro = VoiceAssistantPreferences.isKokoroTtsEnabled(context) && KokoroTtsEngine.isModelInstalled(context)
-        if (useKokoro) {
-            Log.i(TAG, "Speaking via Neural Kokoro-82M INT8 ONNX Engine: \"$cleanText\"")
-            kokoroTts.speak(cleanText, speed = 1.0f, interrupt = interrupt, onDone = onDone)
-            return
+        // Start progressive word highlighting timer synchronized to speech rate
+        startWordHighlighting(cleanText, onWordSpoken)
+
+        val wrappedOnDone: () -> Unit = {
+            stopWordHighlighting()
+            onDone?.invoke()
+            Unit
         }
 
-        // 2. Android High-Definition Native TextToSpeech (Clean, Natural, Crystal-Clear Voice)
+        // Android High-Definition Native TextToSpeech (Clean, Natural, Crystal-Clear Voice)
         if (!isTtsReady || tts == null) {
             Log.w(TAG, "Android TTS engine not ready yet")
-            onDone?.invoke()
+            wrappedOnDone()
             return
         }
 
         val speechRate = VoiceAssistantPreferences.getSpeechRate(context)
         tts?.setSpeechRate(speechRate)
-        tts?.setPitch(1.0f)
+        tts?.setPitch(0.92f)
+        applyMaleVoice()
 
         val utteranceId = "JARVIS_TTS_${System.currentTimeMillis()}"
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) {}
             override fun onDone(id: String?) {
-                if (id == utteranceId) onDone?.invoke()
+                if (id == utteranceId) {
+                    mainHandler.post { wrappedOnDone() }
+                }
             }
             @Deprecated("Deprecated in Java")
             override fun onError(id: String?) {
-                if (id == utteranceId) onDone?.invoke()
+                if (id == utteranceId) {
+                    mainHandler.post { wrappedOnDone() }
+                }
+            }
+            override fun onRangeStart(utteranceIdParam: String?, start: Int, end: Int, frame: Int) {
+                if (utteranceIdParam == utteranceId) {
+                    mainHandler.post {
+                        onWordSpoken?.invoke(start, end)
+                    }
+                }
             }
         })
 
         tts?.speak(cleanText, if (interrupt) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, utteranceId)
     }
 
+    private fun startWordHighlighting(cleanText: String, onWordSpoken: ((start: Int, end: Int) -> Unit)?) {
+        stopWordHighlighting()
+        if (onWordSpoken == null) return
+
+        val words = Regex("\\S+").findAll(cleanText).toList()
+        if (words.isEmpty()) return
+
+        var cumulativeDelay = 80L
+        val speechRate = VoiceAssistantPreferences.getSpeechRate(context).coerceIn(0.5f, 2.0f)
+        val msPerChar = (42.0f / speechRate).toLong()
+
+        val tasks = mutableListOf<Runnable>()
+        for (m in words) {
+            val start = m.range.first
+            val end = m.range.last + 1
+            val word = m.value
+            val wordDuration = Math.max(160L, (word.length * msPerChar) + (if (word.endsWith(".") || word.endsWith(",")) 120L else 0L))
+
+            val task = Runnable {
+                onWordSpoken(start, end)
+            }
+            tasks.add(task)
+            mainHandler.postDelayed(task, cumulativeDelay)
+            cumulativeDelay += wordDuration
+        }
+
+        wordHighlightRunnable = Runnable {
+            for (t in tasks) {
+                mainHandler.removeCallbacks(t)
+            }
+        }
+    }
+
+    private fun stopWordHighlighting() {
+        wordHighlightRunnable?.run()
+        wordHighlightRunnable = null
+    }
+
     fun stopSpeaking() {
+        stopWordHighlighting()
         try {
-            kokoroTts.stop()
             if (tts?.isSpeaking == true) {
                 tts?.stop()
             }
         } catch (_: Exception) {}
     }
 
-    fun isSpeaking(): Boolean = kokoroTts.isSpeakingNow() || (tts?.isSpeaking == true)
+    fun isSpeaking(): Boolean = tts?.isSpeaking == true
 
     fun startListening(
         activity: Activity? = null,
@@ -155,9 +264,15 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
                 speechRecognizer = null
 
                 val recognizer = try {
-                    SpeechRecognizer.createSpeechRecognizer(targetContext.applicationContext)
+                    if (Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(targetContext)) {
+                        SpeechRecognizer.createOnDeviceSpeechRecognizer(targetContext)
+                    } else {
+                        SpeechRecognizer.createSpeechRecognizer(targetContext.applicationContext)
+                    }
                 } catch (e: Exception) {
-                    null
+                    try {
+                        SpeechRecognizer.createSpeechRecognizer(targetContext.applicationContext)
+                    } catch (_: Exception) { null }
                 } ?: run {
                     onError("Failed to create SpeechRecognizer on this device")
                     return@post
@@ -167,15 +282,18 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
                 recognizer.setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         isListening = true
+                        handler.postDelayed({ muteEarcons(targetContext, false) }, 150)
                     }
                     override fun onBeginningOfSpeech() {}
                     override fun onRmsChanged(rmsdB: Float) {}
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {
                         isListening = false
+                        muteEarcons(targetContext, true)
                     }
                     override fun onError(error: Int) {
                         isListening = false
+                        handler.postDelayed({ muteEarcons(targetContext, false) }, 200)
                         val msg = when (error) {
                             SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
                             SpeechRecognizer.ERROR_CLIENT -> "Client side error"
@@ -193,6 +311,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
 
                     override fun onResults(results: Bundle?) {
                         isListening = false
+                        handler.postDelayed({ muteEarcons(targetContext, false) }, 200)
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val text = matches?.firstOrNull() ?: ""
                         if (text.isNotBlank()) {
@@ -216,12 +335,27 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                 }
+                muteEarcons(targetContext, true)
                 recognizer.startListening(intent)
             } catch (e: Exception) {
                 isListening = false
+                muteEarcons(targetContext, false)
                 onError("Failed to start speech recognizer: ${e.message}")
             }
         }
+    }
+
+    private fun muteEarcons(ctx: Context, mute: Boolean) {
+        try {
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+            val streams = intArrayOf(AudioManager.STREAM_NOTIFICATION, AudioManager.STREAM_SYSTEM)
+            for (stream in streams) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    val direction = if (mute) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE
+                    am.adjustStreamVolume(stream, direction, 0)
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     fun stopListening() {
@@ -233,7 +367,6 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
 
     fun destroy() {
         try {
-            kokoroTts.stop()
             speechRecognizer?.destroy()
             speechRecognizer = null
             tts?.stop()

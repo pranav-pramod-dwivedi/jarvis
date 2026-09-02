@@ -68,8 +68,10 @@ class VoiceSettingsActivity : AppCompatActivity() {
         switchHandsFree.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 // Verify audio permission
-                val hasMic = checkCallingOrSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
-                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                val hasMic = androidx.core.content.ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.RECORD_AUDIO
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
                 if (!hasMic) {
                     switchHandsFree.isChecked = false
                     Toast.makeText(this, "Microphone permission required for Hands-Free mode", Toast.LENGTH_LONG).show()

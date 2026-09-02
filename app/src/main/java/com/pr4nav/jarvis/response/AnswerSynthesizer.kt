@@ -121,6 +121,12 @@ object AnswerSynthesizer {
                 }
             }
 
+            "system.bluetooth", "set_bluetooth" -> {
+                val argsObj = json?.optJSONObject("arguments") ?: json
+                val state = if (argsObj != null && argsObj.has("state")) argsObj.optBoolean("state") else true
+                return if (state) "Bluetooth enabled." else "Bluetooth disabled."
+            }
+
             "get_bluetooth" -> {
                 val enabled = json?.optBoolean("enabled", true) == true
                 return if (enabled) {
@@ -156,11 +162,13 @@ object AnswerSynthesizer {
                 }
             }
 
-            "open_app" -> {
-                val app = json?.optString("app").takeIf { !it.isNullOrBlank() }
+            "open_app", "app.launch" -> {
+                val app = json?.optString("label").takeIf { !it.isNullOrBlank() }
+                    ?: json?.optString("app").takeIf { !it.isNullOrBlank() }
                     ?: json?.optString("package").takeIf { !it.isNullOrBlank() }
                     ?: "app"
-                return "Opening $app."
+                val friendly = cleanFriendlyAppName(app)
+                return "Opening $friendly."
             }
 
             "call_contact" -> {
@@ -178,5 +186,53 @@ object AnswerSynthesizer {
                 return if (!msg.isNullOrBlank()) msg else "Task completed successfully."
             }
         }
+    }
+
+    fun cleanFriendlyAppName(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return "the app"
+        val lower = trimmed.lowercase()
+        val known = mapOf(
+            "com.google.android.youtube" to "YouTube",
+            "com.youtube.app" to "YouTube",
+            "youtube" to "YouTube",
+            "com.whatsapp" to "WhatsApp",
+            "whatsapp" to "WhatsApp",
+            "com.spotify.music" to "Spotify",
+            "spotify" to "Spotify",
+            "com.android.chrome" to "Chrome",
+            "chrome" to "Chrome",
+            "com.google.android.apps.photos" to "Photos",
+            "photos" to "Photos",
+            "gallery" to "Gallery",
+            "com.google.android.apps.maps" to "Google Maps",
+            "maps" to "Maps",
+            "com.google.android.gm" to "Gmail",
+            "gmail" to "Gmail",
+            "com.google.android.apps.messaging" to "Messages",
+            "messages" to "Messages",
+            "com.android.settings" to "Settings",
+            "settings" to "Settings",
+            "com.google.android.deskclock" to "Clock",
+            "clock" to "Clock",
+            "com.google.android.calculator" to "Calculator",
+            "calculator" to "Calculator",
+            "com.google.android.keep" to "Keep Notes",
+            "notes" to "Notes",
+            "com.termux" to "Termux",
+            "termux" to "Termux"
+        )
+        val direct = known[lower]
+        if (direct != null) return direct
+
+        if (trimmed.contains(".")) {
+            val parts = trimmed.split(".")
+            val candidate = parts.lastOrNull { it != "android" && it != "app" && it.length > 2 }
+                ?: parts.lastOrNull()
+                ?: trimmed
+            return candidate.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+
+        return trimmed.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
 }

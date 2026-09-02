@@ -50,11 +50,13 @@ class OpenCodeWebActivity : AppCompatActivity() {
 
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
-        webView.settings.allowFileAccess = true
-        webView.settings.allowContentAccess = true
-        webView.settings.allowFileAccessFromFileURLs = true
-        webView.settings.allowUniversalAccessFromFileURLs = true
-        webView.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        webView.settings.allowFileAccess = false
+        webView.settings.allowContentAccess = false
+        @Suppress("DEPRECATION")
+        webView.settings.allowFileAccessFromFileURLs = false
+        @Suppress("DEPRECATION")
+        webView.settings.allowUniversalAccessFromFileURLs = false
+        webView.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
         webView.addJavascriptInterface(JsBridge(), "Jarvis")
 
         webView.webChromeClient = WebChromeClient()

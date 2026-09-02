@@ -3,23 +3,24 @@ package com.pr4nav.jarvis.router
 import android.content.Context
 import android.util.Log
 import com.pr4nav.jarvis.llm.GeminiCloudLLM
-import com.pr4nav.jarvis.llm.QwenAgentClient
+import com.pr4nav.jarvis.llm.GroqClient
 import com.pr4nav.jarvis.tools.CanonicalToolRegistry
 import com.pr4nav.jarvis.tools.ToolResult
 import org.json.JSONObject
 
 enum class AgentExecutionMode(val displayName: String, val badge: String, val description: String) {
-    CLOUD_NEEDLE("☁️ Cloud + ⚡ Needle", "☁️ [Cloud + Needle]", "Gemini 2.0 Flash + Needle Reflex"),
-    NEEDLE_ONLY("⚡ Needle Only", "⚡ [Needle Only]", "Fast Deterministic On-Device Actions"),
-    QWEN_NEEDLE("🟢 Qwen + ⚡ Needle", "🟢 [Qwen + Needle]", "Local Qwen3.5-2B Shell Agent + Needle Reflex")
+    AUTO("Auto (Needle + Groq + AGY)", "[Auto Tri-Tier]", "Cascades Needle Reflex -> Groq Compound Mini -> AGY Autonomous Agent"),
+    CLOUD_NEEDLE("Cloud + Needle", "[Cloud + Needle]", "Gemini 2.0 Flash + Needle Reflex"),
+    GROQ_NEEDLE("Groq + Needle", "[Groq + Needle]", "Groq Compound Mini Agent + Needle Reflex"),
+    NEEDLE_ONLY("Needle Only", "[Needle Only]", "Fast Deterministic On-Device Actions")
 }
 
 enum class ExecutionSource(val label: String, val badge: String) {
-    DETERMINISTIC_NEEDLE("Needle 2 Reflex", "⚡ [Needle 2 Reflex]"),
-    QWEN_AGENT("Qwen3.5-2B Shell Agent", "🟢 [Qwen 3.5 Agent]"),
-    AGY_AGENT("AGY Autonomous Agent", "🤖 [AGY Agent (PRoot Linux)]"),
-    CLOUD_LLM("Gemini 2.0 Flash (Cloud)", "☁️ [Gemini 2.0 Flash (Cloud)]"),
-    FALLBACK("System Fallback", "⚙️ [System Fallback]")
+    DETERMINISTIC_NEEDLE("Needle 2 Reflex", "[Needle 2 Reflex]"),
+    GROQ_AGENT("Groq Compound Agent", "[Groq Agent]"),
+    AGY_AGENT("AGY Autonomous Agent", "[AGY Agent (PRoot Linux)]"),
+    CLOUD_LLM("Gemini 2.0 Flash (Cloud)", "[Gemini 2.0 Flash (Cloud)]"),
+    FALLBACK("System Fallback", "[System Fallback]")
 }
 
 data class UnifiedExecutionResult(
@@ -68,21 +69,26 @@ object UnifiedAssistantDispatcher {
     private const val TAG = "UnifiedAssistant"
     private const val PREFS_NAME = "jarvis_mode_prefs"
     private const val KEY_SELECTED_MODE = "jarvis_agent_mode"
+    @Volatile private var inMemoryMode: AgentExecutionMode = AgentExecutionMode.AUTO
 
     fun getAgentMode(context: Context?): AgentExecutionMode {
-        if (context == null) return AgentExecutionMode.CLOUD_NEEDLE
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val name = prefs.getString(KEY_SELECTED_MODE, AgentExecutionMode.CLOUD_NEEDLE.name)
+        if (context == null) return inMemoryMode
         return try {
-            AgentExecutionMode.valueOf(name ?: AgentExecutionMode.CLOUD_NEEDLE.name)
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val name = prefs?.getString(KEY_SELECTED_MODE, inMemoryMode.name)
+            if (name != null) AgentExecutionMode.valueOf(name) else inMemoryMode
         } catch (_: Exception) {
-            AgentExecutionMode.CLOUD_NEEDLE
+            inMemoryMode
         }
     }
 
-    fun setAgentMode(context: Context, mode: AgentExecutionMode) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_SELECTED_MODE, mode.name).apply()
+    fun setAgentMode(context: Context?, mode: AgentExecutionMode) {
+        inMemoryMode = mode
+        if (context == null) return
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs?.edit()?.putString(KEY_SELECTED_MODE, mode.name)?.apply()
+        } catch (_: Exception) {}
     }
 
     fun execute(
@@ -113,10 +119,65 @@ object UnifiedAssistantDispatcher {
         val mode = getAgentMode(context)
         CanonicalToolRegistry.init(context)
 
+        // 0. Safety Guard & Context Disambiguation / Continuation Pre-Routing
+        val preDecision = PreRoutingPipeline.filter(context, trimmed)
+        if (preDecision is PreRoutingDecision.Blocked) {
+            val latency = System.currentTimeMillis() - t0
+            val blockMsg = "⚠️ Command Blocked: ${preDecision.reason}"
+            onChunk?.invoke(blockMsg)
+            onResult(
+                UnifiedExecutionResult(
+                    handled = false,
+                    source = ExecutionSource.FALLBACK,
+                    speechResponse = blockMsg,
+                    fullSummary = "⚠️ [Safety Policy]\n${preDecision.reason}",
+                    thinkingTrace = "Safety guard intercepted command: ${preDecision.reason}",
+                    latencyMs = latency
+                )
+            )
+            return
+        }
+
+        if (preDecision is PreRoutingDecision.DirectToolMatch) {
+            val tool = preDecision.toolName
+            val args = preDecision.arguments
+            val validation = com.pr4nav.jarvis.tools.ToolValidator.validate(context, tool, args, trimmed)
+            if (validation is com.pr4nav.jarvis.tools.ValidationResult.Valid) {
+                try {
+                    onStatus?.invoke("⚡ Executing [$tool] via Pre-Routing Match...")
+                    val toolRes = CanonicalToolRegistry.execute(context, tool, args)
+                    if (toolRes.success) {
+                        com.pr4nav.jarvis.context.ContextManager.updateToolContext(tool, args)
+                    }
+                    val toolDef = CanonicalToolRegistry.get(tool)
+                    val responseMode = com.pr4nav.jarvis.response.AnswerSynthesizer.determineResponseMode(trimmed, "DEVICE")
+                    val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, tool, toolRes.data as? JSONObject, responseMode)
+                    val latency = System.currentTimeMillis() - t0
+                    val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: Pre-Routing Continuation Match [$tool]\n• Reason: ${preDecision.reason}\n• Latency: ${latency}ms\n</think>"
+                    onChunk?.invoke(synthesizedAnswer)
+                    onResult(
+                        UnifiedExecutionResult(
+                            handled = true,
+                            source = ExecutionSource.DETERMINISTIC_NEEDLE,
+                            speechResponse = synthesizedAnswer,
+                            fullSummary = "$thinkTrace\n\n⚡ [Pre-Routing Match · ${latency}ms]\n$synthesizedAnswer",
+                            thinkingTrace = thinkTrace,
+                            modelName = "Needle 2 Reflex",
+                            toolResult = toolRes,
+                            latencyMs = latency
+                        )
+                    )
+                    return
+                } catch (e: Exception) {
+                    Log.w(TAG, "Pre-routing direct tool execution failed: ${e.message}", e)
+                }
+            }
+        }
+
         val isConversationalOrInformational = LanguageNormalizer.isInformational(trimmed)
         val classified = com.pr4nav.jarvis.intent.IntentClassifier.classify(trimmed)
 
-        // 0. Direct Math & Instant Conversational Answer (<5ms)
+        // 0b. Direct Math & Instant Conversational Answer (<5ms)
         if (classified.responseType == com.pr4nav.jarvis.intent.ResponseType.ANSWER && classified.directAnswer != null) {
             val latency = System.currentTimeMillis() - t0
             val answer = classified.directAnswer
@@ -149,11 +210,14 @@ object UnifiedAssistantDispatcher {
                     try {
                         onStatus?.invoke("⚡ Executing [${normalized.tool}] via Needle Reflex...")
                         val toolRes = CanonicalToolRegistry.execute(context, normalized.tool, normalized.args)
-                        com.pr4nav.jarvis.context.ConversationalContext.updateContext(normalized.tool, normalized.args)
+                        if (toolRes.success) {
+                            com.pr4nav.jarvis.context.ContextManager.updateToolContext(normalized.tool, normalized.args)
+                        } else {
+                            com.pr4nav.jarvis.context.ConversationalContext.updateContext(normalized.tool, normalized.args)
+                        }
                         val toolDef = CanonicalToolRegistry.get(normalized.tool)
                         val responseMode = com.pr4nav.jarvis.response.AnswerSynthesizer.determineResponseMode(trimmed, classified.category.name)
                         val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, normalized.tool, toolRes.data, responseMode)
-                        val terminationStatus = if (toolDef?.purpose == com.pr4nav.jarvis.response.ToolPurpose.ACTION) com.pr4nav.jarvis.response.TerminationStatus.ACTION_COMPLETED else com.pr4nav.jarvis.response.TerminationStatus.FINAL_ANSWER
                         val latency = System.currentTimeMillis() - t0
                         val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: Direct deterministic match [${normalized.tool}]\n• Purpose: ${toolDef?.purpose ?: com.pr4nav.jarvis.response.ToolPurpose.ACTION}\n• Mode: ${mode.displayName}\n• Latency: ${latency}ms\n</think>"
 
@@ -182,15 +246,15 @@ object UnifiedAssistantDispatcher {
         // If mode is NEEDLE_ONLY and no tool matched
         if (mode == AgentExecutionMode.NEEDLE_ONLY) {
             val latency = System.currentTimeMillis() - t0
-            val msg = "Needle Reflex did not match any device action for \"$trimmed\". Switch to 'Cloud + Needle' or 'Qwen + Needle' for open-ended queries."
+            val msg = "Needle Reflex did not match any device action for \"$trimmed\". Switch to 'Cloud + Needle' or 'Groq + Needle' for open-ended queries."
             onChunk?.invoke(msg)
             onResult(
                 UnifiedExecutionResult(
                     handled = false,
-                    source = ExecutionSource.FALLBACK,
+                    source = ExecutionSource.DETERMINISTIC_NEEDLE,
                     speechResponse = msg,
-                    fullSummary = "⚡ [Needle Only]\n$msg",
-                    thinkingTrace = "Needle Only mode active; open-ended reasoning skipped.",
+                    fullSummary = "[Needle Miss]\n$msg",
+                    thinkingTrace = "Deterministic matching yielded no action.",
                     latencyMs = latency
                 )
             )
@@ -198,133 +262,157 @@ object UnifiedAssistantDispatcher {
         }
 
         // =========================================================================
-        // QWEN_NEEDLE Mode: Local Qwen3.5-2B Shell Agent Server
+        // GROQ_NEEDLE Mode: Groq LLaMA 3.3 70B Agent with Shell Capabilities
         // =========================================================================
-        if (mode == AgentExecutionMode.QWEN_NEEDLE) {
-            Log.i(TAG, "Querying Local Qwen3.5-2B Shell Agent Server (:8081)...")
-            onStatus?.invoke("🟢 Asking Local Qwen3.5-2B Shell Agent...")
+        if (mode == AgentExecutionMode.GROQ_NEEDLE) {
+            Log.i(TAG, "Querying Groq Compound Agent...")
+            onStatus?.invoke("Asking Groq Compound...")
 
-            QwenAgentClient.query(
+            GroqClient.query(
                 context = context,
                 prompt = trimmed,
-                onSuccess = { qwenRes ->
+                onSuccess = { groqRes ->
                     val latency = System.currentTimeMillis() - t0
-                    val cleaned = GeminiCloudLLM.cleanForSpeech(qwenRes.response)
+                    val cleaned = GeminiCloudLLM.cleanForSpeech(groqRes.response)
                     com.pr4nav.jarvis.context.ConversationalContext.recordTurn(trimmed, cleaned)
 
-                    val toolSummary = if (qwenRes.toolCallsExecuted.isNotEmpty()) {
-                        "• Shell Tools Executed: ${qwenRes.toolCallsExecuted.size} (${qwenRes.toolCallsExecuted.map { it.command }.joinToString(", ")})\n"
+                    val toolSummary = if (groqRes.toolCallsExecuted.isNotEmpty()) {
+                        "• Shell Tools Executed: ${groqRes.toolCallsExecuted.size} (${groqRes.toolCallsExecuted.map { it.command }.joinToString(", ")})\n"
                     } else ""
-                    val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Engine: Local Qwen3.5-2B Shell Agent\n$toolSummary• Latency: ${latency}ms\n</think>"
+                    val thinkTrace = if (groqRes.thinkingTrace.isNotBlank()) {
+                        "<think>\n${groqRes.thinkingTrace}\n$toolSummary• Latency: ${latency}ms\n• Engine: Groq (${groqRes.modelUsed})\n</think>"
+                    } else {
+                        "<think>\n• Input: \"$trimmed\"\n• Engine: Groq (${groqRes.modelUsed})\n$toolSummary• Latency: ${latency}ms\n</think>"
+                    }
 
                     onChunk?.invoke(cleaned)
                     onResult(
                         UnifiedExecutionResult(
                             handled = true,
-                            source = ExecutionSource.QWEN_AGENT,
+                            source = if (groqRes.escalatedToAgy) ExecutionSource.AGY_AGENT else ExecutionSource.GROQ_AGENT,
                             speechResponse = cleaned,
-                            fullSummary = "$thinkTrace\n\n🟢 [Qwen3.5-2B Agent · ${latency}ms]\n$cleaned",
+                            fullSummary = "$thinkTrace\n\n[Groq ${groqRes.modelUsed} · ${latency}ms]\n$cleaned",
                             thinkingTrace = thinkTrace,
-                            modelName = "Qwen3.5-2B Shell Agent",
+                            modelName = if (groqRes.escalatedToAgy) "AGY Autonomous Agent" else "Groq ${groqRes.modelUsed}",
                             latencyMs = latency
                         )
                     )
                 },
                 onError = { err ->
                     val latency = System.currentTimeMillis() - t0
-                    Log.w(TAG, "Qwen Agent query failed: $err")
-                    val fallbackMsg = "Local Qwen Agent is offline. Please make sure `llama serve` and `python3 server/agent.py` are running."
-                    onChunk?.invoke(fallbackMsg)
-                    onResult(
-                        UnifiedExecutionResult(
-                            handled = false,
-                            source = ExecutionSource.FALLBACK,
-                            speechResponse = fallbackMsg,
-                            fullSummary = "⚙️ [Qwen Agent Offline]\n$err\n\n$fallbackMsg",
-                            thinkingTrace = "Qwen Agent server unreachable.",
-                            latencyMs = latency
-                        )
-                    )
+                    Log.w(TAG, "Groq query failed: $err; escalating to Cloud/AGY fallback")
+                    executeCloudFallback(context, trimmed, t0, onStatus, onChunk, onResult)
                 }
             )
             return
         }
 
         // =========================================================================
-        // CLOUD_NEEDLE Mode: AGY Autonomous Agent & Gemini 2.0 Flash Cloud LLM
+        // AUTO Mode: Tri-Tier Cascade (Needle -> Groq LLaMA -> AGY / Cloud Gemini)
         // =========================================================================
-        Log.i(TAG, "Querying Cloud LLM (Gemini 2.0 Flash) with zero-refusal command access...")
-        onStatus?.invoke("☁️ Querying Google Gemini Cloud LLM...")
+        if (mode == AgentExecutionMode.AUTO) {
+            Log.i(TAG, "Executing Auto Tri-Tier: Testing Tier 2 (Groq Compound) then Tier 3 (AGY / Cloud)...")
+            onStatus?.invoke("Querying Groq (Tier 2)...")
 
-        Thread {
-            val historyContext = com.pr4nav.jarvis.context.ConversationalContext.getRecentHistory(4)
-            val fullPromptWithHistory = if (historyContext.isNotBlank()) {
-                "$historyContext\nUser: $trimmed\nJarvis:"
-            } else {
-                trimmed
-            }
-
-            GeminiCloudLLM.generate(
+            GroqClient.query(
                 context = context,
-                prompt = fullPromptWithHistory,
-                onChunk = { chunk ->
-                    onStatus?.invoke("✍️ Writing response...")
-                    onChunk?.invoke(chunk)
-                },
-                onSuccess = { cloudSpeech ->
+                prompt = trimmed,
+                onSuccess = { groqRes ->
                     val latency = System.currentTimeMillis() - t0
-                    com.pr4nav.jarvis.context.ConversationalContext.recordTurn(trimmed, cloudSpeech)
+                    val cleaned = GeminiCloudLLM.cleanForSpeech(groqRes.response)
+                    if (cleaned.isNotBlank()) {
+                        com.pr4nav.jarvis.context.ConversationalContext.recordTurn(trimmed, cleaned)
+                        val toolSummary = if (groqRes.toolCallsExecuted.isNotEmpty()) {
+                            "• Shell Tools Executed: ${groqRes.toolCallsExecuted.size} (${groqRes.toolCallsExecuted.map { it.command }.joinToString(", ")})\n"
+                        } else ""
+                        val thinkTrace = if (groqRes.thinkingTrace.isNotBlank()) {
+                            "<think>\n${groqRes.thinkingTrace}\n$toolSummary• Mode: Auto Tri-Tier\n• Resolved At: Tier 2 (Groq)\n• Latency: ${latency}ms\n</think>"
+                        } else {
+                            "<think>\n• Input: \"$trimmed\"\n• Mode: Auto Tri-Tier\n• Resolved At: Tier 2 (Groq)\n• Latency: ${latency}ms\n</think>"
+                        }
 
-                    val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Engine: Google Gemini 2.0 Flash (Cloud)\n• Mode: Cloud + Needle\n• Latency: ${latency}ms\n</think>"
-
-                    Log.i(TAG, "Cloud Gemini 2.0 Flash responded in ${latency}ms")
-                    onResult(
-                        UnifiedExecutionResult(
-                            handled = true,
-                            source = ExecutionSource.CLOUD_LLM,
-                            speechResponse = cloudSpeech,
-                            fullSummary = "$thinkTrace\n\n☁️ [Gemini 2.0 Flash · ${latency}ms]\n$cloudSpeech",
-                            thinkingTrace = thinkTrace,
-                            modelName = "Gemini 2.0 Flash (Cloud)",
-                            latencyMs = latency
+                        onChunk?.invoke(cleaned)
+                        onResult(
+                            UnifiedExecutionResult(
+                                handled = true,
+                                source = if (groqRes.escalatedToAgy) ExecutionSource.AGY_AGENT else ExecutionSource.GROQ_AGENT,
+                                speechResponse = cleaned,
+                                fullSummary = "$thinkTrace\n\n[Groq ${groqRes.modelUsed} · ${latency}ms]\n$cleaned",
+                                thinkingTrace = thinkTrace,
+                                modelName = if (groqRes.escalatedToAgy) "AGY Autonomous Agent" else "Groq ${groqRes.modelUsed}",
+                                latencyMs = latency
+                            )
                         )
-                    )
-                },
-                onError = { errMsg ->
-                    val latency = System.currentTimeMillis() - t0
-                    Log.e(TAG, "Cloud LLM failed: $errMsg")
-
-                    val helpfulFallback = when {
-                        trimmed.lowercase().contains("who are you") || trimmed.lowercase().contains("what is your name") ->
-                            "I am JARVIS, your personal autonomous AI assistant."
-                        trimmed.lowercase().contains("how are you") ->
-                            "All systems are operating at peak performance, sir. How can I assist you today?"
-                        trimmed.lowercase().contains("hi") || trimmed.lowercase().contains("hello") || trimmed.lowercase().contains("hey") ->
-                            "Hello! Systems online and ready. What would you like to do?"
-                        trimmed.lowercase().contains("time") ->
-                            "The current time is ${java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date())}."
-                        trimmed.lowercase().contains("date") ->
-                            "Today is ${java.text.SimpleDateFormat("EEEE, MMMM d", java.util.Locale.getDefault()).format(java.util.Date())}."
-                        else ->
-                            "I am ready. You can ask me to open apps, control volume, toggle flashlight, run shell commands, or query information."
+                        return@query
                     }
 
-                    val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Cloud: $errMsg\n• Fallback: Native system conversational handler\n</think>"
-                    onChunk?.invoke(helpfulFallback)
-
-                    onResult(
-                        UnifiedExecutionResult(
-                            handled = false,
-                            source = ExecutionSource.FALLBACK,
-                            speechResponse = helpfulFallback,
-                            fullSummary = "$thinkTrace\n\n⚙️ [System Fallback · ${latency}ms]\n$helpfulFallback",
-                            thinkingTrace = thinkTrace,
-                            modelName = "System Fallback",
-                            latencyMs = latency
-                        )
-                    )
+                    // Empty response -> Escalate to fallback ONCE
+                    Log.i(TAG, "Groq returned empty response; escalating sequentially to Tier 3 (AGY / Cloud)...")
+                    onStatus?.invoke("Escalating to Tier 3 (AGY / Cloud)...")
+                    executeCloudFallback(context, trimmed, t0, onStatus, onChunk, onResult)
+                },
+                onError = { groqErr ->
+                    Log.i(TAG, "Groq unavailable ($groqErr); escalating to Tier 3 (AGY / Cloud)...")
+                    onStatus?.invoke("Groq unavailable; escalating to Tier 3 (AGY / Cloud)...")
+                    executeCloudFallback(context, trimmed, t0, onStatus, onChunk, onResult)
                 }
             )
-        }.start()
+            return
+        }
+
+        // =========================================================================
+        // CLOUD_NEEDLE Mode: Direct Cloud Gemini 2.0 Flash / AGY
+        // =========================================================================
+        Log.i(TAG, "Routing via central JarvisRouter / Cloud...")
+        executeCloudFallback(context, trimmed, t0, onStatus, onChunk, onResult)
+    }
+
+    private fun executeCloudFallback(
+        context: Context,
+        query: String,
+        t0: Long,
+        onStatus: ((String) -> Unit)?,
+        onChunk: ((String) -> Unit)?,
+        onResult: (UnifiedExecutionResult) -> Unit
+    ) {
+        onStatus?.invoke("Escalating to Cloud Reasoning (Gemini)...")
+        GeminiCloudLLM.generate(
+            context = context,
+            prompt = query,
+            onChunk = onChunk,
+            onSuccess = { reply ->
+                val latency = System.currentTimeMillis() - t0
+                val cleaned = GeminiCloudLLM.cleanForSpeech(reply)
+                val thinkTrace = "<think>\n• Fallback Engine: Google Gemini 2.0 Flash\n• Latency: ${latency}ms\n</think>"
+                onResult(
+                    UnifiedExecutionResult(
+                        handled = true,
+                        source = ExecutionSource.CLOUD_LLM,
+                        jarvisResponse = com.pr4nav.jarvis.response.JarvisResponse.of(cleaned),
+                        speechResponse = cleaned,
+                        fullSummary = "$thinkTrace\n\n[Gemini 2.0 Flash · ${latency}ms]\n$cleaned",
+                        thinkingTrace = thinkTrace,
+                        modelName = "Gemini 2.0 Flash",
+                        latencyMs = latency
+                    )
+                )
+            },
+            onError = { err ->
+                val latency = System.currentTimeMillis() - t0
+                val errMsg = "I'm sorry, I cannot connect to the assistant services right now."
+                onResult(
+                    UnifiedExecutionResult(
+                        handled = false,
+                        source = ExecutionSource.FALLBACK,
+                        jarvisResponse = com.pr4nav.jarvis.response.JarvisResponse.of(errMsg),
+                        speechResponse = errMsg,
+                        fullSummary = "Cloud reasoning and local AGY are currently unavailable: $err",
+                        thinkingTrace = "<think>\n• Fallback Failed: $err\n</think>",
+                        modelName = "None (Unavailable)",
+                        latencyMs = latency
+                    )
+                )
+            }
+        )
     }
 }

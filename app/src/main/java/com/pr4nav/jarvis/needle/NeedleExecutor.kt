@@ -11,8 +11,11 @@ import com.pr4nav.jarvis.capabilities.DeviceCapability
 import com.pr4nav.jarvis.gui.JarvisGuiRenderer
 import com.pr4nav.jarvis.router.JarvisIntentRouter
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
+import org.json.JSONObject
 
 /**
  * Executes structured tool calls produced by Needle 2 local router,
@@ -31,7 +34,9 @@ object NeedleExecutor {
                 val jsonArgs = org.json.JSONObject(args)
                 val res = canonical.executeWithTimeout(context, jsonArgs)
                 if (res.success) {
-                    res.data?.toString() ?: "Executed $tool successfully."
+                    val dataJson = res.data as? org.json.JSONObject
+                    dataJson?.optString("message")?.takeIf { it.isNotBlank() }
+                        ?: com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize("", tool, dataJson, com.pr4nav.jarvis.response.ResponseMode.ACTION)
                 } else {
                     res.error?.message ?: "Execution of $tool failed."
                 }
@@ -41,6 +46,12 @@ object NeedleExecutor {
                     val execRes = com.pr4nav.jarvis.registry.CapabilityRegistry.execute(tool, args, context)
                     execRes.summary
                 } else when (tool) {
+                "system.bluetooth" -> {
+                    val state = args["state"] as? Boolean ?: (args["on"] as? Boolean ?: true)
+                    val res = com.pr4nav.jarvis.tools.CanonicalToolRegistry.execute(context, "system.bluetooth", org.json.JSONObject().put("state", state))
+                    if (res.success) "ᛒ Bluetooth turned ${if (state) "ON" else "OFF"}." else "Bluetooth error: ${res.error?.message}"
+                }
+
                 "system.battery" -> {
                     val (pct, charging) = DeviceCapability.battery()
                     "🔋 Battery: $pct% (${if (charging) "Charging ⚡" else "Discharging"})"
@@ -92,14 +103,27 @@ object NeedleExecutor {
                     val m = (args["minute"] as? Number)?.toInt() ?: 0
                     val label = args["label"] as? String ?: "Alarm"
                     val res = DeviceCapability.setAlarm(h, m, label)
-                    if (res.success) "⏰ Alarm set for %02d:%02d ($label).".format(h, m) else "Alarm error: ${res.error}"
+                    val period = if (h < 12) "AM" else "PM"
+                    val displayHour = if (h == 0) 12 else if (h > 12) h - 12 else h
+                    val timeStr = "%d:%02d %s".format(displayHour, m, period)
+                    if (res.success) "⏰ Alarm set for $timeStr ($label)." else "Alarm error: ${res.error}"
                 }
 
                 "system.timer" -> {
                     val sec = (args["seconds"] as? Number)?.toInt() ?: 60
                     val label = args["label"] as? String ?: "Timer"
                     val res = DeviceCapability.setTimer(sec, label)
-                    if (res.success) "⏱️ Timer started for ${sec / 60} minutes ($label)." else "Timer error: ${res.error}"
+                    val durationStr = when {
+                        sec >= 3600 -> "${sec / 3600} hr ${if (sec % 3600 > 0) "${(sec % 3600) / 60} min" else ""}".trim()
+                        sec >= 60 -> "${sec / 60} min ${if (sec % 60 > 0) "${sec % 60} sec" else ""}".trim()
+                        else -> "$sec seconds"
+                    }
+                    if (res.success) "⏱️ Timer started for $durationStr ($label)." else "Timer error: ${res.error}"
+                }
+
+                "system.world_time" -> {
+                    val loc = args["location"] as? String ?: "world"
+                    resolveWorldTime(loc)
                 }
 
                 "media.play" -> {
@@ -147,10 +171,11 @@ object NeedleExecutor {
                     "⚠️ [Safety Gate] Destructive operation on $path requires confirmation."
                 }
 
-                "app.launch" -> {
-                    val name = args["name"] as? String ?: "app"
-                    JarvisIntentRouter.routeAndExecute(context, "Open $name") { _ -> }
-                    "🚀 Launching $name."
+                "app.launch", "open_app" -> {
+                    val rawName = (args["app"] as? String) ?: (args["name"] as? String) ?: (args["package"] as? String) ?: "app"
+                    val friendly = com.pr4nav.jarvis.response.AnswerSynthesizer.cleanFriendlyAppName(rawName)
+                    JarvisIntentRouter.routeAndExecute(context, "Open $friendly") { _ -> }
+                    "▶️ Opening $friendly."
                 }
 
                 "termux.diag" -> {
@@ -192,5 +217,66 @@ object NeedleExecutor {
         routeResult.executionSummary = summary
         NeedleRuntime.fastPathExecutions.incrementAndGet()
         return summary
+    }
+
+    fun resolveWorldTime(queryLocation: String): String {
+        val q = queryLocation.trim().lowercase()
+        val zoneMap = mapOf(
+            "tokyo" to "Asia/Tokyo",
+            "japan" to "Asia/Tokyo",
+            "london" to "Europe/London",
+            "uk" to "Europe/London",
+            "united kingdom" to "Europe/London",
+            "england" to "Europe/London",
+            "new york" to "America/New_York",
+            "nyc" to "America/New_York",
+            "california" to "America/Los_Angeles",
+            "los angeles" to "America/Los_Angeles",
+            "la" to "America/Los_Angeles",
+            "san francisco" to "America/Los_Angeles",
+            "seattle" to "America/Los_Angeles",
+            "chicago" to "America/Chicago",
+            "austin" to "America/Chicago",
+            "dallas" to "America/Chicago",
+            "toronto" to "America/Toronto",
+            "vancouver" to "America/Vancouver",
+            "paris" to "Europe/Paris",
+            "france" to "Europe/Paris",
+            "berlin" to "Europe/Berlin",
+            "germany" to "Europe/Berlin",
+            "dubai" to "Asia/Dubai",
+            "uae" to "Asia/Dubai",
+            "singapore" to "Asia/Singapore",
+            "sydney" to "Australia/Sydney",
+            "melbourne" to "Australia/Melbourne",
+            "bengaluru" to "Asia/Kolkata",
+            "bangalore" to "Asia/Kolkata",
+            "delhi" to "Asia/Kolkata",
+            "mumbai" to "Asia/Kolkata",
+            "india" to "Asia/Kolkata",
+            "moscow" to "Europe/Moscow",
+            "russia" to "Europe/Moscow",
+            "beijing" to "Asia/Shanghai",
+            "china" to "Asia/Shanghai",
+            "shanghai" to "Asia/Shanghai",
+            "hong kong" to "Asia/Hong_Kong",
+            "seoul" to "Asia/Seoul",
+            "korea" to "Asia/Seoul",
+            "south korea" to "Asia/Seoul",
+            "auckland" to "Pacific/Auckland",
+            "new zealand" to "Pacific/Auckland"
+        )
+        val zoneIdStr = zoneMap[q] ?: zoneMap.entries.firstOrNull { q.contains(it.key) }?.value
+            ?: TimeZone.getAvailableIDs().firstOrNull { it.lowercase().contains(q) }
+            ?: "UTC"
+
+        val tz = TimeZone.getTimeZone(zoneIdStr)
+        val cal = Calendar.getInstance(tz)
+        val timeFmt = SimpleDateFormat("h:mm a", Locale.US).apply { timeZone = tz }
+        val dateFmt = SimpleDateFormat("EEEE, MMM d", Locale.US).apply { timeZone = tz }
+        val formattedTime = timeFmt.format(cal.time)
+        val formattedDate = dateFmt.format(cal.time)
+        val displayLoc = queryLocation.split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.titlecase() } }
+        return "⏰ In $displayLoc, it is currently $formattedTime ($formattedDate)."
     }
 }

@@ -94,6 +94,29 @@ class OpenCodeActivity : AppCompatActivity() {
         loadAgentsAndModels()
     }
 
+    private val workerExecutor = java.util.concurrent.Executors.newFixedThreadPool(4)
+
+    private fun runAsync(block: () -> Unit) {
+        if (!isFinishing && !isDestroyed && !workerExecutor.isShutdown) {
+            try {
+                workerExecutor.execute {
+                    if (!isFinishing && !isDestroyed) {
+                        try {
+                            block()
+                        } catch (e: Exception) {
+                            android.util.Log.e("OpenCodeActivity", "Async operation error: ${e.message}", e)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    override fun onDestroy() {
+        workerExecutor.shutdownNow()
+        super.onDestroy()
+    }
+
     override fun onResume() {
         super.onResume()
         openCode.setEventListener(eventListener)
@@ -200,7 +223,7 @@ class OpenCodeActivity : AppCompatActivity() {
     private fun doConnect() {
         val url = inputServerUrl.text.toString().trim().ifBlank { "http://127.0.0.1:4096" }
         serverLabel.text = "Connecting to $url…"
-        Thread {
+        runAsync {
             val res = openCode.connect(url)
             runOnUiThread {
                 if (res.isSuccess) {
@@ -214,7 +237,7 @@ class OpenCodeActivity : AppCompatActivity() {
                     serverDot.setBackgroundColor(0xFFF85149.toInt())
                 }
             }
-        }.start()
+        }
     }
 
     private fun openWebUi() {
@@ -226,7 +249,7 @@ class OpenCodeActivity : AppCompatActivity() {
     private fun testConnection() {
         val url = inputServerUrl.text.toString().trim().ifBlank { "http://127.0.0.1:4096" }
         serverLabel.text = "Testing $url…"
-        Thread {
+        runAsync {
             val results = runDiagnostics(url)
             runOnUiThread {
                 val sb = StringBuilder("Diagnostics for $url:\n")
@@ -243,7 +266,7 @@ class OpenCodeActivity : AppCompatActivity() {
                     .create()
                 dialog.show()
             }
-        }.start()
+        }
     }
 
     private fun runDiagnostics(baseUrl: String): List<Triple<String, Boolean, String?>> {
@@ -310,7 +333,7 @@ class OpenCodeActivity : AppCompatActivity() {
 
     private fun discoverAndConnect() {
         serverLabel.text = "Discovering servers…"
-        Thread {
+        runAsync {
             val found = openCode.process.discoverNetwork()
             runOnUiThread {
                 if (found.isNotEmpty()) {
@@ -322,11 +345,11 @@ class OpenCodeActivity : AppCompatActivity() {
                     serverLabel.text = "No servers found"
                 }
             }
-        }.start()
+        }
     }
 
     private fun refreshServerStatus() {
-        Thread {
+        runAsync {
             val st = openCode.process.current
             val health = openCode.client.health()
             runOnUiThread {
@@ -344,11 +367,11 @@ class OpenCodeActivity : AppCompatActivity() {
                     versionLabel.text = ""
                 }
             }
-        }.start()
+        }
     }
 
     private fun loadProjects() {
-        Thread {
+        runAsync {
             val res = openCode.projects.projects()
             runOnUiThread {
                 if (res is OcResult.Ok) {
@@ -360,7 +383,7 @@ class OpenCodeActivity : AppCompatActivity() {
                     }
                 }
             }
-        }.start()
+        }
         val dir = openCode.projects.currentDirectory()
         if (dir != null) {
             currentProjectDir = dir
@@ -369,7 +392,7 @@ class OpenCodeActivity : AppCompatActivity() {
     }
 
     private fun showProjectPicker() {
-        Thread {
+        runAsync {
             val res = openCode.projects.projects()
             runOnUiThread {
                 val projects: List<OcProject> = (res as? OcResult.Ok)?.value ?: emptyList()
@@ -393,7 +416,7 @@ class OpenCodeActivity : AppCompatActivity() {
                     .setNegativeButton("Enter path") { _, _ -> inputProjectManually() }
                     .show()
             }
-        }.start()
+        }
     }
 
     private fun inputProjectManually() {
@@ -414,7 +437,7 @@ class OpenCodeActivity : AppCompatActivity() {
     }
 
     private fun loadSessions() {
-        Thread {
+        runAsync {
             openCode.sessions.refreshFromServer(currentProjectDir)
             val list = openCode.sessions.list()
             runOnUiThread {
@@ -428,7 +451,7 @@ class OpenCodeActivity : AppCompatActivity() {
                 loadMessagesForCurrent()
                 refreshTools()
             }
-        }.start()
+        }
     }
 
     private fun switchSession(id: String) {
@@ -440,7 +463,7 @@ class OpenCodeActivity : AppCompatActivity() {
     private fun createNewSession() {
         val dir = currentProjectDir
         if (dir.isNullOrBlank()) { Toast.makeText(this, "Pick a project first", Toast.LENGTH_SHORT).show(); return }
-        Thread {
+        runAsync {
             val res = openCode.sessions.createSession(dir)
             runOnUiThread {
                 if (res is OcResult.Ok) {
@@ -450,23 +473,23 @@ class OpenCodeActivity : AppCompatActivity() {
                     Toast.makeText(this, "Create failed: ${(res as OcResult.Err).error.message}", Toast.LENGTH_LONG).show()
                 }
             }
-        }.start()
+        }
     }
 
     private fun abortCurrent() {
         val id = openCode.sessions.currentSessionId ?: return
-        Thread {
+        runAsync {
             val res = openCode.sessions.abort(id)
             runOnUiThread {
                 Toast.makeText(this, if (res.isOk) "Aborted" else "Abort failed: ${(res as OcResult.Err).error.message}", Toast.LENGTH_SHORT).show()
                 loadSessions()
             }
-        }.start()
+        }
     }
 
     private fun forkCurrent() {
         val id = openCode.sessions.currentSessionId ?: return
-        Thread {
+        runAsync {
             val res = openCode.sessions.fork(id)
             runOnUiThread {
                 if (res is OcResult.Ok) {
@@ -474,7 +497,7 @@ class OpenCodeActivity : AppCompatActivity() {
                     loadSessions()
                 } else Toast.makeText(this, "Fork failed", Toast.LENGTH_SHORT).show()
             }
-        }.start()
+        }
     }
 
     private fun renameCurrent() {
@@ -485,12 +508,12 @@ class OpenCodeActivity : AppCompatActivity() {
             .setPositiveButton("OK") { _, _ ->
                 val t = et.text.toString().trim()
                 if (t.isBlank()) return@setPositiveButton
-                Thread {
+                runAsync {
                     val res = openCode.sessions.rename(id, t)
                     runOnUiThread {
                         if (res.isOk) loadSessions() else Toast.makeText(this, "Rename failed", Toast.LENGTH_SHORT).show()
                     }
-                }.start()
+                }
             }.setNegativeButton("Cancel", null).show()
     }
 
@@ -499,11 +522,11 @@ class OpenCodeActivity : AppCompatActivity() {
         AlertDialog.Builder(this).setTitle(row.title).setItems(opts) { _, w ->
             when (w) {
                 0 -> switchSession(row.id)
-                1 -> Thread { openCode.sessions.fork(row.id); runOnUiThread { loadSessions() } }.start()
+                1 -> runAsync { openCode.sessions.fork(row.id); runOnUiThread { loadSessions() } }
                 2 -> { openCode.sessions.setCurrent(row.id); renameCurrent() }
-                3 -> Thread { openCode.sessions.abort(row.id); runOnUiThread { loadSessions() } }.start()
+                3 -> runAsync { openCode.sessions.abort(row.id); runOnUiThread { loadSessions() } }
                 4 -> AlertDialog.Builder(this).setMessage("Delete ${row.title}?").setPositiveButton("Delete") { _, _ ->
-                    Thread { openCode.sessions.archive(row.id); runOnUiThread { loadSessions() } }.start()
+                    runAsync { openCode.sessions.archive(row.id); runOnUiThread { loadSessions() } }
                 }.setNegativeButton("Cancel", null).show()
             }
         }.show()
@@ -511,7 +534,7 @@ class OpenCodeActivity : AppCompatActivity() {
 
     private fun loadMessagesForCurrent() {
         val id = openCode.sessions.currentSessionId ?: run { messagesData.clear(); messagesAdapter.notifyDataSetChanged(); return }
-        Thread {
+        runAsync {
             val res = openCode.sessions.backfillMessages(id, 60)
             runOnUiThread {
                 messagesData.clear()
@@ -522,7 +545,7 @@ class OpenCodeActivity : AppCompatActivity() {
                 if (messagesData.isNotEmpty()) listMessages.setSelection(messagesData.size - 1)
                 updateSessionHeader()
             }
-        }.start()
+        }
     }
 
     private fun refreshTools() {
@@ -551,7 +574,7 @@ class OpenCodeActivity : AppCompatActivity() {
     }
 
     private fun loadAgentsAndModels() {
-        Thread {
+        runAsync {
             val agentsRes = openCode.agents.agents()
             val providersRes = openCode.models.catalog()
             runOnUiThread {
@@ -577,7 +600,7 @@ class OpenCodeActivity : AppCompatActivity() {
                     spinnerModel.setSelection(idx)
                 }
             }
-        }.start()
+        }
     }
 
     private fun sendPrompt() {
@@ -589,7 +612,7 @@ class OpenCodeActivity : AppCompatActivity() {
         }
         inputPrompt.setText("")
         val entry = openCode.sessions.get(cur)
-        Thread {
+        runAsync {
             val res = openCode.sessions.sendPrompt(cur, listOf(OpenCodeClient.PromptPart.Text(text)), openCode.agents.current, openCode.models.current)
             runOnUiThread {
                 when (res) {
@@ -606,7 +629,7 @@ class OpenCodeActivity : AppCompatActivity() {
                     }
                 }
             }
-        }.start()
+        }
     }
 
     private fun replyPerm(decision: String) {
@@ -618,12 +641,12 @@ class OpenCodeActivity : AppCompatActivity() {
             "reject" -> OpenCodeClient.PermissionDecision.REJECT
             else -> OpenCodeClient.PermissionDecision.ONCE
         }
-        Thread {
+        runAsync {
             val res = openCode.permissions.respondToPermission(id, d, dir)
             runOnUiThread {
                 if (res is OcResult.Err) Toast.makeText(this, res.error.message, Toast.LENGTH_SHORT).show()
             }
-        }.start()
+        }
         pendingPermId = null
     }
 
@@ -712,12 +735,12 @@ class OpenCodeActivity : AppCompatActivity() {
 
     private fun answerQuestion(requestId: String, answers: List<List<String>>) {
         questionBanner.visibility = View.GONE
-        Thread {
+        runAsync {
             val res = openCode.permissions.respondToQuestion(requestId, answers, pendingQuestionDir)
             runOnUiThread {
                 if (res is OcResult.Err) Toast.makeText(this, res.error.message, Toast.LENGTH_SHORT).show()
             }
-        }.start()
+        }
         pendingQuestionId = null
     }
 

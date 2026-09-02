@@ -54,7 +54,7 @@ class KokoroTtsEngine(private val context: Context) {
         private const val TAG = "KokoroTtsEngine"
         private const val MODEL_DIR_NAME = "kokoro"
         private const val MODEL_FILE_NAME = "kokoro-v1.0.int8.onnx"
-        private const val VOICE_FILE_NAME = "af_heart.bin"
+        private const val VOICE_FILE_NAME = "bm_george.bin"
         private const val DICT_FILE_NAME = "dict.txt"
         private const val TOKENS_FILE_NAME = "tokens.txt"
         private const val SAMPLE_RATE = 24000 // Kokoro output is 24kHz mono
@@ -62,7 +62,13 @@ class KokoroTtsEngine(private val context: Context) {
         fun isModelInstalled(context: Context): Boolean {
             val baseDir = File(context.filesDir, MODEL_DIR_NAME)
             val modelFile = File(baseDir, MODEL_FILE_NAME)
-            return modelFile.exists() && modelFile.length() > 50_000_000L // ~82MB
+            val tokensFile = File(baseDir, TOKENS_FILE_NAME)
+            val hasVoice = listOf("bm_george.bin", "af_heart.bin", "voices.bin").any {
+                val f = File(baseDir, it)
+                f.exists() && f.length() > 10_000L
+            }
+            val hasDict = File(baseDir, "phoneme_dict.json").exists() || File(baseDir, "dict.txt").exists()
+            return modelFile.exists() && modelFile.length() > 50_000_000L && tokensFile.exists() && hasVoice && hasDict
         }
     }
 
@@ -100,9 +106,12 @@ class KokoroTtsEngine(private val context: Context) {
         try {
             val baseDir = File(context.filesDir, MODEL_DIR_NAME)
             val modelFile = File(baseDir, MODEL_FILE_NAME)
-            val voiceFile = File(baseDir, VOICE_FILE_NAME)
-            val dictFile = File(baseDir, DICT_FILE_NAME)
             val tokensFile = File(baseDir, TOKENS_FILE_NAME)
+            val jsonDict = File(baseDir, "phoneme_dict.json")
+            val txtDict = File(baseDir, "dict.txt")
+
+            val voiceCandidates = listOf("bm_george.bin", "am_adam.bin", "am_michael.bin", "am_echo.bin", "voices.bin", "af_heart.bin")
+            val voiceFile = voiceCandidates.map { File(baseDir, it) }.firstOrNull { it.exists() && it.length() > 0L }
 
             if (!modelFile.exists()) {
                 Log.w(TAG, "Kokoro ONNX model not found at ${modelFile.absolutePath}")
@@ -134,9 +143,28 @@ class KokoroTtsEngine(private val context: Context) {
                 }
             }
 
-            // Load dict.txt
-            if (dictFile.exists()) {
-                dictFile.forEachLine { line ->
+            // Load phoneme dictionary (JSON or TXT)
+            if (jsonDict.exists()) {
+                try {
+                    val text = jsonDict.readText()
+                    val json = org.json.JSONObject(text)
+                    val keys = json.keys()
+                    while (keys.hasNext()) {
+                        val word = keys.next()
+                        val arr = json.optJSONArray(word)
+                        if (arr != null) {
+                            val list = ArrayList<Long>(arr.length())
+                            for (i in 0 until arr.length()) {
+                                list.add(arr.optLong(i))
+                            }
+                            phonemeDict[word.lowercase()] = list
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error parsing phoneme_dict.json: ${e.message}")
+                }
+            } else if (txtDict.exists()) {
+                txtDict.forEachLine { line ->
                     val parts = line.split('\t', ' ')
                     if (parts.size >= 2) {
                         val word = parts[0].trim().lowercase()
@@ -148,17 +176,18 @@ class KokoroTtsEngine(private val context: Context) {
                 }
             }
 
-            // Load af_heart.bin voice style vector [511, 1, 256] or [N, 256]
-            if (voiceFile.exists()) {
+            // Load voice style vector
+            if (voiceFile != null && voiceFile.exists()) {
                 voiceStyle = loadVoiceStyle(voiceFile)
             }
 
             if (voiceStyle == null) {
-                voiceStyle = generateDefaultVoiceStyle()
+                Log.w(TAG, "No valid voice style found for Kokoro TTS")
+                return false
             }
 
             isInitialized.set(true)
-            Log.i(TAG, "Kokoro-82M TTS initialized successfully in ${System.currentTimeMillis() - t0}ms")
+            Log.i(TAG, "Kokoro-82M TTS initialized successfully in ${System.currentTimeMillis() - t0}ms with voice ${voiceFile?.name}")
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize Kokoro ONNX: ${e.message}", e)

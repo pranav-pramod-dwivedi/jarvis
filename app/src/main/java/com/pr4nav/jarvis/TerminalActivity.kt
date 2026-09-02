@@ -147,6 +147,12 @@ class TerminalActivity : AppCompatActivity() {
     private fun runCmd(cmd: String) {
         appendLine("---")
         appendLine("> $cmd")
+        val guardErr = CmdGuard.check(cmd)
+        if (guardErr != null) {
+            appendLine("⚠️ Command Blocked by Safety Guard: $guardErr")
+            status.text = "blocked by guard"
+            return
+        }
         status.text = "running: $cmd"
         Thread {
             val r = Shell.termux(cmd, 30_000)

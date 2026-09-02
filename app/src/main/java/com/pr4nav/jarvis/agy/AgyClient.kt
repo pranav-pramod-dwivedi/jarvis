@@ -24,6 +24,23 @@ class AgyClient(private val config: AgyConfig = AgyConfig()) {
         val busy: Boolean
     )
 
+    private fun postCallback(block: () -> Unit) {
+        val isUnitTest = try {
+            Class.forName("org.junit.Test") != null
+        } catch (_: Throwable) {
+            false
+        }
+        if (isUnitTest) {
+            block()
+        } else {
+            try {
+                mainHandler.post(block)
+            } catch (_: Throwable) {
+                block()
+            }
+        }
+    }
+
     fun checkHealth(onSuccess: (Health) -> Unit, onError: (String) -> Unit) {
         executor.execute {
             try {
@@ -44,12 +61,12 @@ class AgyClient(private val config: AgyConfig = AgyConfig()) {
                         port = config.port,
                         busy = false
                     )
-                    mainHandler.post { onSuccess(h) }
+                    postCallback { onSuccess(h) }
                 } else {
-                    mainHandler.post { onError("HTTP $code from AGY daemon") }
+                    postCallback { onError("HTTP $code from AGY daemon") }
                 }
             } catch (e: Exception) {
-                mainHandler.post { onError(e.message ?: "AGY daemon unreachable") }
+                postCallback { onError(e.message ?: "AGY daemon unreachable") }
             }
         }
     }

@@ -14,33 +14,36 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.pr4nav.jarvis.MainActivity
-import com.pr4nav.jarvis.router.JarvisIntentRouter
+import com.pr4nav.jarvis.R
 import java.util.Locale
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Foreground Service powering JARVIS Hands-Free Voice Assistant.
+ * JARVIS Core — The Resilient Always-Available Foreground Voice Service.
  *
- * Runs strictly as an Android-compliant Foreground Service with type MICROPHONE.
- * Separates Voice Activity Detection (VAD) from Wake Word verification and active STT.
+ * Runs as an Android-compliant Foreground Service with type MICROPHONE.
+ * Independent of Activities, WebViews, and ephemeral UI lifecycles.
  *
- * Explicit State Machine:
+ * State Machine:
  * - OFF
  * - IDLE (quiet low-power candidate VAD)
  * - WAKE_DETECTED (verified wake word)
  * - STARTING_LISTENER
  * - LISTENING (active intentional SpeechRecognizer session)
- * - PROCESSING
- * - SPEAKING
- * - FOLLOW_UP_LISTENING
- * - PAUSED
- * - ERROR
- * - PERMISSION_REQUIRED
+ * - PROCESSING (unified routing & reasoning)
+ * - SPEAKING (HD TTS playback with barge-in support)
+ * - FOLLOW_UP_LISTENING (conversational multi-turn window)
+ * - PAUSED (user-requested standby)
+ * - ERROR (controlled backoff)
+ * - PERMISSION_REQUIRED (missing RECORD_AUDIO)
  */
 class JarvisVoiceService : Service() {
 
@@ -58,30 +61,46 @@ class JarvisVoiceService : Service() {
         PERMISSION_REQUIRED
     }
 
+    interface CoreObserver {
+        fun onStateChanged(state: VoiceState, detail: String)
+        fun onSpeechRecognized(text: String)
+        fun onResponseSynthesized(speechText: String, fullSummary: String)
+        fun onThinkingTrace(trace: String)
+    }
+
     companion object {
         private const val TAG = "JarvisVoiceService"
-        private const val CHANNEL_ID = "jarvis_voice_assistant_channel"
+        private const val CHANNEL_ID = "jarvis_voice_core_channel"
         private const val NOTIFICATION_ID = 4040
 
         const val ACTION_START = "com.pr4nav.jarvis.voice.START"
         const val ACTION_STOP = "com.pr4nav.jarvis.voice.STOP"
         const val ACTION_PAUSE = "com.pr4nav.jarvis.voice.PAUSE"
         const val ACTION_RESUME = "com.pr4nav.jarvis.voice.RESUME"
+        const val ACTION_STOP_SPEAKING = "com.pr4nav.jarvis.voice.STOP_SPEAKING"
         const val ACTION_START_ACTIVE_SESSION = "com.pr4nav.jarvis.voice.START_ACTIVE_SESSION"
 
         @Volatile var currentState: VoiceState = VoiceState.OFF
             private set
+        @Volatile var currentDetail: String = "Initializing"
+            private set
         @Volatile var isRunning: Boolean = false
             private set
+
+        @Volatile private var instance: JarvisVoiceService? = null
 
         fun start(context: Context) {
             val intent = Intent(context, JarvisVoiceService::class.java).apply {
                 action = ACTION_START
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start JarvisVoiceService: ${e.message}", e)
             }
         }
 
@@ -89,7 +108,36 @@ class JarvisVoiceService : Service() {
             val intent = Intent(context, JarvisVoiceService::class.java).apply {
                 action = ACTION_STOP
             }
-            context.startService(intent)
+            try {
+                context.startService(intent)
+            } catch (_: Exception) {}
+        }
+
+        fun pause(context: Context) {
+            val intent = Intent(context, JarvisVoiceService::class.java).apply {
+                action = ACTION_PAUSE
+            }
+            try {
+                context.startService(intent)
+            } catch (_: Exception) {}
+        }
+
+        fun resume(context: Context) {
+            val intent = Intent(context, JarvisVoiceService::class.java).apply {
+                action = ACTION_RESUME
+            }
+            try {
+                context.startService(intent)
+            } catch (_: Exception) {}
+        }
+
+        fun stopSpeaking(context: Context) {
+            val intent = Intent(context, JarvisVoiceService::class.java).apply {
+                action = ACTION_STOP_SPEAKING
+            }
+            try {
+                context.startService(intent)
+            } catch (_: Exception) {}
         }
 
         fun triggerActiveSession(context: Context, reason: String = "User Trigger") {
@@ -97,7 +145,23 @@ class JarvisVoiceService : Service() {
                 action = ACTION_START_ACTIVE_SESSION
                 putExtra("reason", reason)
             }
-            context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to trigger active session: ${e.message}", e)
+            }
+        }
+
+        fun registerObserver(observer: CoreObserver) {
+            instance?.registerObserver(observer)
+        }
+
+        fun unregisterObserver(observer: CoreObserver) {
+            instance?.unregisterObserver(observer)
         }
     }
 
@@ -105,34 +169,78 @@ class JarvisVoiceService : Service() {
     private var voiceEngine: JarvisVoiceEngine? = null
     private var acousticDetector: AcousticWakeDetector? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val observers = CopyOnWriteArrayList<CoreObserver>()
 
     private var inConversationWindow = false
     private var conversationTimerRunnable: Runnable? = null
     private var backoffRunnable: Runnable? = null
+    private var watchdogRunnable: Runnable? = null
     private var activeSttSessionRunning = false
     private var errorRetryCount = 0
 
+    private var executionWakeLock: PowerManager.WakeLock? = null
+
+    fun registerObserver(observer: CoreObserver) {
+        if (!observers.contains(observer)) {
+            observers.add(observer)
+            mainHandler.post {
+                observer.onStateChanged(currentState, currentDetail)
+            }
+        }
+    }
+
+    fun unregisterObserver(observer: CoreObserver) {
+        observers.remove(observer)
+    }
+
     override fun onCreate() {
         super.onCreate()
+        instance = this
         isRunning = true
         voiceEngine = JarvisVoiceEngine(applicationContext)
         createNotificationChannel()
+        startGuardianWatchdog()
 
+        // Android 14+ Compliant Foreground Service Start
+        val notif = buildNotification("JARVIS Core Initializing")
         try {
-            val notif = buildNotification("Hands-Free Ready")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+                val hasMic = ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+
+                if (hasMic) {
+                    startForeground(NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+                } else {
+                    startForeground(NOTIFICATION_ID, notif)
+                }
             } else {
                 startForeground(NOTIFICATION_ID, notif)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error in startForeground during onCreate: ${e.message}", e)
+            Log.e(TAG, "startForeground failed during onCreate: ${e.message}", e)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.i(TAG, "onStartCommand received action: ${intent?.action}")
-        when (intent?.action) {
+        Log.i(TAG, "onStartCommand action: ${intent?.action}, flags: $flags, startId: $startId")
+
+        // 1. Process Death / Service Recreation Check (intent == null)
+        if (intent == null) {
+            val handsFreeEnabled = VoiceAssistantPreferences.isHandsFreeEnabled(applicationContext)
+            if (handsFreeEnabled) {
+                Log.i(TAG, "Reconstructing JARVIS runtime state after process recreation")
+                checkPermissionsAndInitialize()
+            } else {
+                Log.i(TAG, "Hands-free disabled in preferences; stopping recreated service")
+                shutdownService()
+                return START_NOT_STICKY
+            }
+            return START_STICKY
+        }
+
+        when (intent.action) {
             ACTION_STOP -> {
                 shutdownService()
                 return START_NOT_STICKY
@@ -141,15 +249,32 @@ class JarvisVoiceService : Service() {
                 updateState(VoiceState.PAUSED, "Paused by user")
                 stopActiveSttSession("User paused")
                 stopAcousticDetector()
+                releaseExecutionWakeLock()
                 return START_STICKY
             }
             ACTION_RESUME -> {
                 returnToIdleState("User resumed")
                 return START_STICKY
             }
+            ACTION_STOP_SPEAKING -> {
+                voiceEngine?.stopSpeaking()
+                releaseExecutionWakeLock()
+                returnToIdleState("Speech stopped by user")
+                return START_STICKY
+            }
             ACTION_START_ACTIVE_SESSION -> {
                 val reason = intent.getStringExtra("reason") ?: "Intentional trigger"
                 startDeliberateListeningSession(reason)
+                return START_STICKY
+            }
+            ACTION_START -> {
+                // Idempotent start protection: If already IDLE and actively listening, do not recreate pipeline
+                if (currentState == VoiceState.IDLE && acousticDetector?.isListening() == true) {
+                    Log.d(TAG, "Service already actively listening in IDLE state; ignoring duplicate start")
+                    updateNotification()
+                    return START_STICKY
+                }
+                checkPermissionsAndInitialize()
                 return START_STICKY
             }
             else -> {
@@ -160,8 +285,11 @@ class JarvisVoiceService : Service() {
     }
 
     private fun checkPermissionsAndInitialize() {
-        val hasMic = checkCallingOrSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
-                PackageManager.PERMISSION_GRANTED
+        val hasMic = ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+
         Log.i(TAG, "checkPermissionsAndInitialize: hasMic=$hasMic")
 
         if (!hasMic) {
@@ -170,15 +298,31 @@ class JarvisVoiceService : Service() {
             return
         }
 
-        returnToIdleState("Service started")
+        returnToIdleState("Service ready")
     }
 
     private fun updateState(state: VoiceState, detail: String) {
         currentState = state
+        currentDetail = detail
         Log.i(TAG, "State transition -> $state ($detail)")
-        val notif = buildNotification(detail)
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-        nm?.notify(NOTIFICATION_ID, notif)
+
+        for (obs in observers) {
+            try {
+                obs.onStateChanged(state, detail)
+            } catch (e: Exception) {
+                Log.w(TAG, "Error notifying observer: ${e.message}")
+            }
+        }
+
+        updateNotification()
+    }
+
+    private fun updateNotification() {
+        try {
+            val notif = buildNotification(currentDetail)
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            nm?.notify(NOTIFICATION_ID, notif)
+        } catch (_: Exception) {}
     }
 
     /**
@@ -190,9 +334,10 @@ class JarvisVoiceService : Service() {
             if (!isRunning || currentState == VoiceState.PAUSED) return@post
 
             stopActiveSttSession(reason)
+            releaseExecutionWakeLock()
             inConversationWindow = false
             errorRetryCount = 0
-            updateState(VoiceState.IDLE, "JARVIS ready")
+            updateState(VoiceState.IDLE, "Listening for 'Hey Jarvis'")
             VoiceInstrumentation.log("ENTER_IDLE", reason, currentState.name)
 
             // Start low-power acoustic monitoring
@@ -214,29 +359,48 @@ class JarvisVoiceService : Service() {
                         Log.i(TAG, "Barge-in interrupt received: Stopping speech playback")
                         voiceEngine?.stopSpeaking()
                     }
-                    if (currentState == VoiceState.IDLE || currentState == VoiceState.SPEAKING) {
+                    if (currentState != VoiceState.PAUSED && currentState != VoiceState.OFF) {
                         VoiceInstrumentation.onWakeWordConfirmed(wakeWord, currentState.name)
                         updateState(VoiceState.WAKE_DETECTED, "Wake word confirmed: $wakeWord")
 
-                        // Open AgentActivity chat screen automatically
+                        // Trigger Floating HUD Overlay if permission granted
                         try {
-                            val chatIntent = Intent(applicationContext, com.pr4nav.jarvis.AgentActivity::class.java).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                                putExtra("from_wake_word", true)
-                                putExtra("wake_word", wakeWord)
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || android.provider.Settings.canDrawOverlays(applicationContext)) {
+                                com.pr4nav.jarvis.companion.JarvisOverlayService.showHud(applicationContext)
                             }
-                            applicationContext.startActivity(chatIntent)
                         } catch (e: Exception) {
-                            Log.e(TAG, "Failed to launch chat screen on wake word: ${e.message}")
+                            Log.w(TAG, "Failed to launch overlay on wake word: ${e.message}")
                         }
 
-                        startDeliberateListeningSession("Wake word confirmed: $wakeWord")
+                        // Respond immediately with a short, natural acknowledgement: "Yes?", "At your service.", "Hi!"
+                        val acks = listOf("Yes?", "At your service.", "I'm listening.", "Hi!")
+                        val ack = acks.random()
+                        voiceEngine?.speak(ack, interrupt = true) {
+                            mainHandler.post {
+                                startDeliberateListeningSession("Wake word confirmed: $wakeWord")
+                            }
+                        } ?: run {
+                            startDeliberateListeningSession("Wake word confirmed: $wakeWord")
+                        }
+                    } else {
+                        returnToIdleState("Wake word received while inactive")
                     }
                 }
             },
             onVoiceActivityCandidate = {
-                // Log voice activity candidate event without starting SpeechRecognizer
                 VoiceInstrumentation.onVadEvent("Ambient voice candidate detected", currentState.name)
+            },
+            onDetectorDied = {
+                mainHandler.post {
+                    if (isRunning && currentState == VoiceState.IDLE) {
+                        Log.w(TAG, "AcousticWakeDetector thread ended unexpectedly; auto-reviving in 600ms...")
+                        mainHandler.postDelayed({
+                            if (isRunning && currentState == VoiceState.IDLE) {
+                                returnToIdleState("Acoustic detector revival")
+                            }
+                        }, 600L)
+                    }
+                }
             }
         )
         acousticDetector?.start()
@@ -250,7 +414,7 @@ class JarvisVoiceService : Service() {
     }
 
     /**
-     * Starts ONE intentional SpeechRecognizer session.
+     * Starts ONE intentional SpeechRecognizer session with bounded WakeLock.
      * Does NOT loop indefinitely or restart on silence.
      */
     fun startDeliberateListeningSession(reason: String) {
@@ -261,6 +425,7 @@ class JarvisVoiceService : Service() {
                 return@post
             }
 
+            acquireExecutionWakeLock()
             stopAcousticDetector()
             updateState(
                 if (inConversationWindow) VoiceState.FOLLOW_UP_LISTENING else VoiceState.LISTENING,
@@ -278,7 +443,6 @@ class JarvisVoiceService : Service() {
                     }
 
                     override fun onBeginningOfSpeech() {
-                        // Barge-in check if TTS is still speaking
                         if (VoiceAssistantPreferences.isBargeInEnabled(applicationContext) &&
                             voiceEngine?.isSpeaking() == true) {
                             voiceEngine?.stopSpeaking()
@@ -307,7 +471,7 @@ class JarvisVoiceService : Service() {
                         }
                         VoiceInstrumentation.onError(error, errorMsg, currentState.name)
 
-                        // Do NOT rapidly restart! Enter controlled backoff to IDLE.
+                        // Controlled backoff to IDLE rather than rapid infinite restart
                         handleSttErrorWithBackoff(error, errorMsg)
                     }
 
@@ -320,6 +484,9 @@ class JarvisVoiceService : Service() {
 
                         if (text.isNotBlank()) {
                             VoiceInstrumentation.onSuccess(text, currentState.name)
+                            for (obs in observers) {
+                                try { obs.onSpeechRecognized(text) } catch (_: Exception) {}
+                            }
                             handleRecognizedText(text)
                         } else {
                             returnToIdleState("Empty recognition result")
@@ -329,7 +496,6 @@ class JarvisVoiceService : Service() {
                     override fun onPartialResults(partialResults: Bundle?) {
                         val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                         if (!partial.isNullOrBlank()) {
-                            // Barge-in check
                             if (VoiceAssistantPreferences.isBargeInEnabled(applicationContext) &&
                                 (WakeWordEngine.isStopCommand(partial) || WakeWordEngine.containsWakeWord(partial))) {
                                 voiceEngine?.stopSpeaking()
@@ -350,7 +516,6 @@ class JarvisVoiceService : Service() {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                    // Generous speech pause timeout (allow natural speaking pauses)
                     putExtra("android.speech.extras.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 2000L)
                     putExtra("android.speech.extras.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 1500L)
                     putExtra("android.speech.extras.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 1500L)
@@ -368,8 +533,8 @@ class JarvisVoiceService : Service() {
     private fun handleSttErrorWithBackoff(errorCode: Int, errorMsg: String) {
         errorRetryCount++
         updateState(VoiceState.ERROR, "STT: $errorMsg")
+        releaseExecutionWakeLock()
 
-        // Controlled exponential backoff (e.g. 1.5s, 3s, 5s) instead of immediate infinite loop
         val backoffDelay = minOf(1500L * errorRetryCount, 5000L)
         backoffRunnable?.let { mainHandler.removeCallbacks(it) }
         backoffRunnable = Runnable {
@@ -381,7 +546,7 @@ class JarvisVoiceService : Service() {
     private fun handleRecognizedText(text: String) {
         Log.i(TAG, "Processing utterance: \"$text\"")
 
-        // 1. Barge-in / stop check
+        // 1. Barge-in / stop check (STOP SPEAKING != CANCEL TASK)
         if (WakeWordEngine.isStopCommand(text)) {
             voiceEngine?.stopSpeaking()
             inConversationWindow = false
@@ -391,12 +556,10 @@ class JarvisVoiceService : Service() {
 
         // 2. Wake-word check
         val hasWake = WakeWordEngine.containsWakeWord(text)
-        // If wake-word was confirmed by on-device neural engine to trigger this STT session,
-        // or user explicitly included "Jarvis", or in conversation follow-up window:
-        val shouldExecute = hasWake || inConversationWindow || (currentState == VoiceState.LISTENING || currentState == VoiceState.WAKE_DETECTED)
+        val shouldExecute = hasWake || inConversationWindow ||
+                (currentState == VoiceState.LISTENING || currentState == VoiceState.WAKE_DETECTED)
 
         if (!shouldExecute) {
-            // Speech recognized did NOT contain wake word -> False activation
             VoiceInstrumentation.onFalseActivation("Recognized text \"$text\" had no wake word", currentState.name)
             returnToIdleState("Speech did not contain wake word")
             return
@@ -406,14 +569,15 @@ class JarvisVoiceService : Service() {
             VoiceInstrumentation.onWakeWordConfirmed("Jarvis", currentState.name)
         }
 
-        // 3. Extract clean command (e.g. "Jarvis, take me home" -> "take me home")
+        // 3. Extract clean command
         val cleanCommand = if (hasWake) WakeWordEngine.extractCommand(text) else text
         if (cleanCommand.isBlank()) {
             speakResponse("Yes? How can I help you?", openConversation = true)
             return
         }
 
-        // 4. Execute via unified autonomous system (Deterministic Needle -> Local SLM -> Cloud Gemini LLM)
+        // 4. Execute via unified autonomous system
+        acquireExecutionWakeLock()
         updateState(VoiceState.PROCESSING, "\"$cleanCommand\"")
 
         val voiceSession = com.pr4nav.jarvis.session.JarvisSessionManager.getActiveSession(
@@ -426,19 +590,53 @@ class JarvisVoiceService : Service() {
             com.pr4nav.jarvis.session.SessionMessage(sender = "user", text = cleanCommand)
         )
 
+        val execSafetyRunnable = Runnable {
+            Log.w(TAG, "Command execution safety timeout (40s); auto-recovering to IDLE")
+            returnToIdleState("Command execution timed out")
+        }
+        mainHandler.postDelayed(execSafetyRunnable, 40_000L)
+
         Thread {
-            com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(applicationContext, cleanCommand) { res ->
-                com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
-                    applicationContext,
-                    voiceSession,
-                    com.pr4nav.jarvis.session.SessionMessage(
-                        sender = "agent",
-                        text = "${res.source.badge}\n${res.jarvisResponse.text}",
-                        steps = listOf("Model: ${res.modelName}", "Thinking: ${res.thinkingTrace}"),
-                        isSuccess = res.handled
-                    )
+            try {
+                com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(
+                    context = applicationContext,
+                    rawQuery = cleanCommand,
+                    onStatus = { status ->
+                        for (obs in observers) {
+                            try { obs.onThinkingTrace(status) } catch (_: Exception) {}
+                        }
+                    },
+                    onChunk = null,
+                    onResult = { res ->
+                        mainHandler.removeCallbacks(execSafetyRunnable)
+                        com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+                            applicationContext,
+                            voiceSession,
+                            com.pr4nav.jarvis.session.SessionMessage(
+                                sender = "agent",
+                                text = "${res.source.badge}\n${res.jarvisResponse.text}",
+                                steps = listOf("Model: ${res.modelName}", "Thinking: ${res.thinkingTrace}"),
+                                isSuccess = res.handled
+                            )
+                        )
+
+                        for (obs in observers) {
+                            try {
+                                obs.onResponseSynthesized(res.jarvisResponse.speechText, res.jarvisResponse.text)
+                                obs.onThinkingTrace(res.thinkingTrace)
+                            } catch (_: Exception) {}
+                        }
+
+                        speakResponse(
+                            res.jarvisResponse.speechText,
+                            openConversation = VoiceAssistantPreferences.isConversationMode(applicationContext)
+                        )
+                    }
                 )
-                speakResponse(res.jarvisResponse.speechText, openConversation = VoiceAssistantPreferences.isConversationMode(applicationContext))
+            } catch (e: Exception) {
+                mainHandler.removeCallbacks(execSafetyRunnable)
+                Log.e(TAG, "Execution exception: ${e.message}", e)
+                speakResponse("An internal error occurred while processing your request.", openConversation = false)
             }
         }.start()
     }
@@ -446,17 +644,34 @@ class JarvisVoiceService : Service() {
     private fun speakResponse(text: String, openConversation: Boolean) {
         mainHandler.post {
             updateState(VoiceState.SPEAKING, text)
-            // Stop acoustic detector while assistant speaks so microphone doesn't hear own speaker and self-cancel
             stopAcousticDetector()
 
-            voiceEngine?.speak(text, interrupt = true) {
-                mainHandler.post {
-                    if (openConversation && VoiceAssistantPreferences.isConversationMode(applicationContext)) {
-                        enterConversationWindow()
-                    } else {
-                        returnToIdleState("Speech completed")
+            val safetyMs = maxOf(6000L, text.length * 85L) + 4000L
+            val speechSafetyRunnable = Runnable {
+                Log.w(TAG, "TTS speech safety timeout fired after ${safetyMs}ms; resetting to IDLE")
+                voiceEngine?.stopSpeaking()
+                returnToIdleState("TTS safety timeout")
+            }
+            mainHandler.postDelayed(speechSafetyRunnable, safetyMs)
+
+            try {
+                voiceEngine?.speak(text, interrupt = true) {
+                    mainHandler.post {
+                        mainHandler.removeCallbacks(speechSafetyRunnable)
+                        if (openConversation && VoiceAssistantPreferences.isConversationMode(applicationContext)) {
+                            enterConversationWindow()
+                        } else {
+                            returnToIdleState("Speech completed")
+                        }
                     }
+                } ?: run {
+                    mainHandler.removeCallbacks(speechSafetyRunnable)
+                    returnToIdleState("VoiceEngine null")
                 }
+            } catch (e: Exception) {
+                mainHandler.removeCallbacks(speechSafetyRunnable)
+                Log.e(TAG, "TTS speak exception: ${e.message}", e)
+                returnToIdleState("TTS error fallback")
             }
         }
     }
@@ -471,7 +686,6 @@ class JarvisVoiceService : Service() {
         }
         mainHandler.postDelayed(conversationTimerRunnable!!, duration)
 
-        // Start follow-up listening session
         startDeliberateListeningSession("Conversation follow-up")
     }
 
@@ -487,18 +701,81 @@ class JarvisVoiceService : Service() {
         }
     }
 
+    private fun acquireExecutionWakeLock() {
+        try {
+            if (executionWakeLock == null) {
+                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                executionWakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "jarvis:command_execution")
+            }
+            if (executionWakeLock?.isHeld != true) {
+                executionWakeLock?.acquire(30_000L) // 30s safety timeout
+                Log.d(TAG, "Acquired execution WakeLock (30s max)")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "WakeLock acquire error: ${e.message}")
+        }
+    }
+
+    private fun releaseExecutionWakeLock() {
+        try {
+            if (executionWakeLock?.isHeld == true) {
+                executionWakeLock?.release()
+                Log.d(TAG, "Released execution WakeLock")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "WakeLock release error: ${e.message}")
+        }
+    }
+
     private fun shutdownService() {
         isRunning = false
         inConversationWindow = false
         activeSttSessionRunning = false
+        stopGuardianWatchdog()
         conversationTimerRunnable?.let { mainHandler.removeCallbacks(it) }
         backoffRunnable?.let { mainHandler.removeCallbacks(it) }
         stopActiveSttSession("Service shutdown")
         stopAcousticDetector()
+        releaseExecutionWakeLock()
         voiceEngine?.destroy()
-        updateState(VoiceState.OFF, "Hands-Free service stopped")
-        stopForeground(true)
+        updateState(VoiceState.OFF, "JARVIS Core stopped")
+        observers.clear()
+        instance = null
+        try {
+            stopForeground(true)
+        } catch (_: Exception) {}
         stopSelf()
+    }
+
+    private fun startGuardianWatchdog() {
+        stopGuardianWatchdog()
+        watchdogRunnable = object : Runnable {
+            override fun run() {
+                try {
+                    val handsFree = VoiceAssistantPreferences.isHandsFreeEnabled(applicationContext)
+                    if (isRunning && handsFree) {
+                        if (currentState == VoiceState.IDLE) {
+                            if (acousticDetector == null || acousticDetector?.isListening() != true) {
+                                Log.w(TAG, "GuardianWatchdog: Acoustic detector inactive while IDLE! Reviving...")
+                                startAcousticDetector()
+                            }
+                        } else if (currentState == VoiceState.ERROR) {
+                            Log.w(TAG, "GuardianWatchdog: Service in ERROR state! Auto-recovering to IDLE...")
+                            returnToIdleState("Watchdog ERROR auto-recovery")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "GuardianWatchdog loop error: ${e.message}")
+                }
+                mainHandler.postDelayed(this, 5000L)
+            }
+        }
+        mainHandler.postDelayed(watchdogRunnable!!, 5000L)
+    }
+
+    private fun stopGuardianWatchdog() {
+        watchdogRunnable?.let { mainHandler.removeCallbacks(it) }
+        watchdogRunnable = null
     }
 
     override fun onDestroy() {
@@ -512,10 +789,10 @@ class JarvisVoiceService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "JARVIS Hands-Free Assistant",
+                "JARVIS Core Voice Assistant",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shows live status of JARVIS background voice assistant"
+                description = "Shows live status and controls for JARVIS core voice service"
                 setShowBadge(false)
             }
             val nm = getSystemService(NotificationManager::class.java)
@@ -525,20 +802,42 @@ class JarvisVoiceService : Service() {
 
     private fun buildNotification(statusText: String): Notification {
         val tapIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
             this, 0, tapIntent,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
         )
 
+        // Action: Pause / Resume
+        val toggleActionIntent = Intent(this, JarvisVoiceService::class.java).apply {
+            action = if (currentState == VoiceState.PAUSED) ACTION_RESUME else ACTION_PAUSE
+        }
+        val togglePending = PendingIntent.getService(
+            this, 1, toggleActionIntent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        )
+        val toggleTitle = if (currentState == VoiceState.PAUSED) "Resume" else "Pause"
+
+        // Action: Stop
+        val stopActionIntent = Intent(this, JarvisVoiceService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPending = PendingIntent.getService(
+            this, 2, stopActionIntent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("JARVIS Voice Assistant · ${currentState.name}")
+            .setContentTitle("JARVIS Core · ${currentState.name}")
             .setContentText(statusText)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .addAction(android.R.drawable.ic_media_pause, toggleTitle, togglePending)
+            .addAction(android.R.drawable.ic_delete, "Stop", stopPending)
             .build()
     }
 }

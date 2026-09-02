@@ -58,6 +58,11 @@ class OnnxWakeWordEngine : WakeWordEngine {
     private var contextRef: java.lang.ref.WeakReference<Context>? = null
     private var logThrottleCounter = 0
 
+    // Anti-False-Positive Gating & Calibration
+    private var lastDetectionTimestamp = 0L
+    private val MIN_VOCAL_PEAK = 20 // Fully sensitive; neural ONNX model handles noise and silence discrimination
+    private val DETECTION_COOLDOWN_MS = 1000L
+
     init {
         resetBuffers()
     }
@@ -221,17 +226,28 @@ class OnnxWakeWordEngine : WakeWordEngine {
             totalInferenceTimeMs += latency
             averageInferenceLatencyMs = totalInferenceTimeMs / totalInferenceCount
 
+            val threshold = contextRef?.get()?.let { VoiceAssistantPreferences.getWakeConfidenceThreshold(it) } ?: 0.28f
+
             logThrottleCounter++
             if (DEBUG_WAKE && (prob >= 0.15f || logThrottleCounter % 25 == 0)) {
-                Log.d(TAG, "[DEBUG_WAKE] Audio: peak=$peak | Model prob=%.4f (threshold=0.50, latency=%dms, detected=%b)"
-                    .format(prob, latency, prob >= 0.50f))
+                Log.d(TAG, "[DEBUG_WAKE] Audio: peak=$peak | Model prob=%.4f (threshold=%.2f, latency=%dms)"
+                    .format(prob, threshold, latency))
             }
 
-            // Threshold evaluation (0.28f default sensitivity to capture natural speech variants like "Jarvis", "JAR-vis")
-            val threshold = contextRef?.get()?.let { VoiceAssistantPreferences.getWakeConfidenceThreshold(it) } ?: 0.28f
+            val now = System.currentTimeMillis()
+            if (now - lastDetectionTimestamp < DETECTION_COOLDOWN_MS) {
+                return false
+            }
+
+            // Energy Gate: Reject low-power ambient noise / silence
+            if (peak < MIN_VOCAL_PEAK) {
+                return false
+            }
+
             if (prob >= threshold) {
-                Log.i(TAG, "★ WAKE_DETECTED! Confirmed 'Jarvis' wake word (Prob: %.4f, Threshold: %.2f, Latency: %dms, Peak: %d)".format(prob, threshold, latency, peak))
-                // Reset rolling buffers after detection
+                Log.i(TAG, "★ WAKE_DETECTED! Confirmed 'Hey Jarvis' wake word (Prob: %.4f, Threshold: %.2f, Latency: %dms, Peak: %d)"
+                    .format(prob, threshold, latency, peak))
+                lastDetectionTimestamp = now
                 resetBuffers()
                 return true
             }
@@ -243,12 +259,12 @@ class OnnxWakeWordEngine : WakeWordEngine {
 
     private fun copyAssetToFile(context: Context, assetName: String): File {
         val downloadedFile = File(ModelDownloadManager.getWakeWordDir(context), assetName)
-        if (downloadedFile.exists() && downloadedFile.length() > 0L) {
+        if (downloadedFile.exists() && downloadedFile.length() > 500_000L) {
             return downloadedFile
         }
 
         val outFile = File(context.filesDir, assetName)
-        if (outFile.exists() && outFile.length() > 0L) {
+        if (outFile.exists() && outFile.length() > 500_000L) {
             return outFile
         }
 
@@ -258,9 +274,10 @@ class OnnxWakeWordEngine : WakeWordEngine {
                     input.copyTo(output)
                 }
             }
-        } catch (_: Exception) {
-            Log.d(TAG, "Asset $assetName not in APK bundle, relying on downloaded model")
+            Log.i(TAG, "Successfully extracted asset $assetName to ${outFile.absolutePath} (${outFile.length()} bytes)")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error copying asset $assetName: ${e.message}")
         }
-        return if (downloadedFile.exists()) downloadedFile else outFile
+        return if (downloadedFile.exists() && downloadedFile.length() > 500_000L) downloadedFile else outFile
     }
 }

@@ -56,7 +56,7 @@ class SessionHistoryDialog(
             SessionType.AGY_CODING -> "AGY Coding Sessions"
             null -> "All Sessions"
         }
-        txtHeaderTitle.text = "📅 $typeLabel"
+        txtHeaderTitle.text = typeLabel
 
         btnNewSession.setOnClickListener {
             dismiss()

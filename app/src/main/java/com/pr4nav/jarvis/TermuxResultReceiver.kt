@@ -102,9 +102,18 @@ object TermuxBridge {
 
     fun deliver(r: TermuxResult) { pending[r.reqId]?.offer(r) }
 
+    private fun isUnitTest(): Boolean {
+        return try {
+            Class.forName("org.junit.Test") != null
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     /** Blocking execute. Returns null on timeout/dispatch failure. */
     fun execute(label: String, command: String, timeoutMs: Long = 30_000, background: Boolean = true, stdin: String? = null): TermuxResult? {
         val c = ctx ?: return null
+        if (isUnitTest()) return null
         if (!hasPermission()) return null
         val id = idGen.incrementAndGet()
         val q = SynchronousQueue<TermuxResult>()
@@ -227,8 +236,11 @@ object Shell {
 
     fun root(command: String, timeoutMs: Long = 45_000): Res {
         val t0 = System.currentTimeMillis()
+        val suBin = listOf("/product/bin/su", "/system/bin/su", "/system/xbin/su", "/sbin/su").firstOrNull { File(it).exists() }
+        if (suBin == null) {
+            return Res("", "root su binary unavailable", -1, System.currentTimeMillis() - t0, false, "root")
+        }
         return try {
-            val suBin = if (File("/product/bin/su").exists()) "/product/bin/su" else "su"
             val p = ProcessBuilder(suBin, "-c", command).start()
             val done = p.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
             if (!done) { p.destroyForcibly(); Res("", "timeout", 124, System.currentTimeMillis() - t0, true, "root") }
@@ -253,7 +265,7 @@ object Shell {
 
 /** Shared state between file manager UI and the agent — ONE real filesystem. */
 object SessionState {
-    @Volatile var dir: String = "/storage/emulated/0"
+    @Volatile var dir: String = "/storage/emulated/0/JARVIS/workspace"
 }
 
 /**

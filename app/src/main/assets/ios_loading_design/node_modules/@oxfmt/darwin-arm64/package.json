@@ -1,0 +1,24 @@
+{
+  "name": "@oxfmt/darwin-arm64",
+  "version": "0.2.0",
+  "author": "Boshen and oxc contributors",
+  "license": "MIT",
+  "homepage": "https://oxc.rs",
+  "bugs": "https://github.com/oxc-project/oxc/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oxc-project/oxc",
+    "directory": "npm/oxfmt"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "publishConfig": {
+    "executableFiles": [
+      "oxfmt"
+    ]
+  }
+}

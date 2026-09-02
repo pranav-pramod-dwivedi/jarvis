@@ -38,6 +38,19 @@ object ConversationalContext {
         }
     }
 
+    fun getRecentTurns(limit: Int = 4): List<Pair<String, String>> {
+        val recent = synchronized(turnHistory) {
+            val valid = turnHistory.filter { System.currentTimeMillis() - it.timestamp < 10 * 60 * 1000L }
+            valid.takeLast(limit)
+        }
+        val list = mutableListOf<Pair<String, String>>()
+        for (turn in recent) {
+            list.add("user" to turn.userQuery)
+            list.add("assistant" to turn.assistantResponse)
+        }
+        return list
+    }
+
     fun getRecentHistory(limit: Int = 4): String {
         val recent = synchronized(turnHistory) {
             val valid = turnHistory.filter { System.currentTimeMillis() - it.timestamp < 10 * 60 * 1000L }
@@ -51,6 +64,52 @@ object ConversationalContext {
                 append("Jarvis: ").append(turn.assistantResponse).append("\n")
             }
         }.trim()
+    }
+
+    /**
+     * Extracts a compact list of topics, key questions, and entities from the past 4-5 turns.
+     * Prevents bloating message tokens while keeping the model anchored in the conversation.
+     */
+    fun getCompactTopicSummary(limit: Int = 5): String {
+        val recent = synchronized(turnHistory) {
+            val valid = turnHistory.filter { System.currentTimeMillis() - it.timestamp < 15 * 60 * 1000L }
+            valid.takeLast(limit)
+        }
+        if (recent.isEmpty()) return ""
+
+        val sb = StringBuilder()
+        for ((idx, turn) in recent.withIndex()) {
+            val qTopic = extractTopicKeywords(turn.userQuery)
+            val aFact = turn.assistantResponse.lines().firstOrNull { it.isNotBlank() }?.take(80)?.trim() ?: ""
+            sb.append("${idx + 1}. Topic: \"$qTopic\"")
+            if (aFact.isNotBlank()) {
+                sb.append(" ➔ $aFact")
+            }
+            sb.append("\n")
+        }
+        return sb.toString().trim()
+    }
+
+    private fun extractTopicKeywords(query: String): String {
+        val cleaned = query.replace(Regex("(?i)^(what is|what's|tell me about|who is|who's|how is|how does|where is|can you|please|search for|lookup)\\s+"), "").trim()
+        return if (cleaned.length > 50) cleaned.take(47) + "…" else cleaned
+    }
+
+    /**
+     * Compact active context summary (active contact, app, file, location, last action)
+     * for prompt grounding without bloating tokens.
+     */
+    fun getActiveContextSummary(): String {
+        val sb = StringBuilder()
+        val c = sessionContext
+        if (System.currentTimeMillis() - c.timestamp < 10 * 60 * 1000L) {
+            if (!c.lastContact.isNullOrBlank()) sb.append("• Active Contact: ${c.lastContact}\n")
+            if (!c.lastApp.isNullOrBlank()) sb.append("• Active App: ${c.lastApp}\n")
+            if (!c.lastFile.isNullOrBlank()) sb.append("• Active File/Path: ${c.lastFile}\n")
+            if (!c.lastLocation.isNullOrBlank()) sb.append("• Active Location: ${c.lastLocation}\n")
+            if (!c.lastAction.isNullOrBlank()) sb.append("• Last Action: ${c.lastAction}\n")
+        }
+        return sb.toString().trim()
     }
 
     fun updateContext(

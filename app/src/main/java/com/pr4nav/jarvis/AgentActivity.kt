@@ -36,8 +36,10 @@ class AgentActivity : AppCompatActivity() {
     private lateinit var btnSessionHistory: Button
     private lateinit var btnNewSession: Button
     private lateinit var currentSession: com.pr4nav.jarvis.session.JarvisSession
-
     private var voiceEngine: JarvisVoiceEngine? = null
+    private var lastSubmittedPrompt: String = ""
+    @Volatile private var isCurrentTaskCancelled = false
+    private var activeExecutionThread: Thread? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +58,47 @@ class AgentActivity : AppCompatActivity() {
         txtSessionTitle = findViewById(R.id.txt_current_session_title)
         btnSessionHistory = findViewById(R.id.btn_sessions_history)
         btnNewSession = findViewById(R.id.btn_new_session)
+
+        findViewById<View>(R.id.btn_cancel_task)?.setOnClickListener {
+            cancelCurrentTask()
+        }
+
+        findViewById<View>(R.id.btn_race_agy)?.setOnClickListener {
+            val promptToRace = lastSubmittedPrompt
+            if (promptToRace.isNotBlank()) {
+                showThinking("⚡ Racing with AGY Agent…", "Executing prompt in parallel via AGY inside PRoot Linux")
+                Thread {
+                    try {
+                        val agyRes = Shell.agy(promptToRace, timeoutMs = 60_000)
+                        runOnUiThread {
+                            hideThinking()
+                            val cleanOut = com.pr4nav.jarvis.response.UserResponseSanitizer.sanitize(agyRes.out, promptToRace)
+                            val steps = listOf(
+                                "Parallel Engine: AGY Autonomous Agent (PRoot Linux)",
+                                "Execution time: ${agyRes.ms}ms",
+                                "Exit code: ${agyRes.rc}"
+                            )
+                            addExecutionStepCard(
+                                title = "🤖 [AGY Parallel Result · ${agyRes.ms}ms]",
+                                steps = steps,
+                                isSuccess = agyRes.rc == 0,
+                                finalSummary = if (cleanOut.isNotBlank()) cleanOut else if (agyRes.err.isNotBlank()) agyRes.err else "(no output)"
+                            )
+                            if (cleanOut.isNotBlank()) {
+                                voiceEngine?.speak(cleanOut, interrupt = false)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        runOnUiThread {
+                            hideThinking()
+                            Toast.makeText(this@AgentActivity, "AGY race error: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }.start()
+            } else {
+                Toast.makeText(this, "No active prompt to race", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         voiceEngine = JarvisVoiceEngine(this)
 
@@ -183,20 +226,67 @@ class AgentActivity : AppCompatActivity() {
         }
     }
 
+    private val voiceCoreObserver = object : com.pr4nav.jarvis.voice.JarvisVoiceService.CoreObserver {
+        override fun onStateChanged(state: com.pr4nav.jarvis.voice.JarvisVoiceService.VoiceState, detail: String) {
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) {
+                    updateCtx()
+                }
+            }
+        }
+
+        override fun onSpeechRecognized(text: String) {
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed && text.isNotBlank()) {
+                    renderUserBubble(text)
+                }
+            }
+        }
+
+        override fun onResponseSynthesized(speechText: String, fullSummary: String) {
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed && fullSummary.isNotBlank()) {
+                    renderStepCard(emptyList(), true, fullSummary)
+                    scrollToBottom()
+                }
+            }
+        }
+
+        override fun onThinkingTrace(trace: String) {
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed && trace.isNotBlank()) {
+                    thinkingDetail.text = trace
+                }
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        com.pr4nav.jarvis.voice.JarvisVoiceService.registerObserver(voiceCoreObserver)
+    }
+
     override fun onResume() {
         super.onResume()
         updateCtx()
     }
 
+    override fun onStop() {
+        super.onStop()
+        com.pr4nav.jarvis.voice.JarvisVoiceService.unregisterObserver(voiceCoreObserver)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        com.pr4nav.jarvis.voice.JarvisVoiceService.unregisterObserver(voiceCoreObserver)
         voiceEngine?.destroy()
     }
 
     private fun updateCtx() {
         val mode = com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.getAgentMode(this)
         val termuxState = if (Shell.termuxReachable()) "UP" else "DOWN"
-        agentCtx.text = "Mode: ${mode.displayName} (Tap to change) · termux: $termuxState"
+        val coreState = com.pr4nav.jarvis.voice.JarvisVoiceService.currentState.name
+        agentCtx.text = "Mode: ${mode.displayName} · Core: $coreState · termux: $termuxState"
     }
 
     private fun showModeSelectorDialog() {
@@ -211,30 +301,110 @@ class AgentActivity : AppCompatActivity() {
                 updateCtx()
                 Toast.makeText(this, "Switched to ${chosen.displayName}", Toast.LENGTH_SHORT).show()
             }
-            .setNeutralButton("Agent URL") { _, _ ->
-                showConfigureQwenUrlDialog()
+            .setNeutralButton("Groq Key") { _, _ ->
+                showConfigureGroqDialog()
             }
             .setNegativeButton("Close", null)
             .show()
     }
 
-    private fun showConfigureQwenUrlDialog() {
-        val currentUrl = com.pr4nav.jarvis.llm.QwenAgentClient.getAgentUrl(this)
-        val edit = EditText(this).apply {
-            setText(currentUrl)
-            hint = "http://127.0.0.1:8081"
-            setPadding(40, 30, 40, 30)
+    private fun showConfigureGroqDialog() {
+        val currentKey = com.pr4nav.jarvis.llm.GroqClient.getApiKey(this)
+        val currentModel = com.pr4nav.jarvis.llm.GroqClient.getModel(this)
+        val metrics = com.pr4nav.jarvis.llm.GroqClient.getUsageMetrics(this)
+
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 40, 50, 20)
         }
+
+        val info = android.widget.TextView(this).apply {
+            text = "⚡ Groq LPU (Max 8,192 tokens/msg)\nQuotas: ${metrics.rpdUsed}/245 RPD · ${metrics.currentTpm}/65k TPM\nModel: $currentModel"
+            textSize = 12f
+            setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+        }
+        layout.addView(info)
+
+        val edit = EditText(this).apply {
+            setText(currentKey)
+            hint = "Groq API Key (gsk_...)"
+            setPadding(30, 25, 30, 25)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        layout.addView(edit)
+
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Qwen Python Agent Server URL")
-            .setMessage("Set endpoint running `python3 server/agent.py` (Default: http://127.0.0.1:8081)")
-            .setView(edit)
+            .setTitle("⚡ Configure Groq API Key & Quotas")
+            .setView(layout)
             .setPositiveButton("Save") { _, _ ->
-                val newUrl = edit.text.toString().trim()
-                if (newUrl.isNotBlank()) {
-                    com.pr4nav.jarvis.llm.QwenAgentClient.setAgentUrl(this, newUrl)
-                    Toast.makeText(this, "Saved: $newUrl", Toast.LENGTH_SHORT).show()
-                }
+                val newKey = edit.text.toString().trim()
+                com.pr4nav.jarvis.llm.GroqClient.setApiKey(this, newKey)
+                Toast.makeText(this, if (newKey.isNotEmpty()) "Groq API Key Saved!" else "Groq API Key Cleared", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Model") { _, _ ->
+                val models = arrayOf(
+                    "⚡ groq/compound-mini (Default · Ultra-Fast Compound Agent)",
+                    "🧠 groq/compound (Complex Multi-Tool Compound Agent)",
+                    "llama-3.3-70b-versatile (Flagship 70B)",
+                    "llama-3.1-8b-instant (Fast 8B)",
+                    "mixtral-8x7b-32768 (32k Context)",
+                    "📥 Fetch Available Models from Groq API..."
+                )
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Select Groq Model")
+                    .setItems(models) { _, which ->
+                        when (which) {
+                            0 -> {
+                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound-mini")
+                                Toast.makeText(this, "Model set to groq/compound-mini (Default)", Toast.LENGTH_SHORT).show()
+                            }
+                            1 -> {
+                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound")
+                                Toast.makeText(this, "Model set to groq/compound", Toast.LENGTH_SHORT).show()
+                            }
+                            2 -> {
+                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "llama-3.3-70b-versatile")
+                                Toast.makeText(this, "Model set to llama-3.3-70b-versatile", Toast.LENGTH_SHORT).show()
+                            }
+                            3 -> {
+                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "llama-3.1-8b-instant")
+                                Toast.makeText(this, "Model set to llama-3.1-8b-instant", Toast.LENGTH_SHORT).show()
+                            }
+                            4 -> {
+                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "mixtral-8x7b-32768")
+                                Toast.makeText(this, "Model set to mixtral-8x7b-32768", Toast.LENGTH_SHORT).show()
+                            }
+                            5 -> {
+                                Toast.makeText(this, "Fetching models from Groq...", Toast.LENGTH_SHORT).show()
+                                com.pr4nav.jarvis.llm.GroqClient.fetchAvailableModels(
+                                    context = this,
+                                    onSuccess = { fetched ->
+                                        runOnUiThread {
+                                            if (fetched.isEmpty()) {
+                                                Toast.makeText(this, "No models returned by Groq", Toast.LENGTH_SHORT).show()
+                                                return@runOnUiThread
+                                            }
+                                            androidx.appcompat.app.AlertDialog.Builder(this)
+                                                .setTitle("Available Groq Models (${fetched.size})")
+                                                .setItems(fetched.toTypedArray()) { _, fWhich ->
+                                                    val chosen = fetched[fWhich]
+                                                    com.pr4nav.jarvis.llm.GroqClient.setModel(this, chosen)
+                                                    Toast.makeText(this, "Model set to $chosen", Toast.LENGTH_SHORT).show()
+                                                }
+                                                .setNegativeButton("Cancel", null)
+                                                .show()
+                                        }
+                                    },
+                                    onError = { err ->
+                                        runOnUiThread {
+                                            Toast.makeText(this, "Fetch error: $err", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    .show()
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -433,7 +603,125 @@ class AgentActivity : AppCompatActivity() {
             layoutParams = lp
         }
         card.addView(outcome)
+
+        renderMessageActions(card, finalSummary, null)
         messagesContainer.addView(card)
+    }
+
+    private fun renderMessageActions(
+        parent: LinearLayout,
+        summaryText: String,
+        originalPrompt: String? = null
+    ) {
+        val actionsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 12 }
+            layoutParams = lp
+        }
+
+        // 1. Copy Button
+        val btnCopy = TextView(this).apply {
+            text = "📋 Copy"
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 11.5f
+            setBackgroundResource(R.drawable.bg_btn_action_pill)
+            setPadding(20, 10, 20, 10)
+            setOnClickListener {
+                val cb = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                cb.setPrimaryClip(android.content.ClipData.newPlainText("JARVIS Response", summaryText))
+                Toast.makeText(this@AgentActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+            }
+        }
+        actionsRow.addView(btnCopy)
+
+        // 2. Regenerate Button
+        val btnRegenerate = TextView(this).apply {
+            text = "🔄 Regenerate"
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 11.5f
+            setBackgroundResource(R.drawable.bg_btn_action_pill)
+            setPadding(20, 10, 20, 10)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = 10 }
+            layoutParams = lp
+
+            setOnClickListener {
+                showRegenerateDialog(originalPrompt ?: lastSubmittedPrompt.ifBlank { summaryText })
+            }
+        }
+        actionsRow.addView(btnRegenerate)
+
+        // 3. Listen Again Button
+        val btnListen = TextView(this).apply {
+            text = "🔊 Listen"
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 11.5f
+            setBackgroundResource(R.drawable.bg_btn_action_pill)
+            setPadding(20, 10, 20, 10)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = 10 }
+            layoutParams = lp
+
+            setOnClickListener {
+                voiceEngine?.speak(summaryText, interrupt = true)
+            }
+        }
+        actionsRow.addView(btnListen)
+
+        // 4. Stop Speaking Button (Instant TTS Stop only - does NOT cancel task)
+        val btnStopSpeech = TextView(this).apply {
+            text = "■ Stop Speaking"
+            setTextColor(Color.parseColor("#EF4444"))
+            textSize = 11.5f
+            setBackgroundResource(R.drawable.bg_btn_action_pill)
+            setPadding(20, 10, 20, 10)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = 10 }
+            layoutParams = lp
+
+            setOnClickListener {
+                voiceEngine?.stopSpeaking()
+                Toast.makeText(this@AgentActivity, "Speech interrupted", Toast.LENGTH_SHORT).show()
+            }
+        }
+        actionsRow.addView(btnStopSpeech)
+
+        parent.addView(actionsRow)
+    }
+
+    private fun showRegenerateDialog(prompt: String) {
+        val options = arrayOf(
+            "○ Auto (Tri-Tier Cascade)",
+            "○ Groq LLaMA 3.3 70B",
+            "○ Cloud (Gemini 2.0 Flash)",
+            "○ AGY Coding Agent"
+        )
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Regenerate with:")
+            .setItems(options) { _, which ->
+                val targetMode = when (which) {
+                    0 -> com.pr4nav.jarvis.router.AgentExecutionMode.AUTO
+                    1 -> com.pr4nav.jarvis.router.AgentExecutionMode.GROQ_NEEDLE
+                    2, 3 -> com.pr4nav.jarvis.router.AgentExecutionMode.CLOUD_NEEDLE
+                    else -> com.pr4nav.jarvis.router.AgentExecutionMode.AUTO
+                }
+                com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.setAgentMode(this, targetMode)
+                updateCtx()
+                submit(prompt)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun addUserMessage(text: String) {
@@ -526,6 +814,7 @@ class AgentActivity : AppCompatActivity() {
         card.addView(outcome)
 
         messagesContainer.addView(card)
+        renderMessageActions(card, finalSummary, lastSubmittedPrompt)
         scrollToBottom()
 
         // Persist to active session
@@ -544,6 +833,25 @@ class AgentActivity : AppCompatActivity() {
 
         // Speak outcome via TTS
         voiceEngine?.speak(finalSummary, interrupt = false)
+    }
+
+    @Volatile private var activeTaskId: String? = null
+
+    private fun cancelCurrentTask() {
+        isCurrentTaskCancelled = true
+        activeTaskId = null
+        activeExecutionThread?.interrupt()
+        activeExecutionThread = null
+        voiceEngine?.stopSpeaking()
+        runOnUiThread {
+            hideThinking()
+            addExecutionStepCard(
+                title = "Task Cancelled",
+                steps = listOf("Operation stopped by user request"),
+                isSuccess = false,
+                finalSummary = "Task execution was cancelled."
+            )
+        }
     }
 
     private fun createStreamingCard(initialTitle: String): (String, String, List<String>?, Boolean?) -> Unit {
@@ -641,6 +949,7 @@ class AgentActivity : AppCompatActivity() {
                     dot.setBackgroundResource(R.drawable.bg_dot)
                     tvTitle.setTextColor(Color.parseColor("#10B981"))
                     outcome.setBackgroundResource(R.drawable.bg_step_success)
+                    renderMessageActions(card, outcome.text.toString(), lastSubmittedPrompt)
                 }
                 scrollToBottom()
             }
@@ -649,33 +958,41 @@ class AgentActivity : AppCompatActivity() {
 
     private fun submit(q: String) {
         if (q.isEmpty()) return
+        lastSubmittedPrompt = q
+        isCurrentTaskCancelled = false
+        val taskId = java.util.UUID.randomUUID().toString()
+        activeTaskId = taskId
         input.setText("")
         addUserMessage(q)
 
-        thread {
+        val t = thread {
             try {
-                handle(q)
+                handle(q, taskId)
             } catch (e: Exception) {
-                runOnUiThread {
-                    hideThinking()
-                    addExecutionStepCard(
-                        title = "Execution Failed",
-                        steps = listOf("Error during command processing", e.message ?: "Unknown error"),
-                        isSuccess = false,
-                        finalSummary = "Could not execute: ${e.message}"
-                    )
+                if (!isCurrentTaskCancelled && activeTaskId == taskId) {
+                    runOnUiThread {
+                        hideThinking()
+                        addExecutionStepCard(
+                            title = "Execution Failed",
+                            steps = listOf("Error during command processing", e.message ?: "Unknown error"),
+                            isSuccess = false,
+                            finalSummary = "Could not execute: ${e.message}"
+                        )
+                    }
                 }
             }
         }
+        activeExecutionThread = t
     }
 
-    private fun handle(q: String) {
+    private fun handle(q: String, taskId: String? = null) {
         val lower = q.trim().lowercase()
         val arg = q.trim().split(" ", limit = 2).getOrNull(1)?.trim() ?: ""
 
         // Built-in Developer Utilities
         when {
             lower == "help" -> runOnUiThread {
+                if (taskId != null && activeTaskId != taskId) return@runOnUiThread
                 addExecutionStepCard(
                     title = "⚙️ JARVIS Developer & Command Reference",
                     steps = listOf(
@@ -690,6 +1007,7 @@ class AgentActivity : AppCompatActivity() {
             }
 
             lower == "pwd" -> runOnUiThread {
+                if (taskId != null && activeTaskId != taskId) return@runOnUiThread
                 addExecutionStepCard(
                     title = "📁 Current Working Directory",
                     steps = listOf("Resolved from SessionState"),
@@ -703,6 +1021,7 @@ class AgentActivity : AppCompatActivity() {
                 val list = Fs.list(p)
                 val items = list.take(10).map { (if (it.isDir) "📁 " else "📄 ") + it.name }
                 runOnUiThread {
+                    if (taskId != null && activeTaskId != taskId) return@runOnUiThread
                     addExecutionStepCard(
                         title = "📁 Directory Listing: $p",
                         steps = items,
@@ -713,16 +1032,22 @@ class AgentActivity : AppCompatActivity() {
             }
 
             lower.startsWith("run ") -> {
-                runOnUiThread { showThinking("Executing Termux Shell…", arg) }
-                CmdGuard.check(arg)?.let { err ->
+                runOnUiThread {
+                    if (taskId == null || activeTaskId == taskId) showThinking("Executing Termux Shell…", arg)
+                }
+                val guardErr = CmdGuard.check(arg)
+                if (guardErr != null) {
                     runOnUiThread {
-                        hideThinking()
-                        addExecutionStepCard("⚠️ Command Blocked", listOf(err), false, "Security guard prevented execution.")
+                        if (taskId == null || activeTaskId == taskId) {
+                            hideThinking()
+                            addExecutionStepCard("⚠️ Command Blocked", listOf(guardErr), false, "Security guard prevented execution.")
+                        }
                     }
                     return
                 }
                 val r = Shell.termux(arg, 60_000)
                 runOnUiThread {
+                    if (taskId != null && activeTaskId != taskId) return@runOnUiThread
                     hideThinking()
                     addExecutionStepCard(
                         title = "💻 Termux Shell: $arg",
@@ -737,6 +1062,7 @@ class AgentActivity : AppCompatActivity() {
                 com.pr4nav.jarvis.tools.JarvisToolRegistry.registerAll(this)
                 val cat = com.pr4nav.jarvis.tools.JarvisToolRegistry.catalog()
                 runOnUiThread {
+                    if (taskId != null && activeTaskId != taskId) return@runOnUiThread
                     addExecutionStepCard(
                         title = "🛠️ Registered Canonical Tools",
                         steps = cat.lines().take(12),
@@ -750,20 +1076,30 @@ class AgentActivity : AppCompatActivity() {
                 // Live Streaming Model Card with Dynamic Statuses (Thinking, Executing, Writing)
                 var streamCardUpdater: ((String, String, List<String>?, Boolean?) -> Unit)? = null
                 runOnUiThread {
-                    streamCardUpdater = createStreamingCard("🧠 Thinking…")
+                    if (taskId == null || activeTaskId == taskId) {
+                        streamCardUpdater = createStreamingCard("🧠 Thinking…")
+                    }
                 }
 
                 com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.execute(
                     context = this,
                     rawQuery = q,
                     onStatus = { status ->
-                        streamCardUpdater?.invoke(status, "", null, false)
+                        if (taskId == null || (activeTaskId == taskId && !isCurrentTaskCancelled)) {
+                            streamCardUpdater?.invoke(status, "", null, false)
+                        }
                     },
                     onChunk = { chunk ->
-                        streamCardUpdater?.invoke("", chunk, null, false)
+                        if (taskId == null || (activeTaskId == taskId && !isCurrentTaskCancelled)) {
+                            streamCardUpdater?.invoke("", chunk, null, false)
+                        }
                     },
                     onResult = { res ->
                         runOnUiThread {
+                            if (taskId != null && (activeTaskId != taskId || isCurrentTaskCancelled)) {
+                                return@runOnUiThread
+                            }
+
                             val steps = mutableListOf<String>()
                             if (res.thinkingTrace.isNotBlank()) {
                                 val traceLines = res.thinkingTrace
@@ -795,8 +1131,10 @@ class AgentActivity : AppCompatActivity() {
                                 )
                             }
 
-                            // Speak response via Kokoro-82M TTS
-                            voiceEngine?.speak(res.jarvisResponse.speechText, interrupt = false)
+                            // Speak response via Kokoro-82M TTS only if not cancelled
+                            if (taskId == null || (activeTaskId == taskId && !isCurrentTaskCancelled)) {
+                                voiceEngine?.speak(res.jarvisResponse.speechText, interrupt = false)
+                            }
                             updateCtx()
                         }
                     }

@@ -42,7 +42,26 @@ object ToolValidator {
 
         val args = rawArgs ?: JSONObject()
 
-        // 2. Schema check (Required parameters)
+        // 2a. Action normalization for toggle tools (enable/disable -> state: true/false)
+        if (args.has("action") && !args.has("state")) {
+            val actStr = args.optString("action").lowercase()
+            if (actStr in listOf("enable", "on", "true")) {
+                args.put("state", true)
+            } else if (actStr in listOf("disable", "off", "false")) {
+                args.put("state", false)
+            }
+        }
+
+        // 2b. Action validation (Reject malformed actions like bluetooth("banana"))
+        val action = args.optString("action")
+        if (action.isNotBlank() && !ToolCapabilityRegistry.validateAction(toolName, action)) {
+            return ValidationResult.Rejected(
+                JarvisError.invalidSchema("Action '$action' is not supported for tool '$toolName'"),
+                "INVALID_TOOL_ACTION"
+            )
+        }
+
+        // 2c. Schema check (Required parameters)
         val schema = toolDef.argumentSchema
         val required = schema.optJSONArray("required")
         if (required != null) {
@@ -52,6 +71,21 @@ object ToolValidator {
                     return ValidationResult.Rejected(
                         JarvisError.invalidSchema("Missing required parameter '$reqKey' for tool '$toolName'"),
                         "MISSING_PARAMETER"
+                    )
+                }
+            }
+        }
+
+        // 2c. Workspace boundary validation for file operations
+        if (args.has("path") || args.has("destination")) {
+            val targetPath = args.optString("path", args.optString("destination"))
+            if (targetPath.isNotBlank()) {
+                val isWriteOp = toolName in listOf("write_file", "create_file", "delete_file", "mkdir", "build_project")
+                val boundaryCheck = com.pr4nav.jarvis.workspace.JarvisWorkspace.validateAccess(targetPath, isWriteOp)
+                if (boundaryCheck is com.pr4nav.jarvis.workspace.WorkspaceValidationResult.Violation) {
+                    return ValidationResult.Rejected(
+                        JarvisError.invalidSchema("Workspace Boundary Violation: ${boundaryCheck.reason}. Target: ${boundaryCheck.requested}, Allowed: ${boundaryCheck.allowedRoot}"),
+                        "WORKSPACE_BOUNDARY"
                     )
                 }
             }

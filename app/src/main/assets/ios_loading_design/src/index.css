@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import 'tailwindcss';
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes spin-ring {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 30px 8px rgba(120, 180, 255, 0.08); }
+  50% { box-shadow: 0 0 60px 20px rgba(120, 180, 255, 0.18); }
+}
+
+.fade-in-up-1 {
+  opacity: 0;
+  animation: fadeInUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.4s forwards;
+}
+
+.fade-in-up-2 {
+  opacity: 0;
+  animation: fadeInUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.7s forwards;
+}
+
+.fade-in-up-3 {
+  opacity: 0;
+  animation: fadeInUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 1.0s forwards;
+}
+
+.dot-1 { animation: pulse-dot 1.4s ease-in-out 0s infinite; }
+.dot-2 { animation: pulse-dot 1.4s ease-in-out 0.2s infinite; }
+.dot-3 { animation: pulse-dot 1.4s ease-in-out 0.4s infinite; }
+
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.5) 0%,
+    rgba(255,255,255,1) 40%,
+    rgba(255,255,255,0.5) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 3s linear infinite;
+}
+
+.video-glow {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+.spinner-ring {
+  animation: spin-ring 1.4s linear infinite;
+}

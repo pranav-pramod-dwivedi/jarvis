@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/splash_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000"
@@ -16,4 +17,31 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
     </FrameLayout>
+
+    <!-- Transparent touch overlay to capture all screen taps reliably -->
+    <View
+        android:id="@+id/touch_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:focusable="true" />
+
+    <!-- Clean DM Sans Metallic Silver Shine Skip (No border / No capsule / No extra spacing) -->
+    <com.pr4nav.jarvis.ui.MetallicShineTextView
+        android:id="@+id/btn_skip_splash"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="50dp"
+        android:layout_marginEnd="18dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:padding="8dp"
+        android:text="Skip"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:visibility="invisible"
+        android:alpha="0"
+        android:elevation="12dp" />
 </FrameLayout>

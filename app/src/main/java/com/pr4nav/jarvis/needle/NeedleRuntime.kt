@@ -229,7 +229,39 @@ object NeedleRuntime {
                 reasoning = "Screen brightness adjustment."
                 confidence = 0.95
             }
-            // Time & Date
+            // World Time / Time in Location
+            (lower.contains("time in ") || lower.contains("time like in ") || lower.contains("time at ")) -> {
+                val loc = when {
+                    lower.contains("time like in ") -> lower.substringAfter("time like in ")
+                    lower.contains("time in ") -> lower.substringAfter("time in ")
+                    lower.contains("time at ") -> lower.substringAfter("time at ")
+                    else -> "world"
+                }.replace("?", "").trim()
+                calls.add(FunctionCall("system.world_time", mapOf("location" to loc)))
+                reasoning = "World clock query for $loc."
+                confidence = 0.98
+            }
+            // Countdown Timer with duration & label parsing
+            lower.contains("timer") -> {
+                val timerParsed = parseTimer(lower)
+                calls.add(FunctionCall("system.timer", timerParsed))
+                reasoning = "System countdown timer: ${timerParsed["seconds"]}s (${timerParsed["label"]})."
+                confidence = 0.98
+            }
+            // Alarm with time & description parsing
+            lower.contains("alarm") || lower.contains("wake me up") -> {
+                val alarmParsed = parseAlarm(lower)
+                calls.add(FunctionCall("system.alarm", alarmParsed))
+                reasoning = "System clock alarm for ${alarmParsed["hour"]}:${alarmParsed["minute"]} (${alarmParsed["label"]})."
+                confidence = 0.98
+            }
+            // Clock app launch
+            lower in listOf("clock", "open clock", "show clock", "clock app", "open alarms", "alarms") -> {
+                calls.add(FunctionCall("open_app", mapOf("app" to "Clock")))
+                reasoning = "Open system clock application."
+                confidence = 0.98
+            }
+            // Local Time & Date
             lower.contains("time") -> {
                 calls.add(FunctionCall("system.time", emptyMap()))
                 reasoning = "Local system time inquiry."
@@ -293,17 +325,6 @@ object NeedleRuntime {
                 reasoning = "Destructive file removal (HIGH RISK)."
                 confidence = 0.95
             }
-            // Alarm & Timer
-            lower.contains("alarm for ") || lower.contains("set an alarm") -> {
-                calls.add(FunctionCall("system.alarm", mapOf("hour" to 7, "minute" to 0, "label" to "alarm")))
-                reasoning = "System clock alarm."
-                confidence = 0.95
-            }
-            lower.contains("timer for ") || lower.contains("set a timer") -> {
-                calls.add(FunctionCall("system.timer", mapOf("seconds" to 600, "label" to "timer")))
-                reasoning = "System countdown timer."
-                confidence = 0.95
-            }
             // OpenCode
             lower.contains("opencode") || lower.contains("open my project") || lower.contains("fix the build") -> {
                 calls.add(FunctionCall("opencode.open", mapOf("project" to "main")))
@@ -337,18 +358,56 @@ object NeedleRuntime {
             }
             // Wi-Fi
             lower.contains("wifi") || lower.contains("wi-fi") -> {
-                calls.add(FunctionCall("get_wifi", emptyMap()))
-                reasoning = "Query Wi-Fi status."
-                confidence = 0.98
+                if (lower.contains("settings") || lower.contains("open") || lower.contains("kholo")) {
+                    calls.add(FunctionCall("open_settings", mapOf("subpage" to "wifi")))
+                    reasoning = "Open Wi-Fi settings."
+                    confidence = 0.96
+                } else {
+                    calls.add(FunctionCall("get_wifi", emptyMap()))
+                    reasoning = "Query Wi-Fi status."
+                    confidence = 0.98
+                }
             }
             // Bluetooth
-            lower.contains("bluetooth") || lower.contains("bt ") -> {
-                calls.add(FunctionCall("get_bluetooth", emptyMap()))
-                reasoning = "Query Bluetooth status."
+            lower.contains("bluetooth") || lower.contains("bt ") || lower == "bt" -> {
+                when {
+                    lower.contains("on") || lower.contains("enable") || lower.contains("start") || lower.contains("chalu") || lower.contains("turn on") -> {
+                        calls.add(FunctionCall("system.bluetooth", mapOf("state" to true)))
+                        reasoning = "Enable device Bluetooth."
+                        confidence = 0.98
+                    }
+                    lower.contains("off") || lower.contains("disable") || lower.contains("stop") || lower.contains("band") || lower.contains("turn off") -> {
+                        calls.add(FunctionCall("system.bluetooth", mapOf("state" to false)))
+                        reasoning = "Disable device Bluetooth."
+                        confidence = 0.98
+                    }
+                    lower.contains("settings") || lower.contains("open") || lower.contains("kholo") -> {
+                        calls.add(FunctionCall("open_settings", mapOf("subpage" to "bluetooth")))
+                        reasoning = "Open Bluetooth settings."
+                        confidence = 0.96
+                    }
+                    else -> {
+                        calls.add(FunctionCall("get_bluetooth", emptyMap()))
+                        reasoning = "Query Bluetooth status."
+                        confidence = 0.98
+                    }
+                }
+            }
+            // Screencapture / Screen reading without images
+            lower.contains("read screen") || lower.contains("what is on my screen") || lower.contains("what's on my screen") || lower.contains("inspect screen") || lower.contains("screen text") -> {
+                calls.add(FunctionCall("read_screen_text", emptyMap()))
+                reasoning = "Read live screen text via Accessibility without screenshot overhead."
                 confidence = 0.98
             }
-            // Screenshot
-            lower.contains("screenshot") || lower.contains("screen capture") || lower.contains("screen lo") -> {
+            // Virtual touch / click
+            (lower.startsWith("click ") || lower.startsWith("tap ")) && !lower.contains("clock") && !lower.contains("timer") -> {
+                val target = lower.removePrefix("click ").removePrefix("tap ").trim()
+                calls.add(FunctionCall("virtual_touch", mapOf("text" to target)))
+                reasoning = "Virtual touch click on element '$target'."
+                confidence = 0.96
+            }
+            // Screenshot image
+            lower.contains("screenshot") || lower.contains("take screenshot") || lower.contains("screen lo") -> {
                 calls.add(FunctionCall("take_screenshot", emptyMap()))
                 reasoning = "Capture screen."
                 confidence = 0.99
@@ -356,8 +415,9 @@ object NeedleRuntime {
             // App Launch
             lower.startsWith("open ") || lower.startsWith("launch ") || lower.endsWith(" kholo") || lower.endsWith(" chalao") -> {
                 val app = cleanAppFromInput(lower)
-                calls.add(FunctionCall("open_app", mapOf("app" to app)))
-                reasoning = "Launch application: $app"
+                val friendly = com.pr4nav.jarvis.response.AnswerSynthesizer.cleanFriendlyAppName(app)
+                calls.add(FunctionCall("open_app", mapOf("app" to friendly)))
+                reasoning = "Launch application: $friendly"
                 confidence = 0.96
             }
             // Unsupported / Conversational -> Empty calls (Escalate)
@@ -455,5 +515,79 @@ object NeedleRuntime {
             .removeSuffix(" open karo")
             .removeSuffix(" app")
             .trim()
+    }
+
+    fun parseTimer(input: String): Map<String, Any> {
+        val lower = input.lowercase()
+        var totalSeconds = 0
+
+        val hoursMatch = Regex("(\\d+)\\s*(?:hours?|hrs?)").find(lower)
+        if (hoursMatch != null) {
+            totalSeconds += (hoursMatch.groupValues[1].toIntOrNull() ?: 0) * 3600
+        }
+        val minsMatch = Regex("(\\d+)\\s*(?:minutes?|mins?)").find(lower)
+        if (minsMatch != null) {
+            totalSeconds += (minsMatch.groupValues[1].toIntOrNull() ?: 0) * 60
+        }
+        val secsMatch = Regex("(\\d+)\\s*(?:seconds?|secs?)").find(lower)
+        if (secsMatch != null) {
+            totalSeconds += (secsMatch.groupValues[1].toIntOrNull() ?: 0)
+        }
+
+        if (totalSeconds == 0) {
+            val numMatch = Regex("timer (?:for )?(\\d+)").find(lower)
+            if (numMatch != null) {
+                totalSeconds = (numMatch.groupValues[1].toIntOrNull() ?: 1) * 60
+            } else {
+                totalSeconds = 300 // default 5 min
+            }
+        }
+
+        val label = when {
+            lower.contains("called ") -> lower.substringAfter("called ").trim()
+            lower.contains("named ") -> lower.substringAfter("named ").trim()
+            lower.contains("for ") -> {
+                val afterFor = lower.substringAfterLast("for ").trim()
+                if (!afterFor.matches(Regex(".*\\d+.*"))) afterFor else "Timer"
+            }
+            else -> "Timer"
+        }
+
+        return mapOf("seconds" to totalSeconds, "label" to label)
+    }
+
+    fun parseAlarm(input: String): Map<String, Any> {
+        val lower = input.lowercase()
+        var hour = 7
+        var minute = 0
+
+        val timePattern = Regex("(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?")
+        val match = timePattern.find(lower)
+        if (match != null) {
+            val rawH = match.groupValues[1].toIntOrNull() ?: 7
+            val rawM = match.groupValues[2].toIntOrNull() ?: 0
+            val ampm = match.groupValues[3]
+
+            hour = when {
+                ampm == "pm" && rawH < 12 -> rawH + 12
+                ampm == "am" && rawH == 12 -> 0
+                else -> rawH
+            }
+            minute = rawM
+        }
+
+        val label = when {
+            lower.contains("with description ") -> lower.substringAfter("with description ").trim()
+            lower.contains("description ") -> lower.substringAfter("description ").trim()
+            lower.contains("called ") -> lower.substringAfter("called ").trim()
+            lower.contains("named ") -> lower.substringAfter("named ").trim()
+            lower.contains("for ") -> {
+                val after = lower.substringAfter("for ").trim()
+                if (after.matches(Regex(".*\\d+.*"))) "Alarm" else after
+            }
+            else -> "Alarm"
+        }
+
+        return mapOf("hour" to hour, "minute" to minute, "label" to label)
     }
 }

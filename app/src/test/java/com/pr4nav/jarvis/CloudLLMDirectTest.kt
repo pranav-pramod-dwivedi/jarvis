@@ -31,14 +31,15 @@ class CloudLLMDirectTest {
     @Test
     fun testAgentExecutionModes() {
         val modes = com.pr4nav.jarvis.router.AgentExecutionMode.values()
-        assertEquals(3, modes.size)
+        assertEquals(4, modes.size)
+        assertTrue(modes.contains(com.pr4nav.jarvis.router.AgentExecutionMode.AUTO))
         assertTrue(modes.contains(com.pr4nav.jarvis.router.AgentExecutionMode.CLOUD_NEEDLE))
         assertTrue(modes.contains(com.pr4nav.jarvis.router.AgentExecutionMode.NEEDLE_ONLY))
-        assertTrue(modes.contains(com.pr4nav.jarvis.router.AgentExecutionMode.QWEN_NEEDLE))
+        assertTrue(modes.contains(com.pr4nav.jarvis.router.AgentExecutionMode.GROQ_NEEDLE))
     }
 
     @Test
-    fun testQwenAgentClientDefaults() {
-        assertEquals("http://127.0.0.1:8080", com.pr4nav.jarvis.llm.QwenAgentClient.DEFAULT_AGENT_URL)
+    fun testGroqClientDefaults() {
+        assertNotNull(com.pr4nav.jarvis.llm.GroqClient.DEFAULT_MODEL)
     }
 }

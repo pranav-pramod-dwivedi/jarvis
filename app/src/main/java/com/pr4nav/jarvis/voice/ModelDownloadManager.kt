@@ -65,13 +65,15 @@ object ModelDownloadManager {
     fun isKokoroTtsInstalled(context: Context): Boolean {
         val dir = getKokoroDir(context)
         val onnx = File(dir, "kokoro-v1.0.int8.onnx")
-        val voice = File(dir, "bm_george.bin")
         val tokens = File(dir, "tokens.txt")
-        val dict = File(dir, "phoneme_dict.json")
+        val hasVoice = listOf("bm_george.bin", "af_heart.bin", "voices.bin").any {
+            val f = File(dir, it)
+            f.exists() && f.length() > 10_000L
+        }
+        val hasDict = File(dir, "phoneme_dict.json").exists() || File(dir, "dict.txt").exists()
 
         return onnx.exists() && onnx.length() > 50_000_000L &&
-               voice.exists() && voice.length() > 100_000L &&
-               tokens.exists() && dict.exists()
+               tokens.exists() && hasVoice && hasDict
     }
 
     fun isModelInstalled(context: Context, modelId: String): Boolean {

@@ -1,199 +1,146 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/hud_root"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@android:color/transparent">
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_overlay_half_sheet">
 
-    <!-- Glowing Futuristic Card Container -->
+    <!-- Glowing Siri Replica Background Layer -->
+    <ImageView
+        android:id="@+id/hud_bg_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:src="@drawable/bg_siri_replica_glow"
+        android:scaleType="fitXY" />
+
+    <!-- Main Half-Screen Overlay Content -->
     <LinearLayout
         android:id="@+id/hud_card"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_margin="16dp"
+        android:layout_height="match_parent"
         android:orientation="vertical"
-        android:background="@drawable/bg_agent_input_bar"
-        android:padding="20dp"
-        android:elevation="12dp">
+        android:gravity="center_horizontal">
 
-        <!-- Top Header: Logo, Status Pill, Close / Minimize Buttons -->
+        <!-- Top Header: Handle + 3 Action Buttons (- [ ] ✕) -->
         <RelativeLayout
+            android:id="@+id/hud_header"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:paddingBottom="4dp"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp">
 
+            <!-- Sheet top drag pill handle -->
+            <View
+                android:layout_width="38dp"
+                android:layout_height="4.5dp"
+                android:layout_centerInParent="true"
+                android:background="@drawable/bg_hud_circle_btn"
+                android:backgroundTint="#4DFFFFFF" />
+
+            <!-- Window Buttons on the right -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
                 android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_alignParentStart="true">
+                android:gravity="center_vertical">
 
-                <View
-                    android:id="@+id/hud_status_dot"
-                    android:layout_width="10dp"
-                    android:layout_height="10dp"
-                    android:background="@drawable/bg_dot" />
-
-                <TextView
-                    android:id="@+id/hud_title"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:text="JARVIS HUD"
-                    android:textColor="#00E5FF"
-                    android:textStyle="bold"
-                    android:textSize="14sp"
-                    android:letterSpacing="0.05" />
-
-                <TextView
-                    android:id="@+id/hud_status_badge"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
-                    android:text="LISTENING"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp"
-                    android:background="@drawable/bg_status_pill"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:paddingTop="2dp"
-                    android:paddingBottom="2dp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_alignParentEnd="true">
-
-                <TextView
+                <ImageView
                     android:id="@+id/btn_hud_minimize"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:gravity="center"
-                    android:text="🗕"
-                    android:textColor="#94A3B8"
-                    android:textSize="16sp"
-                    android:background="@android:color/transparent" />
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:background="@drawable/bg_hud_circle_btn"
+                    android:src="@drawable/ic_hud_minimize"
+                    android:scaleType="centerInside"
+                    android:padding="5dp"
+                    android:contentDescription="Minimize" />
 
-                <TextView
+                <ImageView
+                    android:id="@+id/btn_hud_maximize"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_hud_circle_btn"
+                    android:src="@drawable/ic_hud_maximize"
+                    android:scaleType="centerInside"
+                    android:padding="5dp"
+                    android:contentDescription="Open Session in App" />
+
+                <ImageView
                     android:id="@+id/btn_hud_close"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:layout_marginStart="4dp"
-                    android:gravity="center"
-                    android:text="✕"
-                    android:textColor="#EF4444"
-                    android:textStyle="bold"
-                    android:textSize="15sp"
-                    android:background="@android:color/transparent" />
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_hud_circle_btn"
+                    android:src="@drawable/ic_hud_close"
+                    android:scaleType="centerInside"
+                    android:padding="5dp"
+                    android:contentDescription="Close" />
             </LinearLayout>
         </RelativeLayout>
 
-        <!-- Stark Sine Waveform Visualizer -->
-        <com.pr4nav.jarvis.gui.StarkWaveformView
-            android:id="@+id/hud_waveform"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="8dp" />
+        <!-- Siri Animated Orb (unstretched, feathered radial fade to black) -->
+        <FrameLayout
+            android:id="@+id/hud_orb_container"
+            android:layout_width="230dp"
+            android:layout_height="230dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="2dp">
 
-        <!-- Live Transcription Box -->
+            <TextureView
+                android:id="@+id/hud_video_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
+
+        <!-- Subtitle: Listening (Muted White SF Pro, as it was) -->
         <TextView
-            android:id="@+id/hud_transcription"
-            android:layout_width="match_parent"
+            android:id="@+id/hud_subtitle"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Listening to voice command…"
-            android:textColor="#FFFFFF"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp"
+            android:text="Listening"
+            android:fontFamily="@font/sf_pro"
+            android:textColor="#99FFFFFF"
             android:textSize="15sp"
-            android:textStyle="normal"
-            android:padding="8dp"
-            android:maxLines="3"
-            android:ellipsize="end" />
+            android:letterSpacing="0.01"
+            android:gravity="center" />
 
-        <!-- AI Speech & Outcome Card -->
+        <!-- Main Query / State Text (Bold White SF Pro, disappears when chat starts) -->
         <TextView
-            android:id="@+id/hud_response"
-            android:layout_width="match_parent"
+            android:id="@+id/hud_main_text"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="JARVIS online and ready, sir."
-            android:textColor="#67E8F9"
-            android:textSize="13sp"
-            android:lineSpacingExtra="3dp"
-            android:padding="10dp"
-            android:background="@drawable/bg_chat_agent"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="16dp"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:text="How can I help\nyou today?"
+            android:fontFamily="@font/sf_pro"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.15" />
+
+        <!-- Chat Stream: Real-Time Bubbles with Live STT and TTS Word Highlights -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/hud_chat_recycler"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="12dp"
+            android:scrollbars="none"
             android:visibility="gone" />
 
-        <!-- Quick Action Chips Row -->
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:scrollbars="none"
-            android:layout_marginTop="12dp">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/chip_hud_stop"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🛑 Stop Speech"
-                    android:textColor="#F87171"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:background="@drawable/bg_prompt_chip"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="6dp"
-                    android:layout_marginEnd="8dp" />
-
-                <TextView
-                    android:id="@+id/chip_hud_mic"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🎙️ Listen Again"
-                    android:textColor="#38BDF8"
-                    android:textSize="12sp"
-                    android:background="@drawable/bg_prompt_chip"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="6dp"
-                    android:layout_marginEnd="8dp" />
-
-                <TextView
-                    android:id="@+id/chip_hud_screen"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📱 Read Screen"
-                    android:textColor="#E2E8F0"
-                    android:textSize="12sp"
-                    android:background="@drawable/bg_prompt_chip"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="6dp"
-                    android:layout_marginEnd="8dp" />
-
-                <TextView
-                    android:id="@+id/chip_hud_chat"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="💬 Open Chat"
-                    android:textColor="#E2E8F0"
-                    android:textSize="12sp"
-                    android:background="@drawable/bg_prompt_chip"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="6dp" />
-            </LinearLayout>
-        </HorizontalScrollView>
     </LinearLayout>
 
     <!-- Floating Compact Bubble (when minimized) -->
@@ -217,7 +164,8 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:text="J"
-            android:textColor="#00E5FF"
+            android:fontFamily="@font/sf_pro"
+            android:textColor="#FFFFFF"
             android:textSize="20sp"
             android:textStyle="bold" />
     </FrameLayout>

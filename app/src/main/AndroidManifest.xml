@@ -110,18 +110,33 @@
         </activity>
 
         <activity
+            android:name=".setup.SetupLoadingActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Splash" />
+
+        <activity
+            android:name=".setup.TermuxCheckActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Splash" />
+
+        <activity
+            android:name=".setup.TermuxPermissionFixActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Splash" />
+
+        <activity
             android:name=".MainActivity"
             android:launchMode="singleTop"
             android:exported="true" />
 
-        <activity android:name=".AgyActivity" android:exported="true" />
+        <activity android:name=".AgyActivity" android:exported="false" />
         <activity android:name=".AgyWebActivity" android:exported="false" />
         <activity android:name=".OpenCodeActivity" android:exported="false" />
         <activity android:name=".OpenCodeWebActivity" android:exported="false" />
         <activity android:name=".BrowserActivity" android:exported="false" />
-        <activity android:name=".AgentActivity" android:exported="true" />
-        <activity android:name=".DiagnosticsActivity" android:exported="true" />
-        <activity android:name=".ModelTestLabActivity" android:exported="true" />
+        <activity android:name=".AgentActivity" android:exported="false" />
+        <activity android:name=".DiagnosticsActivity" android:exported="false" />
+        <activity android:name=".ModelTestLabActivity" android:exported="false" />
         <activity
             android:name=".PermissionsActivity"
             android:exported="false"
@@ -129,18 +144,18 @@
         <activity android:name=".CommanderActivity" android:exported="false" />
         <activity android:name=".EditorActivity" android:exported="false" />
         <activity android:name=".TerminalActivity" android:exported="false" />
-        <activity android:name=".ConnectedServicesActivity" android:exported="true" />
-        <activity android:name=".ToolPlaygroundActivity" android:exported="true" />
+        <activity android:name=".ConnectedServicesActivity" android:exported="false" />
+        <activity android:name=".ToolPlaygroundActivity" android:exported="false" />
         <activity 
             android:name=".registry.CapabilitiesActivity" 
-            android:exported="true"
+            android:exported="false"
             android:windowSoftInputMode="stateHidden" />
         <activity
             android:name=".voice.VoiceSettingsActivity"
-            android:exported="true" />
+            android:exported="false" />
         <activity
             android:name=".voice.ModelHubActivity"
-            android:exported="true" />
+            android:exported="false" />
 
         <!-- Siri & Stark Floating Companion Overlay Service -->
         <service
@@ -201,7 +216,7 @@
         <!-- JARVIS Hands-Free Foreground Voice Service -->
         <service
             android:name=".voice.JarvisVoiceService"
-            android:exported="true"
+            android:exported="false"
             android:foregroundServiceType="microphone">
             <intent-filter>
                 <action android:name="com.pr4nav.jarvis.voice.START" />

@@ -46,31 +46,36 @@ object JarvisAutomationEngine {
             addAction(Intent.ACTION_HEADSET_PLUG)
         }
         try {
-            context.applicationContext.registerReceiver(object : BroadcastReceiver() {
-                private var lastPlugged = -1
-                private var lastBatteryLevel = -1
+            androidx.core.content.ContextCompat.registerReceiver(
+                context.applicationContext,
+                object : BroadcastReceiver() {
+                    private var lastPlugged = -1
+                    private var lastBatteryLevel = -1
 
-                override fun onReceive(ctx: Context, intent: Intent) {
-                    when (intent.action) {
-                        Intent.ACTION_POWER_CONNECTED -> onEvent(ctx, "POWER_CONNECTED", "true")
-                        Intent.ACTION_POWER_DISCONNECTED -> onEvent(ctx, "POWER_DISCONNECTED", "false")
-                        Intent.ACTION_HEADSET_PLUG -> {
-                            val state = intent.getIntExtra("state", -1)
-                            if (state == 1) onEvent(ctx, "HEADSET_CONNECTED", "plugged")
-                            else if (state == 0) onEvent(ctx, "HEADSET_DISCONNECTED", "unplugged")
-                        }
-                        Intent.ACTION_BATTERY_CHANGED -> {
-                            val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
-                            if (level != lastBatteryLevel) {
-                                lastBatteryLevel = level
-                                if (level in listOf(15, 20, 50, 100)) {
-                                    onEvent(ctx, "BATTERY_LEVEL", level.toString())
+                    override fun onReceive(ctx: Context, intent: Intent) {
+                        when (intent.action) {
+                            Intent.ACTION_POWER_CONNECTED -> onEvent(ctx, "POWER_CONNECTED", "true")
+                            Intent.ACTION_POWER_DISCONNECTED -> onEvent(ctx, "POWER_DISCONNECTED", "false")
+                            Intent.ACTION_HEADSET_PLUG -> {
+                                val state = intent.getIntExtra("state", -1)
+                                if (state == 1) onEvent(ctx, "HEADSET_CONNECTED", "plugged")
+                                else if (state == 0) onEvent(ctx, "HEADSET_DISCONNECTED", "unplugged")
+                            }
+                            Intent.ACTION_BATTERY_CHANGED -> {
+                                val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+                                if (level != lastBatteryLevel) {
+                                    lastBatteryLevel = level
+                                    if (level in listOf(15, 20, 50, 100)) {
+                                        onEvent(ctx, "BATTERY_LEVEL", level.toString())
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            }, filter)
+                },
+                filter,
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+            )
             receiverRegistered = true
             Log.i(TAG, "Jarvis Automation Engine active.")
         } catch (e: Exception) {

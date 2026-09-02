@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="start"
+    android:paddingTop="3dp"
+    android:paddingBottom="3dp">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxWidth="310dp"
+        android:background="@drawable/bg_hud_agent_bubble"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="9dp"
+        android:paddingBottom="9dp"
+        android:orientation="vertical">
+
+        <!-- Executed Tool Badge (Hidden if no tool was executed) -->
+        <LinearLayout
+            android:id="@+id/layout_tool_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_hud_tool_badge"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:layout_marginBottom="6dp"
+            android:visibility="gone">
+
+            <View
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:background="@drawable/bg_hud_circle_btn"
+                android:backgroundTint="#34D399" />
+
+            <TextView
+                android:id="@+id/tv_tool_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:fontFamily="@font/sf_pro"
+                android:textColor="#34D399"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:text="Tool Executed" />
+        </LinearLayout>
+
+        <!-- <think> Hidden Thought Pill (Click to toggle expand/collapse) -->
+        <LinearLayout
+            android:id="@+id/layout_thought_pill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_hud_thought_pill"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:layout_marginBottom="6dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tv_thought_summary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/sf_pro"
+                android:textColor="#94A3B8"
+                android:textSize="12sp"
+                android:text="Thought for 2 seconds" />
+
+            <ImageView
+                android:id="@+id/iv_thought_chevron"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:layout_marginStart="4dp"
+                android:src="@drawable/ic_hud_chevron_down"
+                android:scaleType="centerInside" />
+        </LinearLayout>
+
+        <!-- Expanded Thought Trace Content (Hidden by default, shown on tap) -->
+        <TextView
+            android:id="@+id/tv_thought_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_hud_thought_box"
+            android:padding="8dp"
+            android:layout_marginBottom="6dp"
+            android:fontFamily="@font/sf_pro"
+            android:textColor="#64748B"
+            android:textSize="11.5sp"
+            android:lineSpacingMultiplier="1.2"
+            android:visibility="gone" />
+
+        <!-- Clean Agent Response Text -->
+        <TextView
+            android:id="@+id/tv_agent_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/sf_pro"
+            android:textColor="#F1F5F9"
+            android:textSize="14.5sp"
+            android:lineSpacingMultiplier="1.2" />
+
+    </LinearLayout>
+</LinearLayout>

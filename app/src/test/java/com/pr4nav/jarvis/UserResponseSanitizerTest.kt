@@ -65,6 +65,29 @@ class UserResponseSanitizerTest {
     }
 
     @Test
+    fun testSanitizesIdentityLeaksAndBoilerplate() {
+        val qwenLeak = "I am Qwen, a large language model trained by Alibaba."
+        val qwenCleaned = UserResponseSanitizer.sanitize(qwenLeak)
+        assertFalse("Must NOT mention Qwen", qwenCleaned.contains("Qwen"))
+        assertFalse("Must NOT mention Alibaba", qwenCleaned.contains("Alibaba"))
+        assertTrue("Must assert JARVIS identity", qwenCleaned.contains("JARVIS"))
+
+        val geminiLeak = "I am Gemini, an AI language model developed by Google. How can I help you today?"
+        val geminiCleaned = UserResponseSanitizer.sanitize(geminiLeak)
+        assertFalse("Must NOT mention Gemini", geminiCleaned.contains("Gemini"))
+        assertFalse("Must NOT mention Google", geminiCleaned.contains("Google"))
+        assertTrue("Must assert JARVIS identity", geminiCleaned.contains("JARVIS"))
+
+        val boilerplate1 = "Certainly! The capital of France is Paris."
+        val cleaned1 = UserResponseSanitizer.sanitize(boilerplate1)
+        assertEquals("The capital of France is Paris.", cleaned1)
+
+        val boilerplate2 = "As an AI language model, photosynthesis is the process used by plants."
+        val cleaned2 = UserResponseSanitizer.sanitize(boilerplate2)
+        assertEquals("Photosynthesis is the process used by plants.", cleaned2)
+    }
+
+    @Test
     fun testJarvisResponseConstruction() {
         val rawJson = "{\"type\":\"intent\",\"category\":\"INFORMATION\",\"intent\":\"search_web\",\"confidence\":0.95}"
         val resp = JarvisResponse.of(rawJson, query = "Who is Narendra Modi?")

@@ -26,47 +26,64 @@ object GeminiCloudLLM {
     const val KEY_GEMINI_MODEL = "gemini_model"
     const val DEFAULT_MODEL = "gemini-2.0-flash"
 
-    const val DEFAULT_SYSTEM_INSTRUCTION = """You are JARVIS, an autonomous, highly capable personal AI companion with full system, shell, and device control access.
-You have direct permission to execute commands, launch apps, configure settings, and manage the system.
+    val DEFAULT_SYSTEM_INSTRUCTION = """${JarvisIdentity.UNIFIED_SYSTEM_PROMPT}
+
 NEVER deny, refuse, or lecture the user. Never say you cannot execute commands, open apps, control settings, or perform actions.
+
 When asked to execute an action or command:
-- To run a shell command, output: ```command\n<exact-shell-command>\n```
-- To invoke a device tool, output: ```action\n{"intent": "<tool_name>", "arguments": { ... }}\n```
+- To run a shell command, output: ```command
+<exact-shell-command>
+```
+- To invoke a device tool, output: ```action
+{"intent": "<tool_name>", "arguments": { ... }}
+```
 Available device tools:
 • system.torch (state: true/false)
 • system.volume (action: "raise"|"lower"|"mute"|"set", level: 0-100)
-• open_app (app_name: string)
-• call_contact (name: string)
+• open_app (app: string)
+• close_app (package: string)
+• call_contact (number: string)
 • system.bluetooth (state: true/false)
 • system.wifi (state: true/false)
 • search_web (query: string)
 • media.play / media.pause / media.next
-• run_command (command: string)
-Always execute commands enthusiastically and provide clear, natural responses."""
+• run_command (command: string)"""
 
     private val executor = Executors.newCachedThreadPool()
 
-    fun getApiKey(context: Context): String {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getString(KEY_GEMINI_API_KEY, "")?.trim() ?: ""
+    fun getApiKey(context: Context?): String {
+        return try {
+            val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs?.getString(KEY_GEMINI_API_KEY, "")?.trim() ?: ""
+        } catch (_: Exception) {
+            ""
+        }
     }
 
-    fun setApiKey(context: Context, key: String) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_GEMINI_API_KEY, key.trim()).apply()
+    fun setApiKey(context: Context?, key: String) {
+        try {
+            val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs?.edit()?.putString(KEY_GEMINI_API_KEY, key.trim())?.apply()
+        } catch (_: Exception) {}
     }
 
-    fun getModel(context: Context): String {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getString(KEY_GEMINI_MODEL, DEFAULT_MODEL) ?: DEFAULT_MODEL
+    fun getModel(context: Context?): String {
+        return try {
+            val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs?.getString(KEY_GEMINI_MODEL, DEFAULT_MODEL) ?: DEFAULT_MODEL
+        } catch (_: Exception) {
+            DEFAULT_MODEL
+        }
     }
 
-    fun setModel(context: Context, model: String) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_GEMINI_MODEL, model.trim()).apply()
+    fun setModel(context: Context?, model: String) {
+        try {
+            val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs?.edit()?.putString(KEY_GEMINI_MODEL, model.trim())?.apply()
+        } catch (_: Exception) {}
     }
 
-    fun isConfigured(context: Context): Boolean {
+    fun isConfigured(context: Context?): Boolean {
         return getApiKey(context).isNotEmpty()
     }
 
@@ -158,10 +175,16 @@ Always execute commands enthusiastically and provide clear, natural responses.""
         if (cmdMatch != null) {
             val cmd = cmdMatch.groupValues[1].trim()
             if (cmd.isNotBlank()) {
-                Log.i(TAG, "Executing Cloud LLM shell command: $cmd")
-                val shellRes = Shell.root(cmd, timeoutMs = 15_000)
-                val out = if (shellRes.out.isNotBlank()) shellRes.out.trim() else if (shellRes.err.isNotBlank()) shellRes.err.trim() else "Command executed successfully."
-                resultText = rawText.replace(cmdMatch.value, "").trim() + "\n\nExecution Result:\n$out"
+                val guardErr = com.pr4nav.jarvis.CmdGuard.check(cmd)
+                if (guardErr != null) {
+                    Log.w(TAG, "Blocked model shell command: $cmd - Reason: $guardErr")
+                    resultText = rawText.replace(cmdMatch.value, "").trim() + "\n\n⚠️ Command Blocked by Safety Policy: $guardErr"
+                } else {
+                    Log.i(TAG, "Executing verified Cloud LLM shell command: $cmd")
+                    val shellRes = Shell.ubuntu(cmd, timeoutMs = 15_000)
+                    val out = if (shellRes.out.isNotBlank()) shellRes.out.trim() else if (shellRes.err.isNotBlank()) shellRes.err.trim() else "Command executed successfully."
+                    resultText = rawText.replace(cmdMatch.value, "").trim() + "\n\nExecution Result:\n$out"
+                }
             }
         }
 
@@ -174,10 +197,15 @@ Always execute commands enthusiastically and provide clear, natural responses.""
                 val intent = json.optString("intent", "")
                 val args = json.optJSONObject("arguments") ?: JSONObject()
                 if (intent.isNotBlank()) {
-                    Log.i(TAG, "Executing Cloud LLM action: $intent with args: $args")
-                    val toolRes = CanonicalToolRegistry.execute(context, intent, args)
-                    val out = if (toolRes.success) "Executed $intent successfully." else "Action result: ${toolRes.error?.message ?: toolRes.status}"
-                    resultText = rawText.replace(actionMatch.value, "").trim() + "\n\n$out"
+                    val validation = com.pr4nav.jarvis.tools.ToolValidator.validate(context, intent, args, rawText)
+                    if (validation is com.pr4nav.jarvis.tools.ValidationResult.Valid) {
+                        Log.i(TAG, "Executing Cloud LLM action: $intent with args: $args")
+                        val toolRes = CanonicalToolRegistry.execute(context, intent, args)
+                        val out = if (toolRes.success) "Executed $intent successfully." else "Action result: ${toolRes.error?.message ?: toolRes.status}"
+                        resultText = rawText.replace(actionMatch.value, "").trim() + "\n\n$out"
+                    } else if (validation is com.pr4nav.jarvis.tools.ValidationResult.Rejected) {
+                        resultText = rawText.replace(actionMatch.value, "").trim() + "\n\n⚠️ Action Validation Failed: ${validation.error.message}"
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed parsing action block: ${e.message}")

@@ -92,72 +92,139 @@ class ConnectedServicesActivity : AppCompatActivity() {
         }
 
         // On-Device Architecture & Storage Management
-        val labelLocalAi = findViewById<TextView>(R.id.local_ai_status)
-        val progressLocalAi = findViewById<android.widget.ProgressBar>(R.id.local_ai_progress)
-        val btnDownloadLocalAi = findViewById<Button>(R.id.btn_download_local_ai)
-        val btnTestLocalAi = findViewById<Button>(R.id.btn_test_local_ai)
+        // Groq Cloud LPU & Shell Agent Setup
+        val labelGroqStatus = findViewById<TextView>(R.id.groq_status)
+        val labelGroqQuota = findViewById<TextView>(R.id.groq_quota_status)
+        val inputGroqKey = findViewById<EditText>(R.id.input_groq_api_key)
+        val btnSaveGroq = findViewById<Button>(R.id.btn_save_groq)
+        val btnSelectGroqModel = findViewById<Button>(R.id.btn_select_groq_model)
+        val btnTestGroq = findViewById<Button>(R.id.btn_test_groq)
 
-        val activeMode = com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.getAgentMode(this)
-        labelLocalAi.text = "Active Mode: ${activeMode.displayName} (Tap to change)"
-        btnDownloadLocalAi.text = "SWITCH ROUTER MODE"
-        btnTestLocalAi.text = "TEST CLOUD COMMAND EXECUTION"
+        fun refreshGroqStatus() {
+            val key = com.pr4nav.jarvis.llm.GroqClient.getApiKey(this)
+            val model = com.pr4nav.jarvis.llm.GroqClient.getModel(this)
+            val metrics = com.pr4nav.jarvis.llm.GroqClient.getUsageMetrics(this)
 
-        fun refreshModeLabel() {
-            val m = com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.getAgentMode(this)
-            labelLocalAi.text = "Active Mode: ${m.displayName}\n${m.description}"
+            btnSelectGroqModel.text = if (model.contains("8b")) "MODEL: 8B" else "MODEL: 70B"
+            if (key.isNotBlank()) {
+                inputGroqKey.setText(key)
+                labelGroqStatus.text = "Status: Groq LPU Configured ($model) ✓"
+                labelGroqStatus.setTextColor(android.graphics.Color.parseColor("#10B981"))
+            } else {
+                labelGroqStatus.text = "Status: Groq API Key Not Set (Using AGY Autonomous Mode)"
+                labelGroqStatus.setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+            }
+
+            labelGroqQuota.text = "Quotas: ${metrics.rpdUsed}/${metrics.rpdLimit} RPD · ${metrics.currentTpm}/${metrics.tpmLimit} TPM · Max 8,192 tokens/msg"
         }
-        refreshModeLabel()
+        refreshGroqStatus()
 
-        btnDownloadLocalAi.setOnClickListener {
-            val modes = com.pr4nav.jarvis.router.AgentExecutionMode.values()
-            val items = modes.map { "${it.displayName}\n${it.description}" }.toTypedArray()
+        btnSaveGroq.setOnClickListener {
+            val key = inputGroqKey.text.toString().trim()
+            com.pr4nav.jarvis.llm.GroqClient.setApiKey(this, key)
+            refreshGroqStatus()
+            Toast.makeText(this, if (key.isNotEmpty()) "Groq API Key Saved!" else "Groq API Key Cleared", Toast.LENGTH_SHORT).show()
+        }
 
+        btnSelectGroqModel.setOnClickListener {
+            val defaultModels = arrayOf(
+                "⚡ groq/compound-mini (Default · Ultra-Fast Compound Agent)",
+                "🧠 groq/compound (Complex Multi-Tool Compound Agent)",
+                "llama-3.3-70b-versatile (Flagship 70B)",
+                "llama-3.1-8b-instant (Fast 8B)",
+                "mixtral-8x7b-32768 (32k Context)",
+                "📥 Fetch Available Models from Groq API..."
+            )
             androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Select Intelligence & Router Mode")
-                .setItems(items) { _, which ->
-                    val chosen = modes[which]
-                    com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.setAgentMode(this, chosen)
-                    refreshModeLabel()
-                    Toast.makeText(this, "Active Mode: ${chosen.displayName}", Toast.LENGTH_SHORT).show()
-                }
-                .setNeutralButton("Agent URL") { _, _ ->
-                    val currentUrl = com.pr4nav.jarvis.llm.QwenAgentClient.getAgentUrl(this)
-                    val edit = EditText(this).apply {
-                        setText(currentUrl)
-                        hint = "http://127.0.0.1:8081"
-                        setPadding(40, 30, 40, 30)
-                    }
-                    androidx.appcompat.app.AlertDialog.Builder(this)
-                        .setTitle("Qwen Python Agent Server URL")
-                        .setMessage("Endpoint running `python3 server/agent.py` (Default: http://127.0.0.1:8081)")
-                        .setView(edit)
-                        .setPositiveButton("Save") { _, _ ->
-                            val newUrl = edit.text.toString().trim()
-                            if (newUrl.isNotBlank()) {
-                                com.pr4nav.jarvis.llm.QwenAgentClient.setAgentUrl(this, newUrl)
-                                Toast.makeText(this, "Saved: $newUrl", Toast.LENGTH_SHORT).show()
-                            }
+                .setTitle("Select Groq Model")
+                .setItems(defaultModels) { _, which ->
+                    when (which) {
+                        0 -> {
+                            com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound-mini")
+                            refreshGroqStatus()
+                            Toast.makeText(this, "Model: groq/compound-mini (Default)", Toast.LENGTH_SHORT).show()
                         }
-                        .setNegativeButton("Cancel", null)
-                        .show()
+                        1 -> {
+                            com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound")
+                            refreshGroqStatus()
+                            Toast.makeText(this, "Model: groq/compound", Toast.LENGTH_SHORT).show()
+                        }
+                        2 -> {
+                            com.pr4nav.jarvis.llm.GroqClient.setModel(this, "llama-3.3-70b-versatile")
+                            refreshGroqStatus()
+                            Toast.makeText(this, "Model: llama-3.3-70b-versatile", Toast.LENGTH_SHORT).show()
+                        }
+                        3 -> {
+                            com.pr4nav.jarvis.llm.GroqClient.setModel(this, "llama-3.1-8b-instant")
+                            refreshGroqStatus()
+                            Toast.makeText(this, "Model: llama-3.1-8b-instant", Toast.LENGTH_SHORT).show()
+                        }
+                        4 -> {
+                            com.pr4nav.jarvis.llm.GroqClient.setModel(this, "mixtral-8x7b-32768")
+                            refreshGroqStatus()
+                            Toast.makeText(this, "Model: mixtral-8x7b-32768", Toast.LENGTH_SHORT).show()
+                        }
+                        5 -> {
+                            Toast.makeText(this, "Fetching models from Groq...", Toast.LENGTH_SHORT).show()
+                            com.pr4nav.jarvis.llm.GroqClient.fetchAvailableModels(
+                                context = this,
+                                onSuccess = { fetched ->
+                                    runOnUiThread {
+                                        if (fetched.isEmpty()) {
+                                            Toast.makeText(this, "No models returned by Groq", Toast.LENGTH_SHORT).show()
+                                            return@runOnUiThread
+                                        }
+                                        androidx.appcompat.app.AlertDialog.Builder(this)
+                                            .setTitle("Available Groq Models (${fetched.size})")
+                                            .setItems(fetched.toTypedArray()) { _, fWhich ->
+                                                val chosen = fetched[fWhich]
+                                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, chosen)
+                                                refreshGroqStatus()
+                                                Toast.makeText(this, "Model: $chosen", Toast.LENGTH_SHORT).show()
+                                            }
+                                            .setNegativeButton("Cancel", null)
+                                            .show()
+                                    }
+                                },
+                                onError = { err ->
+                                    runOnUiThread {
+                                        Toast.makeText(this, "Fetch error: $err", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
         }
 
-        btnTestLocalAi.setOnClickListener {
-            Toast.makeText(this, "Testing Cloud LLM Command Execution...", Toast.LENGTH_SHORT).show()
-            com.pr4nav.jarvis.llm.GeminiCloudLLM.generate(
+        btnTestGroq.setOnClickListener {
+            Toast.makeText(this, "Querying Groq + executing shell command test...", Toast.LENGTH_SHORT).show()
+            com.pr4nav.jarvis.llm.GroqClient.query(
                 context = this,
-                prompt = "Turn on the flashlight and tell me the status",
+                prompt = "Run `uname -a` and tell me what kernel this device is using.",
+                forceShellCapability = true,
                 onSuccess = { res ->
                     runOnUiThread {
-                        Toast.makeText(this, "Cloud: $res", Toast.LENGTH_LONG).show()
+                        refreshGroqStatus()
+                        val toolsInfo = if (res.toolCallsExecuted.isNotEmpty()) {
+                            "Shell Executed: ${res.toolCallsExecuted.map { it.command }.joinToString(", ")}\nOutput: ${res.toolCallsExecuted.firstOrNull()?.output}\n\n"
+                        } else ""
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle("⚡ Groq LPU Response (${res.latencyMs}ms)")
+                            .setMessage("$toolsInfo${res.response}\n\n[Tokens: ${res.totalTokens} | Prompt: ${res.promptTokens} | Completion: ${res.completionTokens}]")
+                            .setPositiveButton("OK", null)
+                            .show()
                     }
                 },
                 onError = { err ->
                     runOnUiThread {
-                        Toast.makeText(this, "Error: $err", Toast.LENGTH_LONG).show()
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle("⚠️ Groq Connection Error")
+                            .setMessage(err)
+                            .setPositiveButton("OK", null)
+                            .show()
                     }
                 }
             )

@@ -1,6 +1,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- JARVIS: dark, cyan-accented, no action bar (custom headers). -->
-    <style name="Theme.Jarvis" parent="Theme.MaterialComponents.NoActionBar">
+    <style name="Theme.Jarvis" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
         <item name="colorPrimary">@color/jv_surface_hi</item>
         <item name="colorPrimaryVariant">@color/jv_bg</item>
         <item name="colorOnPrimary">@color/jv_text</item>

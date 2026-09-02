@@ -194,7 +194,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- In-App Local AI (Qwen2.5-1.5B) Section -->
+        <!-- Groq LPU & Shell Agent Section -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -206,27 +206,42 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="🧠 ON-DEVICE LOCAL AI (SLM)"
+                android:text="⚡ GROQ CLOUD LPU &amp; SHELL AGENT"
                 android:textColor="#38BDF8"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/local_ai_status"
+                android:id="@+id/groq_status"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="Status: Qwen 2.5 (1.5B Instruct) — Not Downloaded"
+                android:text="Status: Groq API Key Not Set (Using AGY Autonomous Mode)"
                 android:textColor="#94A3B8"
                 android:textSize="12sp" />
 
-            <ProgressBar
-                android:id="@+id/local_ai_progress"
-                style="?android:attr/progressBarStyleHorizontal"
+            <TextView
+                android:id="@+id/groq_quota_status"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Quotas: 0/245 RPD · 0/65k TPM · Max 8,192 tokens/msg"
+                android:textColor="#38BDF8"
+                android:textSize="11sp" />
+
+            <EditText
+                android:id="@+id/input_groq_api_key"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
                 android:layout_marginTop="8dp"
-                android:visibility="gone" />
+                android:background="#0F172A"
+                android:fontFamily="monospace"
+                android:hint="Groq API Key (gsk_...)"
+                android:inputType="textPassword"
+                android:paddingHorizontal="10dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#64748B"
+                android:textSize="12sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -235,22 +250,33 @@
                 android:orientation="horizontal">
 
                 <Button
-                    android:id="@+id/btn_download_local_ai"
+                    android:id="@+id/btn_save_groq"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
                     android:backgroundTint="#0284C7"
-                    android:text="DOWNLOAD QWEN 2.5"
+                    android:text="SAVE GROQ KEY"
                     android:textColor="#FFFFFF"
                     android:textSize="11sp"
                     android:textStyle="bold" />
 
                 <Button
-                    android:id="@+id/btn_test_local_ai"
+                    android:id="@+id/btn_select_groq_model"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:backgroundTint="#334155"
+                    android:text="MODEL: 70B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btn_test_groq"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
                     android:layout_marginStart="8dp"
                     android:backgroundTint="#10B981"
-                    android:text="TEST INFERENCE"
+                    android:text="TEST GROQ + SHELL"
                     android:textColor="#FFFFFF"
                     android:textSize="11sp"
                     android:textStyle="bold" />
