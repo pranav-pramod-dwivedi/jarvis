@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
@@ -60,7 +61,26 @@ class JarvisOverlayService : Service() {
         @Volatile var isRunning = false
             private set
 
+        fun wakeScreen(context: Context) {
+            try {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                @Suppress("DEPRECATION")
+                val wl = pm?.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                    PowerManager.ON_AFTER_RELEASE,
+                    "jarvis:overlay_wake"
+                )
+                wl?.acquire(10_000L)
+            } catch (_: Exception) {}
+
+            try {
+                com.pr4nav.jarvis.Shell.root("input keyevent KEYCODE_WAKEUP")
+            } catch (_: Exception) {}
+        }
+
         fun showHud(context: Context) {
+            wakeScreen(context)
             val intent = Intent(context, JarvisOverlayService::class.java).apply {
                 action = ACTION_SHOW_HUD
             }
@@ -272,7 +292,10 @@ class JarvisOverlayService : Service() {
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
@@ -542,10 +565,15 @@ class JarvisOverlayService : Service() {
 
         val displayMetrics = resources.displayMetrics
         val halfScreenHeight = (displayMetrics.heightPixels * 0.54).toInt()
+        wakeScreen(this)
         layoutParams?.let { lp ->
             lp.width = WindowManager.LayoutParams.MATCH_PARENT
             lp.height = halfScreenHeight
             lp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            lp.flags = lp.flags or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
             lp.x = 0
             lp.y = 0
             windowManager?.updateViewLayout(overlayView, lp)

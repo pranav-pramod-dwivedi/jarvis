@@ -363,6 +363,9 @@ class JarvisVoiceService : Service() {
                         VoiceInstrumentation.onWakeWordConfirmed(wakeWord, currentState.name)
                         updateState(VoiceState.WAKE_DETECTED, "Wake word confirmed: $wakeWord")
 
+                        // Turn screen on and prepare display
+                        wakeUpScreen()
+
                         // Trigger Floating HUD Overlay if permission granted
                         try {
                             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || android.provider.Settings.canDrawOverlays(applicationContext)) {
@@ -403,11 +406,13 @@ class JarvisVoiceService : Service() {
                 }
             }
         )
+        acquireAmbientWakeLock()
         acousticDetector?.start()
     }
 
     private fun stopAcousticDetector() {
         try {
+            releaseAmbientWakeLock()
             acousticDetector?.stop()
             acousticDetector = null
         } catch (_: Exception) {}
@@ -725,6 +730,56 @@ class JarvisVoiceService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "WakeLock release error: ${e.message}")
         }
+    }
+
+    private var ambientListenWakeLock: PowerManager.WakeLock? = null
+
+    private fun acquireAmbientWakeLock() {
+        try {
+            if (ambientListenWakeLock == null) {
+                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                ambientListenWakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "jarvis:ambient_acoustic")
+            }
+            if (ambientListenWakeLock?.isHeld != true) {
+                ambientListenWakeLock?.acquire()
+                Log.d(TAG, "Acquired ambient acoustic WakeLock")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Ambient WakeLock acquire error: ${e.message}")
+        }
+    }
+
+    private fun releaseAmbientWakeLock() {
+        try {
+            if (ambientListenWakeLock?.isHeld == true) {
+                ambientListenWakeLock?.release()
+                Log.d(TAG, "Released ambient acoustic WakeLock")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Ambient WakeLock release error: ${e.message}")
+        }
+    }
+
+    private fun wakeUpScreen() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            if (pm != null && !pm.isInteractive) {
+                @Suppress("DEPRECATION")
+                val wl = pm.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                    PowerManager.ON_AFTER_RELEASE,
+                    "jarvis:screen_wake_on_lock"
+                )
+                wl.acquire(10_000L)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Screen wakeLock error: ${e.message}")
+        }
+
+        try {
+            com.pr4nav.jarvis.Shell.root("input keyevent KEYCODE_WAKEUP; wm dismiss-keyguard")
+        } catch (_: Exception) {}
     }
 
     private fun shutdownService() {
