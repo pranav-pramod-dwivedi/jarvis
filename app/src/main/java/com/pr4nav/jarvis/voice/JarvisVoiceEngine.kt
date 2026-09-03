@@ -282,18 +282,15 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
                 recognizer.setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         isListening = true
-                        handler.postDelayed({ muteEarcons(targetContext, false) }, 150)
                     }
                     override fun onBeginningOfSpeech() {}
                     override fun onRmsChanged(rmsdB: Float) {}
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {
                         isListening = false
-                        muteEarcons(targetContext, true)
                     }
                     override fun onError(error: Int) {
                         isListening = false
-                        handler.postDelayed({ muteEarcons(targetContext, false) }, 200)
                         val msg = when (error) {
                             SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
                             SpeechRecognizer.ERROR_CLIENT -> "Client side error"
@@ -311,7 +308,6 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
 
                     override fun onResults(results: Bundle?) {
                         isListening = false
-                        handler.postDelayed({ muteEarcons(targetContext, false) }, 200)
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val text = matches?.firstOrNull() ?: ""
                         if (text.isNotBlank()) {
@@ -334,6 +330,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    putExtra("android.speech.extra.DICTATION_MODE", true)
                 }
                 muteEarcons(targetContext, true)
                 recognizer.startListening(intent)
@@ -345,15 +342,36 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
         }
     }
 
-    private fun muteEarcons(ctx: Context, mute: Boolean) {
+    private var isEarconsMuted = false
+    private var savedSystemVol: Int? = null
+    private var savedNotifVol: Int? = null
+
+    fun muteEarcons(ctx: Context, mute: Boolean) {
+        if (mute == isEarconsMuted) return
         try {
             val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
             val streams = intArrayOf(AudioManager.STREAM_NOTIFICATION, AudioManager.STREAM_SYSTEM)
-            for (stream in streams) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    val direction = if (mute) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE
-                    am.adjustStreamVolume(stream, direction, 0)
+            if (mute) {
+                savedSystemVol = am.getStreamVolume(AudioManager.STREAM_SYSTEM)
+                savedNotifVol = am.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
+                for (stream in streams) {
+                    try { am.setStreamVolume(stream, 0, 0) } catch (_: Exception) {}
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        try { am.adjustStreamVolume(stream, AudioManager.ADJUST_MUTE, 0) } catch (_: Exception) {}
+                    }
                 }
+                isEarconsMuted = true
+            } else {
+                for (stream in streams) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        try { am.adjustStreamVolume(stream, AudioManager.ADJUST_UNMUTE, 0) } catch (_: Exception) {}
+                    }
+                }
+                savedSystemVol?.let { try { am.setStreamVolume(AudioManager.STREAM_SYSTEM, it, 0) } catch (_: Exception) {} }
+                savedNotifVol?.let { try { am.setStreamVolume(AudioManager.STREAM_NOTIFICATION, it, 0) } catch (_: Exception) {} }
+                savedSystemVol = null
+                savedNotifVol = null
+                isEarconsMuted = false
             }
         } catch (_: Exception) {}
     }
@@ -362,6 +380,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
         try {
             speechRecognizer?.stopListening()
             isListening = false
+            context?.let { muteEarcons(it, false) }
         } catch (_: Exception) {}
     }
 
@@ -369,6 +388,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
         try {
             speechRecognizer?.destroy()
             speechRecognizer = null
+            context?.let { muteEarcons(it, false) }
             tts?.stop()
             tts?.shutdown()
             tts = null

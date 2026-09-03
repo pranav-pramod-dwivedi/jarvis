@@ -27,6 +27,7 @@
     <!-- microphone / audio -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
     <!-- location -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
