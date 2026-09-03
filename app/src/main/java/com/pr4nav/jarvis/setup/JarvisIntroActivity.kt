@@ -19,7 +19,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import com.pr4nav.jarvis.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -117,6 +120,22 @@ fun IntroLoadingScreen(
     val screenAlpha = remember { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
 
+    val spaceGroteskFamily = remember {
+        try {
+            FontFamily(Font(R.font.space_grotesk))
+        } catch (_: Exception) {
+            FontFamily.SansSerif
+        }
+    }
+
+    val dmSansFamily = remember {
+        try {
+            FontFamily(Font(R.font.dm_sans))
+        } catch (_: Exception) {
+            FontFamily.SansSerif
+        }
+    }
+
     LaunchedEffect(Unit) {
         screenAlpha.animateTo(1f, animationSpec = tween(durationMillis = 350, easing = LinearEasing))
         INTRODUCING.forEachIndexed { index, _ ->
@@ -160,6 +179,7 @@ fun IntroLoadingScreen(
             Text(
                 text = typed + if (typed.length < INTRODUCING.length) "|" else "",
                 fontSize = 15.sp,
+                fontFamily = dmSansFamily,
                 fontWeight = FontWeight.Normal,
                 color = Color.White.copy(alpha = 0.6f),
                 letterSpacing = 0.05.sp,
@@ -173,6 +193,7 @@ fun IntroLoadingScreen(
                 IntroGradientText(
                     text = "J4rvis",
                     fontSize = 48.sp,
+                    fontFamily = spaceGroteskFamily,
                     fontWeight = FontWeight.Bold
                 )
             } else {
@@ -187,12 +208,14 @@ fun IntroLoadingScreen(
                 IntroShimmerText(
                     text = "Waking up jarvis for the very first time...",
                     fontSize = 13.sp,
+                    fontFamily = dmSansFamily,
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Please wait, this will take a couple of seconds only",
                     fontSize = 10.5.sp,
+                    fontFamily = dmSansFamily,
                     fontWeight = FontWeight.Normal,
                     color = Color.White.copy(alpha = 0.38f),
                     letterSpacing = 0.1.sp,
@@ -250,7 +273,8 @@ private fun IntroFullscreenVideo(
 private fun IntroGradientText(
     text: String,
     fontSize: androidx.compose.ui.unit.TextUnit,
-    fontWeight: FontWeight
+    fontWeight: FontWeight,
+    fontFamily: FontFamily? = null
 ) {
     val gradientWidth = 700f
     val transition = rememberInfiniteTransition(label = "jarvisGradient")
@@ -281,6 +305,7 @@ private fun IntroGradientText(
         text = text,
         fontSize = fontSize,
         fontWeight = fontWeight,
+        fontFamily = fontFamily,
         style = TextStyle(
             brush = brush,
             letterSpacing = (-1.5).sp
@@ -294,7 +319,8 @@ private fun IntroGradientText(
 private fun IntroShimmerText(
     text: String,
     fontSize: androidx.compose.ui.unit.TextUnit,
-    fontWeight: FontWeight
+    fontWeight: FontWeight,
+    fontFamily: FontFamily? = null
 ) {
     val transition = rememberInfiniteTransition(label = "introShimmer")
     val offset by transition.animateFloat(
@@ -321,6 +347,7 @@ private fun IntroShimmerText(
         text = text,
         fontSize = fontSize,
         fontWeight = fontWeight,
+        fontFamily = fontFamily,
         style = TextStyle(brush = brush, letterSpacing = (-0.2).sp)
     )
 }

@@ -144,7 +144,8 @@
             android:exported="true"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
-            android:theme="@style/Theme.Splash" />
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Setup" />
 
         <activity
             android:name=".MainActivity"

@@ -154,6 +154,22 @@ fun LoadingScreen(
 ) {
     val screenAlpha = remember { Animatable(0f) }
 
+    val spaceGroteskFamily = remember {
+        try {
+            FontFamily(Font(R.font.space_grotesk))
+        } catch (_: Exception) {
+            FontFamily.SansSerif
+        }
+    }
+
+    val dmSansFamily = remember {
+        try {
+            FontFamily(Font(R.font.dm_sans))
+        } catch (_: Exception) {
+            FontFamily.SansSerif
+        }
+    }
+
     LaunchedEffect(Unit) {
         screenAlpha.animateTo(1f, animationSpec = tween(durationMillis = 400, easing = LinearEasing))
     }
@@ -183,12 +199,14 @@ fun LoadingScreen(
             ShimmerText(
                 text = "Waking up jarvis for the very first time...",
                 fontSize = 22.sp,
+                fontFamily = spaceGroteskFamily,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(5.dp))
             Text(
                 text = "Please wait, this will take a couple of seconds only",
                 fontSize = 10.5.sp,
+                fontFamily = dmSansFamily,
                 fontWeight = FontWeight.Normal,
                 color = Color.White.copy(alpha = 0.45f),
                 letterSpacing = 0.1.sp,
@@ -245,7 +263,8 @@ private fun FullscreenVideo(
 private fun ShimmerText(
     text: String,
     fontSize: androidx.compose.ui.unit.TextUnit,
-    fontWeight: FontWeight
+    fontWeight: FontWeight,
+    fontFamily: FontFamily? = null
 ) {
     val transition = rememberInfiniteTransition(label = "shimmer")
     val offset by transition.animateFloat(
@@ -272,6 +291,7 @@ private fun ShimmerText(
         text = text,
         fontSize = fontSize,
         fontWeight = fontWeight,
+        fontFamily = fontFamily,
         style = TextStyle(brush = brush, letterSpacing = (-0.3).sp)
     )
 }

@@ -4,14 +4,14 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
@@ -23,26 +23,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.pr4nav.jarvis.MainActivity
+import com.pr4nav.jarvis.R
 import kotlinx.coroutines.launch
 
 private const val VIDEO_URL =
@@ -50,8 +53,9 @@ private const val VIDEO_URL =
 
 /**
  * First-time User Profile & Name Setup Screen.
- * Uses golden ratio spacing (Fibonacci: 8, 13, 21, 34, 55),
- * non-stretched circular robot visual, and seamless text input.
+ * Uses official SF Pro typography, dynamic IME keyboard adaptation
+ * (robot face glides up and scales smoothly when keyboard opens),
+ * and golden ratio spacing.
  */
 class UserNameSetupActivity : ComponentActivity() {
 
@@ -60,12 +64,11 @@ class UserNameSetupActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-
-        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
-        windowInsetsController.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+        // Enable edge to edge with transparent status/nav bars to preserve IME insets
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
 
         setContent {
             NameSetupScreen(
@@ -107,6 +110,7 @@ class UserNameSetupActivity : ComponentActivity() {
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NameSetupScreen(
     onSubmit: (String) -> Unit = {},
@@ -115,6 +119,16 @@ fun NameSetupScreen(
     var name by remember { mutableStateOf("") }
     val screenAlpha = remember { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
+    val focusRequester = remember { FocusRequester() }
+
+    // Official SF Pro typography
+    val sfProFamily = remember {
+        try {
+            FontFamily(Font(R.font.sf_pro))
+        } catch (_: Exception) {
+            FontFamily.SansSerif
+        }
+    }
 
     LaunchedEffect(Unit) {
         screenAlpha.animateTo(1f, animationSpec = tween(durationMillis = 350, easing = LinearEasing))
@@ -127,25 +141,43 @@ fun NameSetupScreen(
         }
     }
 
+    // Dynamic keyboard avoidance: smoothly move robot face up and scale when keyboard opens
+    val isImeOpen = WindowInsets.isImeVisible
+    val density = LocalDensity.current
+    val targetOffsetPx = with(density) { if (isImeOpen) (-140).dp.toPx() else 0f }
+
+    val videoOffsetY by animateFloatAsState(
+        targetValue = targetOffsetPx,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 320f),
+        label = "videoOffsetY"
+    )
+    val videoScale by animateFloatAsState(
+        targetValue = if (isImeOpen) 0.95f else 1.25f,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 320f),
+        label = "videoScale"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
             .alpha(screenAlpha.value)
     ) {
-        // Video rendered with FIT + uniform scale (No stretch, preserves robot eyes geometry)
+        // Video rendered with FIT + uniform scale (No stretch, horizontal robot eyes)
+        // Dynamically adapts position when keyboard opens so face is never covered!
         NameFullscreenVideo(
             url = VIDEO_URL,
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    scaleX = 1.25f
-                    scaleY = 1.25f
+                    scaleX = videoScale
+                    scaleY = videoScale
+                    translationY = videoOffsetY
                 },
             onReady = bindPlayer
         )
 
-        // Bottom scrim gradient for readability (Golden ratio gradient progression)
+        // Bottom scrim gradient for readability
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -159,19 +191,20 @@ fun NameSetupScreen(
                 )
         )
 
-        // Content pinned to bottom with golden ratio vertical rhythm (8, 13, 21, 34, 55 dp)
+        // Content pinned to bottom with golden ratio vertical rhythm & IME avoidance
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .navigationBarsPadding()
                 .imePadding()
+                .navigationBarsPadding()
                 .padding(start = 34.dp, end = 34.dp, bottom = 28.dp)
         ) {
-            // Greeting — 34sp Fibonacci headline with gradient
+            // Greeting — 34sp SF Pro headline with gradient
             Text(
                 text = "Hi, I am Jarvis",
                 fontSize = 34.sp,
+                fontFamily = sfProFamily,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.8).sp,
                 style = TextStyle(
@@ -188,17 +221,22 @@ fun NameSetupScreen(
             // Fibonacci spacing: 8dp
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Subtitle — 17sp (half of 34sp)
+            // Subtitle — 17sp SF Pro
             Text(
                 text = "What should I call you?",
                 fontSize = 17.sp,
+                fontFamily = sfProFamily,
                 fontWeight = FontWeight.Normal,
                 color = Color.White.copy(alpha = 0.55f),
                 letterSpacing = (-0.1).sp
             )
 
-            // Fibonacci spacing: 34dp
-            Spacer(modifier = Modifier.height(34.dp))
+            // Fibonacci spacing: 34dp (or 24dp when keyboard open)
+            val separatorSpacing by animateDpAsState(
+                targetValue = if (isImeOpen) 20.dp else 34.dp,
+                label = "separatorSpacing"
+            )
+            Spacer(modifier = Modifier.height(separatorSpacing))
 
             // Separator line with subtle golden ratio opacity
             Box(
@@ -208,14 +246,25 @@ fun NameSetupScreen(
                     .background(Color.White.copy(alpha = 0.12f))
             )
 
-            // Fibonacci spacing: 21dp
-            Spacer(modifier = Modifier.height(21.dp))
+            // Fibonacci spacing: 21dp (or 16dp when keyboard open)
+            val inputSpacing by animateDpAsState(
+                targetValue = if (isImeOpen) 16.dp else 21.dp,
+                label = "inputSpacing"
+            )
+            Spacer(modifier = Modifier.height(inputSpacing))
 
             // Input row — 44dp height touch targets
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(13.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        try { focusRequester.requestFocus() } catch (_: Exception) {}
+                    }
             ) {
                 // + button (44dp target)
                 Box(
@@ -227,17 +276,23 @@ fun NameSetupScreen(
                         .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
                         .clickable { submit() }
                 ) {
-                    Text("+", color = Color.White.copy(alpha = 0.8f), fontSize = 22.sp)
+                    Text(
+                        "+",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 22.sp,
+                        fontFamily = sfProFamily
+                    )
                 }
 
-                // Transparent text field — 21sp Fibonacci font size
+                // Transparent text field — 20sp SF Pro font
                 BasicTextField(
                     value = name,
                     onValueChange = { name = it },
                     singleLine = true,
                     textStyle = TextStyle(
                         color = Color.White,
-                        fontSize = 21.sp,
+                        fontSize = 20.sp,
+                        fontFamily = sfProFamily,
                         fontWeight = FontWeight.Normal,
                         letterSpacing = (-0.2).sp
                     ),
@@ -254,12 +309,16 @@ fun NameSetupScreen(
                             Text(
                                 "Your name...",
                                 color = Color.White.copy(alpha = 0.28f),
-                                fontSize = 21.sp
+                                fontSize = 20.sp,
+                                fontFamily = sfProFamily,
+                                fontWeight = FontWeight.Normal
                             )
                         }
                         inner()
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(focusRequester)
                 )
 
                 // Send / Mic button (44dp target)
@@ -282,7 +341,13 @@ fun NameSetupScreen(
                         .clickable { submit() }
                 ) {
                     if (hasText) {
-                        Text("↑", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            "↑",
+                            color = Color.White,
+                            fontSize = 21.sp,
+                            fontFamily = sfProFamily,
+                            fontWeight = FontWeight.Bold
+                        )
                     } else {
                         Text("🎙", fontSize = 18.sp)
                     }
