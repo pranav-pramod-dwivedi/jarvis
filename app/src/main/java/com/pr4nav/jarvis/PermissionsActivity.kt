@@ -2,8 +2,6 @@ package com.pr4nav.jarvis
 
 import android.Manifest
 import android.app.AlarmManager
-import android.app.admin.DevicePolicyManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -22,38 +20,35 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.pr4nav.jarvis.capabilities.Capabilities
 import com.pr4nav.jarvis.capabilities.RootCapability
+import kotlinx.coroutines.launch
 import kotlin.concurrent.thread
 
 class PermissionsActivity : ComponentActivity() {
 
-    private var rootOk: Boolean? = null
     private val queue = ArrayDeque<Array<String>>()
     private val refreshTrigger = mutableStateOf(0)
 
@@ -61,16 +56,12 @@ class PermissionsActivity : ComponentActivity() {
         private const val RC = 7001
     }
 
-    data class PermRow(
+    data class PermItem(
         val title: String,
-        val why: String,
-        val tag: String,
-        val optional: Boolean,
-        val special: Boolean,
+        val description: String,
+        val isEssential: Boolean,
         val isGranted: Boolean,
-        val onGrant: (() -> Unit)? = null,
-        val extraActionLabel: String? = null,
-        val onExtraAction: (() -> Unit)? = null
+        val onGrant: (() -> Unit)? = null
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,13 +77,10 @@ class PermissionsActivity : ComponentActivity() {
 
         setContent {
             val trigger = refreshTrigger.value
-            val rows = remember(trigger) { getPermRows() }
-            val capabilities = remember(trigger) { Capabilities.all().map { safeStatus(it) } }
+            val items = remember(trigger) { getPermissionItems() }
 
-            PermissionsScreen(
-                rows = rows,
-                capabilities = capabilities,
-                onBack = { finish() },
+            PermissionsPage(
+                items = items,
                 onGrantAll = { grantAll() },
                 onProceedToChat = {
                     val intent = Intent(this, MainActivity::class.java).apply {
@@ -100,6 +88,8 @@ class PermissionsActivity : ComponentActivity() {
                     }
                     startActivity(intent)
                     finish()
+                    @Suppress("DEPRECATION")
+                    overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
                 }
             )
         }
@@ -110,31 +100,25 @@ class PermissionsActivity : ComponentActivity() {
         refreshTrigger.value++
     }
 
-    private fun getPermRows(): List<PermRow> = listOf(
-        PermRow(
+    private fun getPermissionItems(): List<PermItem> = listOf(
+        PermItem(
             title = "Files & Storage",
-            why = "Read/write project files, documents, scripts, and downloads.",
-            tag = "FS",
-            optional = false,
-            special = true,
+            description = "Read and write project code, scripts, files, and downloads in workspace.",
+            isEssential = true,
             isGranted = hasAllFiles(),
             onGrant = { requestFiles() }
         ),
-        PermRow(
+        PermItem(
             title = "Microphone",
-            why = "Real-time hands-free voice conversation, wake-word, and audio VAD.",
-            tag = "MIC",
-            optional = false,
-            special = false,
+            description = "Real-time hands-free voice conversations and wake-word voice activation.",
+            isEssential = true,
             isGranted = granted(Manifest.permission.RECORD_AUDIO),
             onGrant = { requestRuntime(Manifest.permission.RECORD_AUDIO) }
         ),
-        PermRow(
+        PermItem(
             title = "Display Over Other Apps",
-            why = "Holographic Siri-style floating HUD companion overlay.",
-            tag = "HUD",
-            optional = false,
-            special = true,
+            description = "Floating Siri-style HUD companion overlay and heads-up dynamic interface.",
+            isEssential = true,
             isGranted = Settings.canDrawOverlays(this),
             onGrant = {
                 openSettings(
@@ -143,30 +127,24 @@ class PermissionsActivity : ComponentActivity() {
                 )
             }
         ),
-        PermRow(
+        PermItem(
             title = "Accessibility Service",
-            why = "Zero-latency text screen reading, coordinates extraction, and virtual tap.",
-            tag = "A11Y",
-            optional = false,
-            special = true,
+            description = "Screen text reading with bounding coordinates and virtual touch gestures.",
+            isEssential = true,
             isGranted = accessibilityEnabled(),
             onGrant = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         ),
-        PermRow(
-            title = "Notifications",
-            why = "Foreground service persistence, task completion alerts, and responses.",
-            tag = "NOTIF",
-            optional = false,
-            special = false,
-            isGranted = Build.VERSION.SDK_INT < 33 || granted(Manifest.permission.POST_NOTIFICATIONS),
-            onGrant = { if (Build.VERSION.SDK_INT >= 33) requestRuntime(Manifest.permission.POST_NOTIFICATIONS) }
+        PermItem(
+            title = "Termux Command Bridge",
+            description = "Execute shell commands inside Termux and PRoot Ubuntu Linux environment.",
+            isEssential = true,
+            isGranted = TermuxBridge.hasPermission(),
+            onGrant = { requestRuntime("com.termux.permission.RUN_COMMAND") }
         ),
-        PermRow(
+        PermItem(
             title = "Battery Optimization Exemption",
-            why = "Prevents Android OS from freezing the assistant in background or sleep.",
-            tag = "PWR",
-            optional = false,
-            special = true,
+            description = "Prevent Android OS from terminating the background assistant during sleep.",
+            isEssential = true,
             isGranted = (getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName),
             onGrant = {
                 openSettings(
@@ -175,21 +153,17 @@ class PermissionsActivity : ComponentActivity() {
                 )
             }
         ),
-        PermRow(
-            title = "Termux Command Bridge",
-            why = "Execute shell commands inside Termux and PRoot Ubuntu Linux.",
-            tag = "SH",
-            optional = false,
-            special = false,
-            isGranted = TermuxBridge.hasPermission(),
-            onGrant = { requestRuntime("com.termux.permission.RUN_COMMAND") }
+        PermItem(
+            title = "Notifications",
+            description = "Foreground background service persistence and proactive completion alerts.",
+            isEssential = true,
+            isGranted = Build.VERSION.SDK_INT < 33 || granted(Manifest.permission.POST_NOTIFICATIONS),
+            onGrant = { if (Build.VERSION.SDK_INT >= 33) requestRuntime(Manifest.permission.POST_NOTIFICATIONS) }
         ),
-        PermRow(
+        PermItem(
             title = "Alarms & Reminders",
-            why = "Schedule precise system alarms, timers, and scheduled tasks.",
-            tag = "ALARM",
-            optional = false,
-            special = true,
+            description = "Schedule precise time-critical alarms, routines, and recurring reminders.",
+            isEssential = false,
             isGranted = Build.VERSION.SDK_INT < 31 || (getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms(),
             onGrant = {
                 if (Build.VERSION.SDK_INT >= 31) openSettings(
@@ -198,18 +172,12 @@ class PermissionsActivity : ComponentActivity() {
                 )
             }
         ),
-        PermRow(
+        PermItem(
             title = "Root (Superuser)",
-            why = "Advanced low-level automation via su (/product/bin/su) with safety gating.",
-            tag = "ROOT",
-            optional = true,
-            special = false,
+            description = "Direct system-level execution via su with automated safety gating.",
+            isEssential = false,
             isGranted = RootCapability.state == RootCapability.State.AVAILABLE,
-            onGrant = null,
-            extraActionLabel = if (RootCapability.available()) {
-                if (RootCapability.toolsEnabled()) "DISABLE ROOT TOOLS" else "ENABLE ROOT TOOLS"
-            } else null,
-            onExtraAction = {
+            onGrant = {
                 val enabled = RootCapability.toolsEnabled()
                 RootCapability.setToolsEnabled(!enabled)
                 refreshTrigger.value++
@@ -297,27 +265,23 @@ class PermissionsActivity : ComponentActivity() {
 
     private fun checkRoot() {
         thread {
-            val ok = RootCapability.detect()
-            rootOk = ok
+            RootCapability.detect()
             runOnUiThread { refreshTrigger.value++ }
         }
     }
-
-    private fun safeStatus(c: com.pr4nav.jarvis.capabilities.Capability): String =
-        try { c.status() } catch (e: Exception) { "? ${c.name} — ${e.message}" }
 }
 
-// ─── Jetpack Compose Dark Screen UI (matching TermuxCheck & Allow page) ──────
+// ─── Main Screen (Identical design to TermuxPermissionFixPage) ───────────────
 
 @Composable
-fun PermissionsScreen(
-    rows: List<PermissionsActivity.PermRow>,
-    capabilities: List<String>,
-    onBack: () -> Unit,
+fun PermissionsPage(
+    items: List<PermissionsActivity.PermItem>,
     onGrantAll: () -> Unit,
     onProceedToChat: () -> Unit
 ) {
-    val context = LocalContext.current
+    val screenAlpha = remember { Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
+
     val dmSansFamily = remember {
         try {
             FontFamily(Font(R.font.dm_sans))
@@ -326,309 +290,249 @@ fun PermissionsScreen(
         }
     }
 
-    val reqOk = rows.count { !it.optional && it.isGranted }
-    val reqAll = rows.count { !it.optional }
-
-    val fadeInAlpha = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        fadeInAlpha.animateTo(1f, animationSpec = tween(durationMillis = 350, easing = LinearEasing))
+        screenAlpha.animateTo(1f, animationSpec = tween(durationMillis = 350, easing = LinearEasing))
     }
+
+    fun proceedWithFadeOut(action: () -> Unit) {
+        coroutineScope.launch {
+            screenAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
+            action()
+        }
+    }
+
+    val reqOk = items.count { it.isEssential && it.isGranted }
+    val reqAll = items.count { it.isEssential }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .alpha(fadeInAlpha.value)
+            .background(Color(0xFF000000))
+            .alpha(screenAlpha.value)
     ) {
-        Column(
+        // Scrollable Documentation Content
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .navigationBarsPadding()
+                .navigationBarsPadding(),
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 160.dp, bottom = 48.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 20.dp, top = 20.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack, modifier = Modifier.size(38.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Back",
-                        tint = Color.White
-                    )
-                }
+            itemsIndexed(items) { index, item ->
+                val stepNumber = String.format("%02d", index + 1)
+                PermDocumentationCard(
+                    stepNumber = stepNumber,
+                    title = item.title,
+                    description = item.description,
+                    isGranted = item.isGranted,
+                    onCardClick = { item.onGrant?.invoke() },
+                    dmSansFamily = dmSansFamily
+                )
+            }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    PermShimmerText(
-                        text = "JARVIS PERMISSIONS",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = dmSansFamily
-                    )
-                    Text(
-                        text = "Essential capabilities for autonomous execution",
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontFamily = dmSansFamily,
-                        fontSize = 12.sp
-                    )
-                }
-
-                // Status Badge
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (reqOk == reqAll) Color(0x3310B981) else Color(0x33FFB45A),
-                    border = BorderStroke(1.dp, if (reqOk == reqAll) Color(0x6610B981) else Color(0x66FFB45A))
+            // Action Buttons Section at Bottom
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "$reqOk / $reqAll",
-                        color = if (reqOk == reqAll) Color(0xFF10B981) else Color(0xFFFFB45A),
-                        fontFamily = dmSansFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
-            }
-
-            // Scrollable List of Permission Cards
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(rows) { row ->
-                    PermissionCard(row = row, dmSansFamily = dmSansFamily)
-                }
-
-                // Capabilities Terminal Section
-                item {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Text(
-                        text = "LIVE CAPABILITY MATRIX",
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = Color.White.copy(alpha = 0.4f),
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFF0D1117),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            capabilities.forEach { cap ->
-                                Text(
-                                    text = cap,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.sp,
-                                    color = if (cap.startsWith("✓")) Color(0xFF10B981) else Color.White.copy(alpha = 0.55f)
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-            }
-
-            // Bottom Actions Bar
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black)
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                if (reqOk < reqAll) {
-                    // Grant All Essentials
+                    // Primary White Button
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = Color.White,
+                        color = Color(0xFFFFFFFF),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
-                            .clickable { onGrantAll() }
+                            .height(50.dp)
+                            .clickable {
+                                if (reqOk < reqAll) onGrantAll()
+                                else proceedWithFadeOut { onProceedToChat() }
+                            }
                     ) {
                         Row(
                             modifier = Modifier.fillMaxSize(),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "GRANT ALL ESSENTIALS",
-                                fontFamily = dmSansFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.5.sp,
-                                color = Color.Black
-                            )
+                            if (reqOk < reqAll) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Grant",
+                                    tint = Color(0xFF000000),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Grant All Essentials",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.5.sp,
+                                    color = Color(0xFF000000),
+                                    fontFamily = dmSansFamily
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Proceed",
+                                    tint = Color(0xFF000000),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Proceed to JARVIS",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.5.sp,
+                                    color = Color(0xFF000000),
+                                    fontFamily = dmSansFamily
+                                )
+                            }
                         }
                     }
-                }
 
-                // Proceed to Chat
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF10B981),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clickable { onProceedToChat() }
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                    // Skip / Secondary Button
+                    TextButton(
+                        onClick = { proceedWithFadeOut { onProceedToChat() } },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(36.dp),
+                        contentPadding = PaddingValues(0.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "PROCEED TO CHAT",
+                            text = "Continue anyway",
                             fontFamily = dmSansFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.5.sp,
-                            color = Color.Black
+                            fontWeight = FontWeight.Normal,
+                            color = Color.White.copy(alpha = 0.45f),
+                            fontSize = 13.sp
                         )
                     }
                 }
             }
         }
-    }
-}
 
-@Composable
-fun PermissionCard(row: PermissionsActivity.PermRow, dmSansFamily: FontFamily) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = Color(0xFF121620),
-        border = BorderStroke(1.dp, if (row.isGranted) Color(0x3310B981) else Color.White.copy(alpha = 0.08f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = (!row.isGranted && row.onGrant != null) || row.onExtraAction != null) {
-                if (!row.isGranted) row.onGrant?.invoke()
-                else row.onExtraAction?.invoke()
-            }
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // Pinned Translucent Top Header Bar (copied from TermuxPermissionFixPage)
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .drawBehind {
+                    drawLine(
+                        color = Color(0x20FFFFFF),
+                        start = Offset(0f, size.height),
+                        end = Offset(size.width, size.height),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                },
+            color = Color(0xD907080A) // Translucent dark glass backdrop
         ) {
-            // Tag icon badge
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (row.isGranted) Color(0x2610B981) else Color(0x1AFFFFFF),
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = row.tag,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = if (row.isGranted) Color(0xFF10B981) else Color.White.copy(alpha = 0.7f)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = row.title,
-                    fontFamily = dmSansFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = Color.White
-                )
-                Text(
-                    text = row.why,
-                    fontFamily = dmSansFamily,
-                    fontSize = 11.5.sp,
-                    color = Color.White.copy(alpha = 0.55f),
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-                if (row.extraActionLabel != null) {
-                    Text(
-                        text = row.extraActionLabel,
-                        fontFamily = dmSansFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = Color(0xFFFFB45A),
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // State Pill
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = if (row.isGranted) Color(0x3310B981) else Color(0x1AFFFFFF),
-                border = BorderStroke(1.dp, if (row.isGranted) Color(0x6610B981) else Color.White.copy(alpha = 0.15f))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
             ) {
                 Text(
-                    text = if (row.isGranted) "✓ GRANTED" else if (row.onGrant != null) "GRANT" else "INFO",
-                    color = if (row.isGranted) Color(0xFF10B981) else Color.White,
+                    text = "SYSTEM CONFIGURATION",
+                    fontSize = 11.sp,
+                    fontFamily = dmSansFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White.copy(alpha = 0.45f),
+                    letterSpacing = 1.2.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "System Permissions",
+                    fontSize = 24.sp,
                     fontFamily = dmSansFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 10.5.sp,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    color = Color.White,
+                    letterSpacing = (-0.5).sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "JARVIS requires device capabilities for autonomous execution. Grant the permissions below:",
+                    fontSize = 12.5.sp,
+                    fontFamily = dmSansFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = Color.White.copy(alpha = 0.60f),
+                    lineHeight = 17.sp
                 )
             }
         }
     }
 }
 
+// ─── Step Card Component (copied from DocumentationCard in TermuxPermissionFixPage) ──
+
 @Composable
-fun PermShimmerText(
-    text: String,
-    fontSize: androidx.compose.ui.unit.TextUnit,
-    fontWeight: FontWeight,
-    fontFamily: FontFamily
+private fun PermDocumentationCard(
+    stepNumber: String,
+    title: String,
+    description: String,
+    isGranted: Boolean,
+    onCardClick: () -> Unit,
+    dmSansFamily: FontFamily
 ) {
-    val transition = rememberInfiniteTransition(label = "permShimmer")
-    val offset by transition.animateFloat(
-        initialValue = -1f,
-        targetValue = 2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2800, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "shimmerOffset"
-    )
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF13151A),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !isGranted) { onCardClick() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = stepNumber,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = Color.White.copy(alpha = 0.4f),
+                    fontFamily = FontFamily.Monospace
+                )
+                Text(
+                    text = title,
+                    fontSize = 16.sp,
+                    fontFamily = dmSansFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    modifier = Modifier.weight(1f)
+                )
 
-    val brush = Brush.linearGradient(
-        colors = listOf(
-            Color.White.copy(alpha = 0.6f),
-            Color.White,
-            Color.White.copy(alpha = 0.6f),
-        ),
-        start = Offset(offset * 800f, 0f),
-        end = Offset((offset + 0.6f) * 800f, 0f)
-    )
+                if (isGranted) {
+                    Text(
+                        text = "Granted",
+                        fontSize = 12.sp,
+                        fontFamily = dmSansFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF10B981)
+                    )
+                } else {
+                    Text(
+                        text = "Grant →",
+                        fontSize = 12.sp,
+                        fontFamily = dmSansFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White.copy(alpha = 0.70f)
+                    )
+                }
+            }
 
-    Text(
-        text = text,
-        fontSize = fontSize,
-        fontWeight = fontWeight,
-        fontFamily = fontFamily,
-        style = TextStyle(
-            brush = brush,
-            letterSpacing = (-0.3).sp
-        )
-    )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = description,
+                fontSize = 13.sp,
+                fontFamily = dmSansFamily,
+                fontWeight = FontWeight.Normal,
+                color = Color.White.copy(alpha = 0.60f),
+                lineHeight = 18.sp
+            )
+        }
+    }
 }
