@@ -1,0 +1,787 @@
+{
+  "registry_name": "JARVIS Canonical Tools Registry",
+  "description": "Complete registry of native, system, terminal, media, communication, and web tools executable by JARVIS.",
+  "total_tools": 130,
+  "tools": [
+    {
+      "name": "system.torch",
+      "category": "system",
+      "description": "Turns the device flashlight/torch on or off.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "system.volume",
+      "category": "system",
+      "description": "Adjusts device volume (raise, lower, mute, unmute).",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "system.battery",
+      "category": "system",
+      "description": "Checks device battery level and charging state.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "system.screenshot",
+      "category": "system",
+      "description": "Captures a device screenshot.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "media.play",
+      "category": "media",
+      "description": "Plays requested music track, song, or artist in default media player.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "open_app",
+      "category": "general",
+      "description": "Opens or launches an installed application by package name or app name.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "close_app",
+      "category": "general",
+      "description": "Closes or stops a running application.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "navigate",
+      "category": "general",
+      "description": "Starts navigation or directions to a destination address or place.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "call_contact",
+      "category": "general",
+      "description": "Initiates a phone call or opens dialer for a phone number or contact.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "send_message",
+      "category": "general",
+      "description": "Sends an SMS or chat message to a recipient.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "read_file",
+      "category": "general",
+      "description": "Reads content from a local file path.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "write_file",
+      "category": "general",
+      "description": "Writes text content to a local file path.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "search_files",
+      "category": "general",
+      "description": "Searches for files matching a name query.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "run_command",
+      "category": "general",
+      "description": "Executes a shell command in Termux, Ubuntu PRoot, or local Android shell environment.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "get_location",
+      "category": "general",
+      "description": "Returns current device geographical location (latitude, longitude).",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "get_battery",
+      "category": "general",
+      "description": "Gets battery level percentage and charging state.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "get_wifi",
+      "category": "general",
+      "description": "Gets current Wi-Fi connection status and SSID.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "system.bluetooth",
+      "category": "system",
+      "description": "Turns the device Bluetooth on or off.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "get_bluetooth",
+      "category": "general",
+      "description": "Gets Bluetooth enabled status and bonded devices.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "open_settings",
+      "category": "general",
+      "description": "Opens the device Settings page or a specific sub-setting.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "open_system_page",
+      "category": "general",
+      "description": "Opens an Android system settings or details page.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "jarvis_environment",
+      "category": "general",
+      "description": "Discovers real system environment, storage mounts, and toolchain state.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "take_screenshot",
+      "category": "general",
+      "description": "High-speed text-only screen capture that reads all text and coordinates on current display into /storage/emulated/0/JARVIS/workspace/screen_capture.txt. Graphic image screenshots are restricted to AGY.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "screen_info",
+      "category": "general",
+      "description": "Reads current screen UI node tree hierarchy via Accessibility.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "click",
+      "category": "general",
+      "description": "Performs a tap or click at screen coordinates (x, y) or text label.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "scroll",
+      "category": "general",
+      "description": "Performs a scroll gesture forward or backward.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "type_text",
+      "category": "general",
+      "description": "Types text into the currently focused input field.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "clipboard_get",
+      "category": "general",
+      "description": "Reads current text from system clipboard.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "clipboard_set",
+      "category": "general",
+      "description": "Sets or copies text to the system clipboard.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "call_history",
+      "category": "general",
+      "description": "Reads recent calls from the Android call log.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "find_contact",
+      "category": "general",
+      "description": "Finds contact details and phone number for a person name.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "draft_message",
+      "category": "general",
+      "description": "Opens the default SMS app with pre-filled recipient and message without sending directly.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "open_${subName}_settings",
+      "category": "general",
+      "description": "Opens the Android $subName settings page directly.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "delete_file",
+      "category": "general",
+      "description": "Deletes a local file or directory.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "rename_file",
+      "category": "general",
+      "description": "Renames or moves a local file.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "copy_file",
+      "category": "general",
+      "description": "Copies a file from source to destination path.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "create_folder",
+      "category": "general",
+      "description": "Creates a directory/folder at the specified path.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "find_downloads",
+      "category": "general",
+      "description": "Finds recent files in the Downloads folder.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "open_url",
+      "category": "general",
+      "description": "Opens a web URL in the default browser.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "search_web",
+      "category": "general",
+      "description": "Performs a web search in the default browser or search provider.",
+      "source": "CanonicalToolRegistry"
+    },
+    {
+      "name": "app_launch_friendly",
+      "category": "AppSystemShortcutTools",
+      "description": "Opens an installed Android app by its human friendly name.",
+      "source": "AppSystemShortcutTools"
+    },
+    {
+      "name": "file_storage_stats",
+      "category": "AppSystemShortcutTools",
+      "description": "Returns available and total storage space on device.",
+      "source": "AppSystemShortcutTools"
+    },
+    {
+      "name": "read_screen_text",
+      "category": "AppSystemShortcutTools",
+      "description": "High-speed text-only screen capture that reads all text and coordinates on the current display. Saves to /storage/emulated/0/JARVIS/workspace/screen_capture.txt for immediate agent reading and virtual tap targeting.",
+      "source": "AppSystemShortcutTools"
+    },
+    {
+      "name": "virtual_touch",
+      "category": "AppSystemShortcutTools",
+      "description": "Dispatches a virtual touch tap on the screen at coordinates (x, y) or clicks an element by visible text label. Automatically uses root fallback if accessibility is unavailable.",
+      "source": "AppSystemShortcutTools"
+    },
+    {
+      "name": "virtual_scroll",
+      "category": "AppSystemShortcutTools",
+      "description": "Dispatches a virtual scroll gesture on the active window.",
+      "source": "AppSystemShortcutTools"
+    },
+    {
+      "name": "virtual_type",
+      "category": "AppSystemShortcutTools",
+      "description": "Types text into the currently focused input field.",
+      "source": "AppSystemShortcutTools"
+    },
+    {
+      "name": "press_global_key",
+      "category": "AppSystemShortcutTools",
+      "description": "Presses a system navigation key (back, home, recents, notifications, quick_settings, lock_screen).",
+      "source": "AppSystemShortcutTools"
+    },
+    {
+      "name": "diagnostic_ping",
+      "category": "AppSystemShortcutTools",
+      "description": "Pings a network host to test connectivity.",
+      "source": "AppSystemShortcutTools"
+    },
+    {
+      "name": "calc_math_evaluate",
+      "category": "CalculationConverterTools",
+      "description": "Evaluates an arithmetic mathematical expression.",
+      "source": "CalculationConverterTools"
+    },
+    {
+      "name": "calc_tip_calculate",
+      "category": "CalculationConverterTools",
+      "description": "Calculates tip amount and bill split per person.",
+      "source": "CalculationConverterTools"
+    },
+    {
+      "name": "calc_unit_convert",
+      "category": "CalculationConverterTools",
+      "description": "Converts units of measurement (e.g. km to miles, kg to lbs, celsius to fahrenheit).",
+      "source": "CalculationConverterTools"
+    },
+    {
+      "name": "calendar_event_create",
+      "category": "CalendarScheduleTools",
+      "description": "Creates a new calendar event with title, date, time, and optional location.",
+      "source": "CalendarScheduleTools"
+    },
+    {
+      "name": "calendar_open_day",
+      "category": "CalendarScheduleTools",
+      "description": "Opens the calendar view for today or a specific date.",
+      "source": "CalendarScheduleTools"
+    },
+    {
+      "name": "calendar_open_app",
+      "category": "CalendarScheduleTools",
+      "description": "Opens the primary calendar application.",
+      "source": "CalendarScheduleTools"
+    },
+    {
+      "name": "calendar_next_meeting",
+      "category": "CalendarScheduleTools",
+      "description": "Summarizes the next upcoming meeting on the schedule.",
+      "source": "CalendarScheduleTools"
+    },
+    {
+      "name": "calendar_quick_meeting",
+      "category": "CalendarScheduleTools",
+      "description": "Schedules a quick 30-minute sync meeting starting in 1 hour.",
+      "source": "CalendarScheduleTools"
+    },
+    {
+      "name": "camera_photo_take",
+      "category": "CameraPhotosTools",
+      "description": "Opens camera ready to capture a photo.",
+      "source": "CameraPhotosTools"
+    },
+    {
+      "name": "camera_video_record",
+      "category": "CameraPhotosTools",
+      "description": "Opens camera ready to record video.",
+      "source": "CameraPhotosTools"
+    },
+    {
+      "name": "photos_open_app",
+      "category": "CameraPhotosTools",
+      "description": "Opens Photos or Gallery app.",
+      "source": "CameraPhotosTools"
+    },
+    {
+      "name": "clock_alarm_set",
+      "category": "ClockTimerTools",
+      "description": "Sets a new alarm at a specific hour and minute with an optional label description.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_alarm_list",
+      "category": "ClockTimerTools",
+      "description": "Opens the Clock application to view all configured alarms.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_alarm_snooze",
+      "category": "ClockTimerTools",
+      "description": "Snoozes an active alarm.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_alarm_dismiss",
+      "category": "ClockTimerTools",
+      "description": "Dismisses an active sounding alarm.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_timer_start",
+      "category": "ClockTimerTools",
+      "description": "Starts a countdown timer for a specified duration in seconds or minutes.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_timer_list",
+      "category": "ClockTimerTools",
+      "description": "Opens the active countdown timers in the clock app.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_stopwatch_start",
+      "category": "ClockTimerTools",
+      "description": "Opens the stopwatch tab in the clock app.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_world_time",
+      "category": "ClockTimerTools",
+      "description": "Looks up the current time, date, and timezone for any city or country in the world.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_time_current",
+      "category": "ClockTimerTools",
+      "description": "Returns the local system time formatted naturally.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_date_current",
+      "category": "ClockTimerTools",
+      "description": "Returns the current local date with day of week, month, day, and year.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_time_difference",
+      "category": "ClockTimerTools",
+      "description": "Calculates the time difference in hours between the local device and a target city.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_open_app",
+      "category": "ClockTimerTools",
+      "description": "Launches the default system clock application.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_timer_preset_tea",
+      "category": "ClockTimerTools",
+      "description": "Starts a quick 3-minute timer preset for tea brewing.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_timer_preset_pasta",
+      "category": "ClockTimerTools",
+      "description": "Starts a quick 10-minute timer preset for pasta cooking.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_timer_preset_workout",
+      "category": "ClockTimerTools",
+      "description": "Starts a quick 45-minute timer preset for a workout session.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "clock_day_of_week",
+      "category": "ClockTimerTools",
+      "description": "Returns the day of the week for today or an offset date.",
+      "source": "ClockTimerTools"
+    },
+    {
+      "name": "network_wifi_toggle",
+      "category": "ConnectivityNetworkTools",
+      "description": "Opens Wi-Fi settings to connect or toggle Wi-Fi.",
+      "source": "ConnectivityNetworkTools"
+    },
+    {
+      "name": "network_bluetooth_toggle",
+      "category": "ConnectivityNetworkTools",
+      "description": "Toggles or configures Bluetooth state.",
+      "source": "ConnectivityNetworkTools"
+    },
+    {
+      "name": "network_hotspot_open",
+      "category": "ConnectivityNetworkTools",
+      "description": "Opens Tethering & Portable Hotspot settings.",
+      "source": "ConnectivityNetworkTools"
+    },
+    {
+      "name": "network_airplane_mode_open",
+      "category": "ConnectivityNetworkTools",
+      "description": "Opens Airplane Mode settings.",
+      "source": "ConnectivityNetworkTools"
+    },
+    {
+      "name": "contact_find",
+      "category": "ContactPhoneCommTools",
+      "description": "Searches for a contact by name and retrieves their details.",
+      "source": "ContactPhoneCommTools"
+    },
+    {
+      "name": "contact_add",
+      "category": "ContactPhoneCommTools",
+      "description": "Creates a new contact card with name, phone, and optional email.",
+      "source": "ContactPhoneCommTools"
+    },
+    {
+      "name": "contact_open_app",
+      "category": "ContactPhoneCommTools",
+      "description": "Opens the Contacts application.",
+      "source": "ContactPhoneCommTools"
+    },
+    {
+      "name": "phone_call_contact",
+      "category": "ContactPhoneCommTools",
+      "description": "Initiates a phone call to a contact by name or phone number.",
+      "source": "ContactPhoneCommTools"
+    },
+    {
+      "name": "phone_dial_number",
+      "category": "ContactPhoneCommTools",
+      "description": "Opens the phone dialer prefilled with a phone number.",
+      "source": "ContactPhoneCommTools"
+    },
+    {
+      "name": "phone_open_app",
+      "category": "ContactPhoneCommTools",
+      "description": "Opens the Phone / Dialer app.",
+      "source": "ContactPhoneCommTools"
+    },
+    {
+      "name": "message_send_sms",
+      "category": "ContactPhoneCommTools",
+      "description": "Sends an SMS message to a contact or phone number.",
+      "source": "ContactPhoneCommTools"
+    },
+    {
+      "name": "message_send_whatsapp",
+      "category": "ContactPhoneCommTools",
+      "description": "Sends a message via WhatsApp.",
+      "source": "ContactPhoneCommTools"
+    },
+    {
+      "name": "message_open_app",
+      "category": "ContactPhoneCommTools",
+      "description": "Opens the default Messages application.",
+      "source": "ContactPhoneCommTools"
+    },
+    {
+      "name": "message_share_text",
+      "category": "ContactPhoneCommTools",
+      "description": "Opens the Android share sheet to share text with any messaging app.",
+      "source": "ContactPhoneCommTools"
+    },
+    {
+      "name": "device_torch_toggle",
+      "category": "DeviceHardwareTools",
+      "description": "Toggles flashlight on or off.",
+      "source": "DeviceHardwareTools"
+    },
+    {
+      "name": "device_torch_on",
+      "category": "DeviceHardwareTools",
+      "description": "Turns on the flashlight/torch.",
+      "source": "DeviceHardwareTools"
+    },
+    {
+      "name": "device_torch_off",
+      "category": "DeviceHardwareTools",
+      "description": "Turns off the flashlight/torch.",
+      "source": "DeviceHardwareTools"
+    },
+    {
+      "name": "device_volume_set",
+      "category": "DeviceHardwareTools",
+      "description": "Sets device media volume percentage (0-100).",
+      "source": "DeviceHardwareTools"
+    },
+    {
+      "name": "device_volume_raise",
+      "category": "DeviceHardwareTools",
+      "description": "Increases media volume by one step.",
+      "source": "DeviceHardwareTools"
+    },
+    {
+      "name": "device_volume_lower",
+      "category": "DeviceHardwareTools",
+      "description": "Decreases media volume by one step.",
+      "source": "DeviceHardwareTools"
+    },
+    {
+      "name": "device_volume_mute",
+      "category": "DeviceHardwareTools",
+      "description": "Mutes device media sound.",
+      "source": "DeviceHardwareTools"
+    },
+    {
+      "name": "device_battery_status",
+      "category": "DeviceHardwareTools",
+      "description": "Checks battery percentage, charging state, and health.",
+      "source": "DeviceHardwareTools"
+    },
+    {
+      "name": "device_screenshot_take",
+      "category": "DeviceHardwareTools",
+      "description": "Captures an instant screenshot of the device screen.",
+      "source": "DeviceHardwareTools"
+    },
+    {
+      "name": "device_vibrate",
+      "category": "DeviceHardwareTools",
+      "description": "Vibrates the device for a specified duration in milliseconds.",
+      "source": "DeviceHardwareTools"
+    },
+    {
+      "name": "device_settings_open",
+      "category": "DeviceHardwareTools",
+      "description": "Opens Android Settings or a specific subpage.",
+      "source": "DeviceHardwareTools"
+    },
+    {
+      "name": "browser_render_app",
+      "category": "JarvisBrowserTools",
+      "description": "Generates and renders an on-demand, interactive HTML/CSS/JS mini web-app in JarvisBrowser. Use whenever a visual UI, animation, interactive simulation, chart, comparison table, or custom dashboard improves the response.",
+      "source": "JarvisBrowserTools"
+    },
+    {
+      "name": "browser_launch_app",
+      "category": "JarvisBrowserTools",
+      "description": "Launches an existing or saved JarvisBrowser app by ID, title, or search query (e.g. 'faraday', 'workout').",
+      "source": "JarvisBrowserTools"
+    },
+    {
+      "name": "browser_list_apps",
+      "category": "JarvisBrowserTools",
+      "description": "Lists all saved and permanent JarvisBrowser mini-apps in the user's library.",
+      "source": "JarvisBrowserTools"
+    },
+    {
+      "name": "browser_save_app",
+      "category": "JarvisBrowserTools",
+      "description": "Saves a temporary JarvisBrowser app permanently into the user's reusable apps library.",
+      "source": "JarvisBrowserTools"
+    },
+    {
+      "name": "browser_delete_app",
+      "category": "JarvisBrowserTools",
+      "description": "Deletes a saved JarvisBrowser mini-app from storage.",
+      "source": "JarvisBrowserTools"
+    },
+    {
+      "name": "music_play",
+      "category": "MediaAudioTools",
+      "description": "Plays music, songs, artists, or playlists on Spotify or default player.",
+      "source": "MediaAudioTools"
+    },
+    {
+      "name": "music_pause",
+      "category": "MediaAudioTools",
+      "description": "Pauses active audio playback.",
+      "source": "MediaAudioTools"
+    },
+    {
+      "name": "music_resume",
+      "category": "MediaAudioTools",
+      "description": "Resumes paused audio playback.",
+      "source": "MediaAudioTools"
+    },
+    {
+      "name": "music_next",
+      "category": "MediaAudioTools",
+      "description": "Skips to next track.",
+      "source": "MediaAudioTools"
+    },
+    {
+      "name": "music_previous",
+      "category": "MediaAudioTools",
+      "description": "Skips to previous track.",
+      "source": "MediaAudioTools"
+    },
+    {
+      "name": "music_open_spotify",
+      "category": "MediaAudioTools",
+      "description": "Opens the Spotify music player app.",
+      "source": "MediaAudioTools"
+    },
+    {
+      "name": "maps_navigate_to",
+      "category": "NavigationTravelTools",
+      "description": "Opens turn-by-turn navigation in Google Maps to any destination address, business, or landmark.",
+      "source": "NavigationTravelTools"
+    },
+    {
+      "name": "maps_search_nearby",
+      "category": "NavigationTravelTools",
+      "description": "Searches for nearby points of interest like restaurants, gas stations, pharmacies, ATMs.",
+      "source": "NavigationTravelTools"
+    },
+    {
+      "name": "maps_navigate_home",
+      "category": "NavigationTravelTools",
+      "description": "Starts navigation to your home address.",
+      "source": "NavigationTravelTools"
+    },
+    {
+      "name": "maps_open_app",
+      "category": "NavigationTravelTools",
+      "description": "Opens Google Maps application.",
+      "source": "NavigationTravelTools"
+    },
+    {
+      "name": "notes_create",
+      "category": "NotesListsTools",
+      "description": "Creates and saves a quick note into memory.",
+      "source": "NotesListsTools"
+    },
+    {
+      "name": "notes_list",
+      "category": "NotesListsTools",
+      "description": "Retrieves all saved notes.",
+      "source": "NotesListsTools"
+    },
+    {
+      "name": "list_add_item",
+      "category": "NotesListsTools",
+      "description": "Adds an item to a named shopping or to-do list.",
+      "source": "NotesListsTools"
+    },
+    {
+      "name": "list_view",
+      "category": "NotesListsTools",
+      "description": "Views all items in a named list.",
+      "source": "NotesListsTools"
+    },
+    {
+      "name": "reminder_create",
+      "category": "ReminderTaskTools",
+      "description": "Creates a new reminder or to-do task with title and optional due time.",
+      "source": "ReminderTaskTools"
+    },
+    {
+      "name": "reminder_list_today",
+      "category": "ReminderTaskTools",
+      "description": "Lists all reminders scheduled for today.",
+      "source": "ReminderTaskTools"
+    },
+    {
+      "name": "reminder_open_app",
+      "category": "ReminderTaskTools",
+      "description": "Opens Google Tasks or the primary Reminders application.",
+      "source": "ReminderTaskTools"
+    },
+    {
+      "name": "reminder_water_log",
+      "category": "ReminderTaskTools",
+      "description": "Sets a periodic drinking water reminder.",
+      "source": "ReminderTaskTools"
+    },
+    {
+      "name": "reminder_medicine_set",
+      "category": "ReminderTaskTools",
+      "description": "Sets a daily reminder to take medicine.",
+      "source": "ReminderTaskTools"
+    },
+    {
+      "name": "weather_current",
+      "category": "WeatherEnvironmentTools",
+      "description": "Retrieves current weather conditions, temperature, and summary for a location.",
+      "source": "WeatherEnvironmentTools"
+    },
+    {
+      "name": "weather_rain_check",
+      "category": "WeatherEnvironmentTools",
+      "description": "Checks if rain or precipitation is expected today in a location.",
+      "source": "WeatherEnvironmentTools"
+    },
+    {
+      "name": "weather_forecast_weekly",
+      "category": "WeatherEnvironmentTools",
+      "description": "Retrieves the 7-day extended weather forecast for a location.",
+      "source": "WeatherEnvironmentTools"
+    },
+    {
+      "name": "web_google_search",
+      "category": "WebKnowledgeTools",
+      "description": "Performs a Google web search for any query.",
+      "source": "WebKnowledgeTools"
+    },
+    {
+      "name": "web_open_url",
+      "category": "WebKnowledgeTools",
+      "description": "Opens a web link in browser.",
+      "source": "WebKnowledgeTools"
+    },
+    {
+      "name": "web_wikipedia_lookup",
+      "category": "WebKnowledgeTools",
+      "description": "Opens Wikipedia page for any topic or person.",
+      "source": "WebKnowledgeTools"
+    }
+  ]
+}
