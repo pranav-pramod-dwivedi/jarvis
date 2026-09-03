@@ -103,6 +103,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
 
     private var wordHighlightRunnable: Runnable? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val audioCoordinator = JarvisAudioCoordinator(context)
 
     fun speak(
         text: String,
@@ -125,6 +126,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
 
         val wrappedOnDone: () -> Unit = {
             stopWordHighlighting()
+            audioCoordinator.abandonAssistantFocus()
             onDone?.invoke()
             Unit
         }
@@ -134,6 +136,10 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
             Log.w(TAG, "Android TTS engine not ready yet")
             wrappedOnDone()
             return
+        }
+
+        audioCoordinator.requestAssistantFocus {
+            stopSpeaking()
         }
 
         val speechRate = VoiceAssistantPreferences.getSpeechRate(context)
@@ -207,6 +213,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
 
     fun stopSpeaking() {
         stopWordHighlighting()
+        audioCoordinator.abandonAssistantFocus()
         try {
             if (tts?.isSpeaking == true) {
                 tts?.stop()
@@ -332,55 +339,18 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                     putExtra("android.speech.extra.DICTATION_MODE", true)
                 }
-                muteEarcons(targetContext, true)
                 recognizer.startListening(intent)
             } catch (e: Exception) {
                 isListening = false
-                muteEarcons(targetContext, false)
                 onError("Failed to start speech recognizer: ${e.message}")
             }
         }
-    }
-
-    private var isEarconsMuted = false
-    private var savedSystemVol: Int? = null
-    private var savedNotifVol: Int? = null
-
-    fun muteEarcons(ctx: Context, mute: Boolean) {
-        if (mute == isEarconsMuted) return
-        try {
-            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-            val streams = intArrayOf(AudioManager.STREAM_NOTIFICATION, AudioManager.STREAM_SYSTEM)
-            if (mute) {
-                savedSystemVol = am.getStreamVolume(AudioManager.STREAM_SYSTEM)
-                savedNotifVol = am.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
-                for (stream in streams) {
-                    try { am.setStreamVolume(stream, 0, 0) } catch (_: Exception) {}
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        try { am.adjustStreamVolume(stream, AudioManager.ADJUST_MUTE, 0) } catch (_: Exception) {}
-                    }
-                }
-                isEarconsMuted = true
-            } else {
-                for (stream in streams) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        try { am.adjustStreamVolume(stream, AudioManager.ADJUST_UNMUTE, 0) } catch (_: Exception) {}
-                    }
-                }
-                savedSystemVol?.let { try { am.setStreamVolume(AudioManager.STREAM_SYSTEM, it, 0) } catch (_: Exception) {} }
-                savedNotifVol?.let { try { am.setStreamVolume(AudioManager.STREAM_NOTIFICATION, it, 0) } catch (_: Exception) {} }
-                savedSystemVol = null
-                savedNotifVol = null
-                isEarconsMuted = false
-            }
-        } catch (_: Exception) {}
     }
 
     fun stopListening() {
         try {
             speechRecognizer?.stopListening()
             isListening = false
-            context?.let { muteEarcons(it, false) }
         } catch (_: Exception) {}
     }
 
@@ -388,7 +358,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
         try {
             speechRecognizer?.destroy()
             speechRecognizer = null
-            context?.let { muteEarcons(it, false) }
+            audioCoordinator.release()
             tts?.stop()
             tts?.shutdown()
             tts = null

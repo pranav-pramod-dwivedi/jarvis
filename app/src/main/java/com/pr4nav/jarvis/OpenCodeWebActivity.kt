@@ -103,6 +103,17 @@ class OpenCodeWebActivity : AppCompatActivity() {
             // WebView will call onReceivedHttpAuthRequest for 401; no need to embed creds in URL
             webView.loadUrl(target)
         }
+
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (::webView.isInitialized && webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
     }
 
     private fun jsEscape(s: String): String = s.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
@@ -125,10 +136,5 @@ class OpenCodeWebActivity : AppCompatActivity() {
             runOnUiThread { Toast.makeText(this@OpenCodeWebActivity, msg, Toast.LENGTH_SHORT).show() }
         }
         @JavascriptInterface fun getBaseUrl(): String = baseUrl
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
     }
 }

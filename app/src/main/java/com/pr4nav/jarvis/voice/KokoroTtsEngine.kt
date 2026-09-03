@@ -86,6 +86,7 @@ class KokoroTtsEngine(private val context: Context) {
 
     @Volatile private var activeAudioTrack: AudioTrack? = null
     private var voiceStyle: Array<FloatArray>? = null
+    private val audioCoordinator = JarvisAudioCoordinator(context)
 
     init {
         synthesisExecutor.execute {
@@ -387,6 +388,7 @@ class KokoroTtsEngine(private val context: Context) {
         var totalFramesWritten = 0
 
         try {
+            audioCoordinator.requestAssistantFocus { stop() }
             val minBuf = AudioTrack.getMinBufferSize(
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_OUT_MONO,
@@ -449,6 +451,7 @@ class KokoroTtsEngine(private val context: Context) {
         } catch (e: Exception) {
             Log.w(TAG, "AudioTrack stream playback error: ${e.message}")
         } finally {
+            audioCoordinator.abandonAssistantFocus()
             try {
                 track?.pause()
                 track?.flush()
@@ -463,6 +466,7 @@ class KokoroTtsEngine(private val context: Context) {
     fun stop() {
         shouldInterrupt.set(true)
         currentState.set(TtsState.STOPPING)
+        audioCoordinator.abandonAssistantFocus()
         try {
             activeAudioTrack?.let { track ->
                 if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
@@ -478,6 +482,15 @@ class KokoroTtsEngine(private val context: Context) {
         } finally {
             currentState.set(TtsState.IDLE)
         }
+    }
+
+    fun release() {
+        stop()
+        audioCoordinator.release()
+        try { ortSession?.close() } catch (_: Exception) {}
+        try { ortEnv?.close() } catch (_: Exception) {}
+        ortSession = null
+        ortEnv = null
     }
 
     private fun synthesizeSentence(tokens: LongArray, speed: Float): FloatArray? {

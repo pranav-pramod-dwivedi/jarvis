@@ -44,6 +44,7 @@ class ScreenshotCaptureService : Service() {
     }
 
     private var projection: MediaProjection? = null
+    private var projectionCallback: MediaProjection.Callback? = null
     private var vdisplay: VirtualDisplay? = null
     private var reader: ImageReader? = null
     @Volatile private var frameConsumed = false
@@ -71,7 +72,12 @@ class ScreenshotCaptureService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val rc = intent?.getIntExtra(EXTRA_RC, -1) ?: -1
-        @Suppress("DEPRECATION") val data: Intent? = intent?.getParcelableExtra(EXTRA_DATA)
+        val data: Intent? = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            intent?.getParcelableExtra(EXTRA_DATA, Intent::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent?.getParcelableExtra(EXTRA_DATA)
+        }
         Thread {
             try {
                 if (data == null) throw IllegalStateException("no consent data")
@@ -79,9 +85,11 @@ class ScreenshotCaptureService : Service() {
                 val p = mpm.getMediaProjection(rc, data)
                     ?: throw IllegalStateException("projection rejected by system")
                 projection = p
-                p.registerCallback(object : MediaProjection.Callback() {
+                val cb = object : MediaProjection.Callback() {
                     override fun onStop() { cleanup(); stopSelf() }
-                }, Handler(Looper.getMainLooper()))
+                }
+                projectionCallback = cb
+                p.registerCallback(cb, Handler(Looper.getMainLooper()))
                 capture(p)
             } catch (e: Exception) {
                 Log.w("JARVIS", "capture failed", e)
@@ -188,7 +196,11 @@ class ScreenshotCaptureService : Service() {
     private fun cleanup() {
         try { reader?.close() } catch (_: Exception) {}
         try { vdisplay?.release() } catch (_: Exception) {}
-        try { projection?.stop() } catch (_: Exception) {}
+        try {
+            projectionCallback?.let { projection?.unregisterCallback(it) }
+            projection?.stop()
+        } catch (_: Exception) {}
+        projectionCallback = null
         reader = null; vdisplay = null; projection = null
     }
 }

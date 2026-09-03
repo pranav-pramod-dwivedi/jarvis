@@ -17,6 +17,8 @@ class VoiceStateTest {
             "PROCESSING",
             "SPEAKING",
             "FOLLOW_UP_LISTENING",
+            "CALL_INTERRUPTED",
+            "RESUMING",
             "PAUSED",
             "ERROR",
             "PERMISSION_REQUIRED"

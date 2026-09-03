@@ -193,7 +193,7 @@
         <!-- Siri & Stark Floating Companion Overlay Service -->
         <service
             android:name=".companion.JarvisOverlayService"
-            android:exported="true"
+            android:exported="false"
             android:foregroundServiceType="microphone|specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

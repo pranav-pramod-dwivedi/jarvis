@@ -129,10 +129,19 @@ class PermissionsActivity : ComponentActivity() {
         ),
         PermItem(
             title = "Accessibility Service",
-            description = "Screen text reading with bounding coordinates and virtual touch gestures.",
+            description = "Screen text reading with bounding coordinates and virtual touch gestures. (On Android 13-16: if grayed out, allow in App Info → 3 dots → Allow restricted settings).",
             isEssential = true,
             isGranted = accessibilityEnabled(),
-            onGrant = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+            onGrant = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !accessibilityEnabled()) {
+                    android.widget.Toast.makeText(
+                        this,
+                        "If grayed out: App Info → 3 dots menu → 'Allow restricted settings'",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
         ),
         PermItem(
             title = "Termux Command Bridge",

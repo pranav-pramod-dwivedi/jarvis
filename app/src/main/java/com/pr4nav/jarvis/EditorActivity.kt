@@ -44,6 +44,15 @@ class EditorActivity : AppCompatActivity() {
             if (dirty) confirmDiscard() else finish()
         }
 
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (dirty) confirmDiscard() else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+
         load()
     }
 
@@ -112,10 +121,5 @@ class EditorActivity : AppCompatActivity() {
         AlertDialog.Builder(this).setTitle("Discard unsaved changes?")
             .setPositiveButton("Discard") { _, _ -> finish() }
             .setNegativeButton("Keep editing", null).show()
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (dirty) confirmDiscard() else super.onBackPressed()
     }
 }

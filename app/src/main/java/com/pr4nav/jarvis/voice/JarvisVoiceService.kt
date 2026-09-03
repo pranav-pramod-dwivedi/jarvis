@@ -18,6 +18,9 @@ import android.os.PowerManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.telephony.PhoneStateListener
+import android.telephony.TelephonyCallback
+import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -41,6 +44,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  * - PROCESSING (unified routing & reasoning)
  * - SPEAKING (HD TTS playback with barge-in support)
  * - FOLLOW_UP_LISTENING (conversational multi-turn window)
+ * - CALL_INTERRUPTED (telephony call in progress, mic and tts halted)
+ * - RESUMING (telephony call finished, safely restoring idle state)
  * - PAUSED (user-requested standby)
  * - ERROR (controlled backoff)
  * - PERMISSION_REQUIRED (missing RECORD_AUDIO)
@@ -56,6 +61,8 @@ class JarvisVoiceService : Service() {
         PROCESSING,
         SPEAKING,
         FOLLOW_UP_LISTENING,
+        CALL_INTERRUPTED,
+        RESUMING,
         PAUSED,
         ERROR,
         PERMISSION_REQUIRED
@@ -179,6 +186,12 @@ class JarvisVoiceService : Service() {
     private var errorRetryCount = 0
 
     private var executionWakeLock: PowerManager.WakeLock? = null
+    private var audioCoordinator: JarvisAudioCoordinator? = null
+    private var telephonyManager: TelephonyManager? = null
+    private var telephonyCallback: Any? = null
+    private var legacyPhoneStateListener: PhoneStateListener? = null
+    @Volatile var isCallActive: Boolean = false
+        private set
 
     fun registerObserver(observer: CoreObserver) {
         if (!observers.contains(observer)) {
@@ -198,6 +211,10 @@ class JarvisVoiceService : Service() {
         instance = this
         isRunning = true
         voiceEngine = JarvisVoiceEngine(applicationContext)
+        audioCoordinator = JarvisAudioCoordinator(applicationContext).apply {
+            startDeviceMonitoring()
+        }
+        registerTelephonyListener()
         createNotificationChannel()
         startGuardianWatchdog()
 
@@ -268,6 +285,7 @@ class JarvisVoiceService : Service() {
                 return START_STICKY
             }
             ACTION_STOP_SPEAKING -> {
+                audioCoordinator?.abandonAssistantFocus()
                 voiceEngine?.stopSpeaking()
                 releaseExecutionWakeLock()
                 returnToIdleState("Speech stopped by user")
@@ -343,6 +361,10 @@ class JarvisVoiceService : Service() {
     private fun returnToIdleState(reason: String) {
         mainHandler.post {
             if (!isRunning || currentState == VoiceState.PAUSED) return@post
+            if (isCallActive || currentState == VoiceState.CALL_INTERRUPTED) {
+                updateState(VoiceState.CALL_INTERRUPTED, "📞 Phone call in progress")
+                return@post
+            }
 
             stopActiveSttSession(reason)
             releaseExecutionWakeLock()
@@ -358,6 +380,10 @@ class JarvisVoiceService : Service() {
 
     private fun startAcousticDetector() {
         stopAcousticDetector()
+        if (isCallActive || currentState == VoiceState.CALL_INTERRUPTED) {
+            Log.i(TAG, "Skipping startAcousticDetector: phone call is active")
+            return
+        }
         val wakeEngine = WakeWordEngineManager.getActiveEngine(applicationContext)
         Log.i(TAG, "startAcousticDetector: wakeEngine=${wakeEngine.name}, isInstalled=${wakeEngine.isInstalled}")
 
@@ -366,6 +392,10 @@ class JarvisVoiceService : Service() {
             wakeWordEngine = wakeEngine,
             onWakeWordDetected = { wakeWord ->
                 mainHandler.post {
+                    if (isCallActive || currentState == VoiceState.CALL_INTERRUPTED) {
+                        Log.i(TAG, "Wake word ignored: phone call active")
+                        return@post
+                    }
                     if (currentState == VoiceState.SPEAKING || voiceEngine?.isSpeaking() == true) {
                         Log.i(TAG, "Barge-in interrupt received: Stopping speech playback")
                         voiceEngine?.stopSpeaking()
@@ -435,7 +465,7 @@ class JarvisVoiceService : Service() {
      */
     fun startDeliberateListeningSession(reason: String) {
         mainHandler.post {
-            if (!isRunning || currentState == VoiceState.PAUSED || currentState == VoiceState.OFF) return@post
+            if (!isRunning || isCallActive || currentState == VoiceState.CALL_INTERRUPTED || currentState == VoiceState.PAUSED || currentState == VoiceState.OFF) return@post
             if (activeSttSessionRunning) {
                 Log.d(TAG, "SpeechRecognizer already running, ignoring redundant start request")
                 return@post
@@ -665,14 +695,19 @@ class JarvisVoiceService : Service() {
             val safetyMs = maxOf(6000L, text.length * 85L) + 4000L
             val speechSafetyRunnable = Runnable {
                 Log.w(TAG, "TTS speech safety timeout fired after ${safetyMs}ms; resetting to IDLE")
+                audioCoordinator?.abandonAssistantFocus()
                 voiceEngine?.stopSpeaking()
                 returnToIdleState("TTS safety timeout")
             }
             mainHandler.postDelayed(speechSafetyRunnable, safetyMs)
 
             try {
+                audioCoordinator?.requestAssistantFocus {
+                    voiceEngine?.stopSpeaking()
+                }
                 voiceEngine?.speak(text, interrupt = true) {
                     mainHandler.post {
+                        audioCoordinator?.abandonAssistantFocus()
                         mainHandler.removeCallbacks(speechSafetyRunnable)
                         if (openConversation && VoiceAssistantPreferences.isConversationMode(applicationContext)) {
                             enterConversationWindow()
@@ -681,10 +716,12 @@ class JarvisVoiceService : Service() {
                         }
                     }
                 } ?: run {
+                    audioCoordinator?.abandonAssistantFocus()
                     mainHandler.removeCallbacks(speechSafetyRunnable)
                     returnToIdleState("VoiceEngine null")
                 }
             } catch (e: Exception) {
+                audioCoordinator?.abandonAssistantFocus()
                 mainHandler.removeCallbacks(speechSafetyRunnable)
                 Log.e(TAG, "TTS speak exception: ${e.message}", e)
                 returnToIdleState("TTS error fallback")
@@ -793,11 +830,97 @@ class JarvisVoiceService : Service() {
         } catch (_: Exception) {}
     }
 
+    private fun registerTelephonyListener() {
+        try {
+            val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return
+            telephonyManager = tm
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val cb = object : TelephonyCallback(), TelephonyCallback.CallStateListener {
+                    override fun onCallStateChanged(state: Int) {
+                        handleCallStateChange(state)
+                    }
+                }
+                telephonyCallback = cb
+                tm.registerTelephonyCallback(ContextCompat.getMainExecutor(this), cb)
+                Log.i(TAG, "Registered TelephonyCallback.CallStateListener (API 31+)")
+            } else {
+                @Suppress("DEPRECATION")
+                val listener = object : PhoneStateListener() {
+                    @Deprecated("Deprecated in Java")
+                    override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                        handleCallStateChange(state)
+                    }
+                }
+                legacyPhoneStateListener = listener
+                @Suppress("DEPRECATION")
+                tm.listen(listener, PhoneStateListener.LISTEN_CALL_STATE)
+                Log.i(TAG, "Registered legacy PhoneStateListener")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to register telephony listener: ${e.message}")
+        }
+    }
+
+    private fun unregisterTelephonyListener() {
+        try {
+            val tm = telephonyManager ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (telephonyCallback as? TelephonyCallback)?.let { tm.unregisterTelephonyCallback(it) }
+            } else {
+                legacyPhoneStateListener?.let {
+                    @Suppress("DEPRECATION")
+                    tm.listen(it, PhoneStateListener.LISTEN_NONE)
+                }
+            }
+        } catch (_: Exception) {}
+        telephonyCallback = null
+        legacyPhoneStateListener = null
+        telephonyManager = null
+    }
+
+    fun handleCallStateChange(state: Int) {
+        mainHandler.post {
+            when (state) {
+                TelephonyManager.CALL_STATE_RINGING,
+                TelephonyManager.CALL_STATE_OFFHOOK -> {
+                    Log.i(TAG, "Telephony state became ACTIVE ($state) -> Interrupting JARVIS voice")
+                    isCallActive = true
+                    if (currentState != VoiceState.CALL_INTERRUPTED) {
+                        updateState(VoiceState.CALL_INTERRUPTED, "📞 Phone call in progress")
+                        stopActiveSttSession("Phone call started")
+                        voiceEngine?.stopSpeaking()
+                        stopAcousticDetector()
+                        inConversationWindow = false
+                        conversationTimerRunnable?.let { mainHandler.removeCallbacks(it) }
+                        releaseExecutionWakeLock()
+                    }
+                }
+                TelephonyManager.CALL_STATE_IDLE -> {
+                    if (isCallActive) {
+                        Log.i(TAG, "Telephony state became IDLE -> Safely resuming JARVIS voice in 1200ms")
+                        isCallActive = false
+                        if (currentState == VoiceState.CALL_INTERRUPTED) {
+                            updateState(VoiceState.RESUMING, "📞 Call ended — restoring voice")
+                            mainHandler.postDelayed({
+                                if (isRunning && !isCallActive && (currentState == VoiceState.RESUMING || currentState == VoiceState.CALL_INTERRUPTED)) {
+                                    returnToIdleState("Call ended")
+                                }
+                            }, 1200L)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private fun shutdownService() {
         isRunning = false
         inConversationWindow = false
         activeSttSessionRunning = false
         stopGuardianWatchdog()
+        unregisterTelephonyListener()
+        audioCoordinator?.release()
+        audioCoordinator = null
         conversationTimerRunnable?.let { mainHandler.removeCallbacks(it) }
         backoffRunnable?.let { mainHandler.removeCallbacks(it) }
         stopActiveSttSession("Service shutdown")
@@ -819,7 +942,7 @@ class JarvisVoiceService : Service() {
             override fun run() {
                 try {
                     val handsFree = VoiceAssistantPreferences.isHandsFreeEnabled(applicationContext)
-                    if (isRunning && handsFree) {
+                    if (isRunning && handsFree && !isCallActive && currentState != VoiceState.CALL_INTERRUPTED) {
                         if (currentState == VoiceState.IDLE) {
                             if (acousticDetector == null || acousticDetector?.isListening() != true) {
                                 Log.w(TAG, "GuardianWatchdog: Acoustic detector inactive while IDLE! Reviving...")

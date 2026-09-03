@@ -55,8 +55,8 @@ dependencies {
     implementation(libs.bundles.compose)
     
     implementation("androidx.documentfile:documentfile:1.0.1")
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
-    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.18.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.22.0")
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.espresso.core)

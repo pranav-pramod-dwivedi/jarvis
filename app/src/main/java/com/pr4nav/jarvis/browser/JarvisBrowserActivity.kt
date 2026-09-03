@@ -104,6 +104,17 @@ class JarvisBrowserActivity : AppCompatActivity() {
         initViews()
         setupWebView()
         loadApp()
+
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (::webView.isInitialized && webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
     }
 
     private fun initViews() {
@@ -252,14 +263,6 @@ class JarvisBrowserActivity : AppCompatActivity() {
             .replace("'", "\\'")
             .replace("\n", "\\n")
             .replace("\r", "\\r")
-
-    override fun onBackPressed() {
-        if (webView.canGoBack()) {
-            webView.goBack()
-        } else {
-            super.onBackPressed()
-        }
-    }
 
     override fun onResume() {
         super.onResume()
