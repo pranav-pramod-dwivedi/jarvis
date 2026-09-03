@@ -240,12 +240,13 @@ private fun IntroGradientText(
     fontSize: androidx.compose.ui.unit.TextUnit,
     fontWeight: FontWeight
 ) {
+    val gradientWidth = 700f
     val transition = rememberInfiniteTransition(label = "jarvisGradient")
     val offset by transition.animateFloat(
         initialValue = 0f,
-        targetValue = 1f,
+        targetValue = gradientWidth,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2000, easing = LinearEasing),
+            animation = tween(durationMillis = 3200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "gradientOffset"
@@ -256,10 +257,12 @@ private fun IntroGradientText(
             Color.White,
             Color(0xFFA78BFA), // violet
             Color(0xFF38BDF8), // sky blue
+            Color(0xFF818CF8), // indigo
             Color.White,
         ),
-        start = Offset(offset * 800f, 0f),
-        end = Offset((offset + 0.5f) * 800f, 0f)
+        start = Offset(offset, 0f),
+        end = Offset(offset + gradientWidth, 0f),
+        tileMode = TileMode.Repeated
     )
 
     Text(
