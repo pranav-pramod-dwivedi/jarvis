@@ -1,6 +1,6 @@
 ---
 name: jarvisbrowser
-description: Autonomous on-demand dynamic UI & web-app generator for JARVIS. Use whenever a user request would benefit from an interactive visual interface, animation, physics simulation, comparison table, timeline, or dashboard. Generates self-contained, offline-first, professional-grade (anti-AI-slop) HTML/CSS/JS mini-apps and launches them instantly in JarvisBrowser.
+description: Autonomous on-demand dynamic UI & web-app generator for JARVIS. Use whenever a user request would benefit from an interactive visual interface, animation, physics simulation, comparison table, timeline, or dashboard. Generates self-contained, offline-first, professional-grade (anti-AI-slop, Awwwards-winner craft) HTML/CSS/JS mini-apps and launches them instantly in JarvisBrowser.
 ---
 
 # JarvisBrowser: Dynamic On-Demand UI & Web-App System
@@ -12,7 +12,36 @@ When a user's request is better answered through an interactive visual interface
 
 ---
 
-## 1. Operating Rules & Speedrun Discipline
+## 1. Zero AI Slop & Awwwards-Winner Engineering Mandate
+
+Every app generated for JarvisBrowser **strictly outlaws generic AI templates, default shadcn/Tailwind cards, and repetitive purple/indigo gradients**. You must synthesize the core tenets of the installed skills:
+
+1. **Hallmark Structural Variety (`hallmark`)**:
+   - Never generate cookie-cutter hero → 3-card-grid → footer layouts.
+   - Varied alignment, asymmetrical layouts, editorial negative space.
+   - Strict token locking: All colors and fonts reference defined variables; no mid-render hex improvisation.
+
+2. **Unslop Universal Anti-Tells (`unslop-ui` / `no-ai-slop`)**:
+   - **No default fonts** (Inter, Geist alone). Pair bold characterful display headings with ultra-clean monospace or high-readability sans body.
+   - **No generic purple/indigo gradients** (`#8B5CF6`, violet-600) or cream backgrounds.
+   - **No pill badge floating above headings.** Heading leads immediately.
+   - **High-contrast text**: `#EAF4FC` on `#070B0E` void darks. Zero low-contrast gray-400/500 body text.
+   - **No em-dashes** or marketing fluff ("unlock", "supercharge", "seamless"). Real, decisive metrics and labels only.
+
+3. **Awwwards-Winner Design Engine (`awwwards-winner`)**:
+   - **Unexpected Typography Scaling**: Large expressive headers paired with ultra-clean technical monospace copy.
+   - **Dynamic Motion Cohesion**: Realistic cubic-bezier easing (`cubic-bezier(0.16, 1, 0.3, 1)` for ultra-smooth out-quint).
+   - **Organic Canvas / WebGL Micro-Interactions**: Interactive wave simulations, particle magnetic deformation, real physical state logic.
+   - **Buttery 60fps Rendering**: Hardware-accelerated CSS transforms and opacity only; never animate width/height/top.
+
+4. **Impeccable Craft Floor (`impeccable`)**:
+   - Inspect desktop and mobile simultaneously. Flawless 320/375/414px mobile rendering.
+   - Zero horizontal overflow (`overflow-x: hidden; width: 100%;`).
+   - Touch targets $\ge$ 48px with active state feedback (`transform: scale(0.97)`).
+
+---
+
+## 2. Operating Rules & Speedrun Discipline
 
 1. **Check Reusability First**:
    Before generating, check if a suitable app already exists in `/storage/emulated/0/JARVIS/browser/apps/<app-id>/index.html`.
@@ -20,9 +49,9 @@ When a user's request is better answered through an interactive visual interface
 
 2. **Zero-Latency / Offline-First**:
    - **NO external npm packages or build tools** (`npm install`, `vite`, `webpack`).
-   - **NO external CDN scripts/styles** (`unpkg`, `cdnjs`, `cdn.tailwindcss.com`). All network requests to external CDNs add latency and fail offline.
-   - Everything must be **100% self-contained** in a single `index.html` (with inline `<style>` and `<script>`, or adjacent `style.css`/`app.js`).
-   - Standard HTML5 `<canvas>`, vanilla JS, and modern CSS3 animations are the gold standard for high performance and 60fps responsiveness.
+   - **NO external CDN scripts/styles** (`unpkg`, `cdnjs`, `cdn.tailwindcss.com`). All external CDNs add network latency and fail offline.
+   - Everything must be **100% self-contained** in a single `index.html` (with inline `<style>` and `<script>`).
+   - Standard HTML5 `<canvas>`, vanilla JS, and modern CSS3 transforms are the gold standard for high performance and 60fps responsiveness.
 
 3. **Storage & Launch Contract**:
    - App Directory: `/storage/emulated/0/JARVIS/browser/apps/<app-id>/` (or `/storage/emulated/0/JARVIS/browser/temp/<app-id>/` if temporary).
@@ -38,45 +67,30 @@ When a user's request is better answered through an interactive visual interface
 
 ---
 
-## 2. Anti-AI-Slop & UI/UX Pro Max Design System (Unslop Standard)
-
-Generic "AI slop" (standard white Bootstrap cards, blurry purple gradients, centered text boxes, non-interactive static diagrams, and broken mobile viewports) is strictly prohibited. Every JarvisBrowser app must look like a high-end, bespoke sci-fi/luxury mobile interface.
-
-### The Visual Palette (Obsidian Cyberpunk)
+## 3. The Visual Palette (Obsidian Cyberpunk & Void Luxury)
 ```css
 :root {
-    --jv-bg: #0B1116;          /* Deep void background */
-    --jv-surface: #101820;     /* Elevated card surface */
-    --jv-surface-hi: #16232E;  /* Active / hovered surface */
-    --jv-border: rgba(79, 209, 197, 0.18); /* Crisp subtle border */
+    --jv-bg: #070B0E;          /* Deep void background */
+    --jv-surface: #0E161C;     /* Elevated card surface */
+    --jv-surface-hi: #15222B;  /* Active / hovered surface */
+    --jv-border: rgba(79, 209, 197, 0.2); /* Crisp subtle border */
     --jv-accent: #4FD1C5;      /* Neon cyan / teal glow */
-    --jv-accent-glow: rgba(79, 209, 197, 0.25);
+    --jv-accent-glow: rgba(79, 209, 197, 0.35);
     --jv-accent-dim: #2A8F87;
-    --jv-text: #E6F2FF;        /* High-contrast bright text */
-    --jv-text-dim: #6E8CA0;    /* Secondary label text */
-    --jv-danger: #FF5252;
+    --jv-text: #EAF4FC;        /* High-contrast bright text */
+    --jv-text-dim: #708A9E;    /* Secondary label text */
+    --jv-danger: #FF4757;
     --font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    --font-mono: 'JetBrains Mono', monospace;
+    --ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
 }
 ```
 
-### Mobile Ergonomics & Touch Controls
-- Set viewport: `<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">`.
-- Use `-webkit-tap-highlight-color: transparent;` and `touch-action: manipulation;`.
-- On interactive canvas elements, use `touch-action: none;` and attach both Mouse (`mousedown`, `mousemove`, `mouseup`) and Touch (`touchstart`, `touchmove`, `touchend`) event listeners.
-- Touch targets (buttons, toggles, sliders) must be at least **48px** tall with active state feedback (`transform: scale(0.97)`).
-- Prevent horizontal scrollbars (`overflow-x: hidden; width: 100%;`).
-
-### Motion, Real Physics & Micro-Interactions
-- **Do not output static placeholders.** Implement the actual physics or algorithmic calculation (e.g. magnetic flux $\Phi = B \cdot A \cos(\theta)$, electromagnetic induction $V = -N \frac{d\Phi}{dt}$, gravitational orbits, interactive Fourier waves, real-time circuit logic).
-- Use `requestAnimationFrame` for 60fps canvas loops.
-- Provide interactive controls: scrubbable sliders, play/pause toggles, step buttons, parameter inputs, and live readout gauges.
-
 ---
 
-## 3. JarvisBridge JavaScript Integration
+## 4. JarvisBridge JavaScript Integration
 
-Every JarvisBrowser app has access to `window.jarvis` (and `window.JarvisNative`) injected automatically:
+Every JarvisBrowser app has access to `window.jarvis` injected automatically:
 
 ```javascript
 // 1. Speak an explanation through JARVIS's native voice engine
@@ -95,24 +109,6 @@ window.jarvis.close();
 window.jarvis.callTool('battery_status', {}).then(res => {
     console.log('Battery level:', res.level);
 });
-```
-
----
-
-## 4. Standard Manifest Template (`manifest.json`)
-
-```json
-{
-  "id": "faradays-law",
-  "title": "Faraday's Law Simulation",
-  "description": "Interactive electromagnetic induction visualizer with magnetic flux and coil physics",
-  "icon": "⚡",
-  "version": "1.0.0",
-  "created_at": 1725320000000,
-  "updated_at": 1725320000000,
-  "tags": ["physics", "simulation", "education", "magnetism"],
-  "is_temporary": false
-}
 ```
 
 ---
