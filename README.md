@@ -1,3 +1,27 @@
+
+
+<p align="center">
+  <img src="assets/Gemini_Generated_Image_pqvzvspqvzvspqvz.png" alt="JARVIS Banner" width="100%">
+</p>
+<table>
+  <tr>
+    <td width="300" align="center">
+      <img src="assets/Gemini_Generated_Image_elotl6elotl6elot.png" width="190" alt="JARVIS">
+    </td>
+    <td>
+      <h1>J.A.R.V.I.S.</h1>
+      <p><strong>Just A Rather Very Intelligent System</strong></p>
+      <p>
+        Your phone, with a brain and hands.
+      </p>
+      <p>
+        JARVIS combines voice interaction, memory, device control,
+        automation, coding agents, local tools and cloud intelligence
+        into one assistant built to <strong>think, act, and verify</strong>.
+      </p>
+    </td>
+  </tr>
+</table>
 # JARVIS — Neural On-Device Autonomous Voice Assistant
 
 [![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-blue.svg)](https://android.com)
