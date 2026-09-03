@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -18,8 +19,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,35 +27,27 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import com.pr4nav.jarvis.Fs
 import com.pr4nav.jarvis.MainActivity
-import com.pr4nav.jarvis.R
-import com.pr4nav.jarvis.Shell
-import com.pr4nav.jarvis.TermuxBridge
-import com.pr4nav.jarvis.capabilities.Capabilities
-import com.pr4nav.jarvis.capabilities.RootCapability
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private const val VIDEO_URL =
-    "https://cdn.dribbble.com/userupload/45546543/file/51b6e93b5e57cc0ab3ae175603b73076.mp4"
+    "https://cdn.dribbble.com/userupload/15363755/file/original-33c8fceaa8f1f12da02deb9ef182cafd.mp4"
+
+private const val INTRODUCING = "Introducing"
 
 /**
- * Cinematic First-Time Wake Loading Screen.
- * Plays 2 loops minimum - 4 loops maximum while running real background setups.
- * Automatically transitions to MainActivity (chat screen) when ready.
+ * "Introducing J4rvis" Cinematic Reveal Page.
+ * Displays luminous holographic sphere without stretching, letter-by-letter
+ * "Introducing" reveal, and sweeping gradient "J4rvis" typography.
  */
-class JarvisWakeLoadingActivity : ComponentActivity() {
+class JarvisIntroActivity : ComponentActivity() {
 
-    @Volatile private var isSetupDone = false
-    @Volatile private var isNavigating = false
     private var exoPlayer: ExoPlayer? = null
+    @Volatile private var isNavigating = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,67 +58,19 @@ class JarvisWakeLoadingActivity : ComponentActivity() {
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
 
-        // Run real background setup during the 2-4 video loops
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                Capabilities.init(applicationContext)
-                Fs.init(applicationContext)
-                try { RootCapability.detect() } catch (_: Exception) {}
-                TermuxBridge.init(applicationContext)
-                try {
-                    Shell.termux("echo 'JARVIS_WAKE_SETUP_OK'", timeoutMs = 3500)
-                } catch (_: Exception) {}
-                try {
-                    Shell.ubuntu("which agy || test -x /usr/local/bin/agy", timeoutMs = 3500)
-                } catch (_: Exception) {}
-                SetupManager.setSetupCompleted(applicationContext, true)
-                SetupManager.setAgyCheckCompleted(applicationContext, true)
-            } catch (_: Exception) {
-            } finally {
-                isSetupDone = true
-            }
-        }
-
         setContent {
-            LoadingScreen(
-                onProceed = {
-                    proceedToMain()
-                },
-                bindPlayer = { player ->
-                    exoPlayer = player
-                    setupLoopController(player)
-                }
+            IntroLoadingScreen(
+                onProceed = { proceedToMain() },
+                bindPlayer = { player -> exoPlayer = player }
             )
         }
-    }
-
-    private fun setupLoopController(player: ExoPlayer) {
-        var loopCount = 0
-        player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) {
-                    loopCount++
-                    // Requirement: 2 loops minimum - 4 loops maximum
-                    if (loopCount < 2) {
-                        player.seekTo(0)
-                        player.play()
-                    } else if (loopCount < 4 && !isSetupDone) {
-                        player.seekTo(0)
-                        player.play()
-                    } else {
-                        // 2 loops done + setup complete, or hit 4 loops max
-                        proceedToMain()
-                    }
-                }
-            }
-        })
     }
 
     private fun proceedToMain() {
         if (isNavigating || isFinishing || isDestroyed) return
         isNavigating = true
         SetupManager.setSetupCompleted(this, true)
-        val intent = Intent(this, JarvisIntroActivity::class.java).apply {
+        val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
@@ -148,14 +91,28 @@ class JarvisWakeLoadingActivity : ComponentActivity() {
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 @Composable
-fun LoadingScreen(
+fun IntroLoadingScreen(
     onProceed: () -> Unit = {},
     bindPlayer: (ExoPlayer) -> Unit = {}
 ) {
+    var typed by remember { mutableStateOf("") }
+    var jarvisVisible by remember { mutableStateOf(false) }
     val screenAlpha = remember { Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        screenAlpha.animateTo(1f, animationSpec = tween(durationMillis = 400, easing = LinearEasing))
+        screenAlpha.animateTo(1f, animationSpec = tween(durationMillis = 350, easing = LinearEasing))
+        INTRODUCING.forEachIndexed { index, _ ->
+            delay(80)
+            typed = INTRODUCING.substring(0, index + 1)
+        }
+        delay(180)
+        jarvisVisible = true
+
+        // Display the reveal for 3.6s, then smoothly transition into chat
+        delay(3600)
+        screenAlpha.animateTo(0f, animationSpec = tween(durationMillis = 350, easing = LinearEasing))
+        onProceed()
     }
 
     Box(
@@ -163,8 +120,15 @@ fun LoadingScreen(
             .fillMaxSize()
             .background(Color.Black)
             .alpha(screenAlpha.value)
+            .clickable {
+                coroutineScope.launch {
+                    screenAlpha.animateTo(0f, animationSpec = tween(durationMillis = 250, easing = LinearEasing))
+                    onProceed()
+                }
+            }
     ) {
-        FullscreenVideo(
+        // Video rendered with FIT + uniform scale to strictly prevent video stretch
+        IntroFullscreenVideo(
             url = VIDEO_URL,
             modifier = Modifier
                 .fillMaxSize()
@@ -180,30 +144,59 @@ fun LoadingScreen(
                 .align(Alignment.BottomStart)
                 .padding(start = 32.dp, bottom = 48.dp)
         ) {
-            ShimmerText(
-                text = "Waking up jarvis for the very first time...",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(5.dp))
+            // "Introducing" — letter by letter
             Text(
-                text = "Please wait, this will take a couple of seconds only",
-                fontSize = 10.5.sp,
+                text = typed + if (typed.length < INTRODUCING.length) "|" else "",
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Normal,
-                color = Color.White.copy(alpha = 0.45f),
-                letterSpacing = 0.1.sp,
-                lineHeight = 14.7.sp,
-                maxLines = 1,
-                softWrap = false
+                color = Color.White.copy(alpha = 0.6f),
+                letterSpacing = 0.05.sp,
+                lineHeight = 18.sp
             )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            // "J4rvis" — gradient sweep animation
+            if (jarvisVisible) {
+                IntroGradientText(
+                    text = "J4rvis",
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            } else {
+                // Reserve space so layout doesn't jump
+                Spacer(modifier = Modifier.height(50.dp))
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Sub-text 1 — shimmer
+            if (jarvisVisible) {
+                IntroShimmerText(
+                    text = "Waking up jarvis for the very first time...",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Please wait, this will take a couple of seconds only",
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = Color.White.copy(alpha = 0.38f),
+                    letterSpacing = 0.1.sp,
+                    lineHeight = 14.7.sp,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
         }
     }
 }
 
-// ─── Video player ─────────────────────────────────────────────────────────────
+// ─── Video player ────────────────────────────────────────────────────────────
 
 @Composable
-private fun FullscreenVideo(
+private fun IntroFullscreenVideo(
     url: String,
     modifier: Modifier = Modifier,
     onReady: (ExoPlayer) -> Unit = {}
@@ -212,7 +205,7 @@ private fun FullscreenVideo(
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(Uri.parse(url)))
-            repeatMode = ExoPlayer.REPEAT_MODE_OFF // Controlled loop count (2 min - 4 max)
+            repeatMode = ExoPlayer.REPEAT_MODE_ALL
             volume = 0f
             prepare()
             playWhenReady = true
@@ -239,15 +232,56 @@ private fun FullscreenVideo(
     )
 }
 
-// ─── Shimmer text ─────────────────────────────────────────────────────────────
+// ─── Gradient sweep text (J4rvis) ────────────────────────────────────────────
 
 @Composable
-private fun ShimmerText(
+private fun IntroGradientText(
     text: String,
     fontSize: androidx.compose.ui.unit.TextUnit,
     fontWeight: FontWeight
 ) {
-    val transition = rememberInfiniteTransition(label = "shimmer")
+    val transition = rememberInfiniteTransition(label = "jarvisGradient")
+    val offset by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "gradientOffset"
+    )
+
+    val brush = Brush.linearGradient(
+        colors = listOf(
+            Color.White,
+            Color(0xFFA78BFA), // violet
+            Color(0xFF38BDF8), // sky blue
+            Color.White,
+        ),
+        start = Offset(offset * 800f, 0f),
+        end = Offset((offset + 0.5f) * 800f, 0f)
+    )
+
+    Text(
+        text = text,
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        style = TextStyle(
+            brush = brush,
+            letterSpacing = (-1.5).sp
+        )
+    )
+}
+
+// ─── Shimmer text ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun IntroShimmerText(
+    text: String,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    fontWeight: FontWeight
+) {
+    val transition = rememberInfiniteTransition(label = "introShimmer")
     val offset by transition.animateFloat(
         initialValue = -1f,
         targetValue = 2f,
@@ -272,6 +306,6 @@ private fun ShimmerText(
         text = text,
         fontSize = fontSize,
         fontWeight = fontWeight,
-        style = TextStyle(brush = brush, letterSpacing = (-0.3).sp)
+        style = TextStyle(brush = brush, letterSpacing = (-0.2).sp)
     )
 }

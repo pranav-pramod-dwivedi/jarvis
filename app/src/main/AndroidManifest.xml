@@ -131,6 +131,11 @@
             android:theme="@style/Theme.Splash" />
 
         <activity
+            android:name=".setup.JarvisIntroActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Splash" />
+
+        <activity
             android:name=".MainActivity"
             android:launchMode="singleTop"
             android:exported="true" />
