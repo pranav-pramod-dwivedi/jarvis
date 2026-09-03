@@ -16,9 +16,10 @@ import http.server
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
-import subprocess
+import subprocess  # nosec B404 - required for local command execution feature; calls use shell=False argv lists
 import sys
 import threading
 import time
@@ -616,7 +617,8 @@ class AgyHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(b'{"error":"empty cmd"}')
                 return
             try:
-                res = subprocess.run(cmd_str, shell=True, capture_output=True, text=True, timeout=60)
+                cmd_args = shlex.split(cmd_str)
+                res = subprocess.run(cmd_args, shell=False, capture_output=True, text=True, timeout=60)
                 out = {"ok": True, "rc": res.returncode, "stdout": res.stdout, "stderr": res.stderr}
             except Exception as e:
                 out = {"ok": False, "error": str(e)}
