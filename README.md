@@ -9,12 +9,12 @@
       <img src="assets/Gemini_Generated_Image_elotl6elotl6elot.png" width="190" alt="JARVIS">
     </td>
     <td>
-      <h1>J.A.R.V.I.S.</h1>
-      <p><strong>Just A Rather Very Intelligent System</strong></p>
-      <p>
-        Your phone, with a brain and hands.
+  <h1 align="center">J4rvis</h1>
+      <p align="center"><strong>Jarvis is an intelligent voice assistant for Android that helps you get things done, from controlling your device and managing everyday tasks to answering questions, remembering what matters, and taking action when you ask.</strong></p>
+      <p align="center">
+        Your phone, but now with a body.
       </p>
-      <p>
+      <p align="center">
         JARVIS combines voice interaction, memory, device control,
         automation, coding agents, local tools and cloud intelligence
         into one assistant built to <strong>think, act, and verify</strong>.
@@ -22,13 +22,12 @@
     </td>
   </tr>
 </table>
-# JARVIS — Neural On-Device Autonomous Voice Assistant
-
+<center></center>
 [![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-blue.svg)](https://android.com)
 [![Voice Model](https://img.shields.io/badge/Neural%20TTS-Kokoro--82M%20INT8-cyan.svg)](https://github.com/pranav-pramod-dwivedi/jarvis/releases/tag/v1.0.0-models)
 [![Wake Word](https://img.shields.io/badge/KWS-openWakeWord%20ONNX-green.svg)](https://github.com/pranav-pramod-dwivedi/jarvis/releases/tag/v1.0.0-models)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
-
+</center>
 **JARVIS** is an autonomous, on-device AI personal assistant built for Android that rivals Siri and Google Assistant. It features high-fidelity neural speech synthesis, 100% offline keyword spotting, dynamic floating companion overlays, on-screen context awareness, and a 3-tier hybrid intelligence pipeline (Needle + Local SLM + Autonomous AGY CLI).
 
 **Author & Maintainer**: Pranav Pramod Dwivedi ([@pranav-pramod-dwivedi](https://github.com/pranav-pramod-dwivedi))
