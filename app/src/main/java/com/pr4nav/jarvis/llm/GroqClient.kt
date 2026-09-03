@@ -58,6 +58,9 @@ object GroqClient {
 
     // Primary agent model: openai/gpt-oss-120b by default for instant single-model response without HTTP 413
     const val DEFAULT_MODEL = MODEL_GPT_OSS_120B
+
+    // User directive: "give groq run all commands" -> full command execution authority by default
+    @Volatile var allowAllCommands: Boolean = true
     const val FAST_MODEL = MODEL_GPT_OSS_120B
     const val COMPLEX_MODEL = MODEL_GPT_OSS_120B
     const val LLAMA_70B_MODEL = MODEL_LLAMA_70B
@@ -763,7 +766,7 @@ object GroqClient {
             }
         }
 
-        // 2. Mandatory CmdGuard check for shell commands
+        // 2. Command check for shell commands
         val commandToRun = when (toolName) {
             "execute_termux_command", "execute_proot_command", "execute_android_command", "run_command", "run_shell_command" ->
                 args.optString("command", args.optString("cmd")).trim()
@@ -771,21 +774,25 @@ object GroqClient {
         }
 
         if (commandToRun != null) {
-            val guardErr = CmdGuard.check(commandToRun)
-            if (guardErr != null) {
-                val dur = System.currentTimeMillis() - t0
-                val blockMsg = "Security Policy Violation: $guardErr"
-                Log.w(TAG, "[Tool] Command REJECTED by CmdGuard: $blockMsg")
-                Log.i(TAG, "[Result] tool: $toolName | success: false | verified: false")
-                return ToolExecutionOutcome(
-                    toolName = toolName,
-                    backend = "CMD_GUARD",
-                    success = false,
-                    exitCode = 126,
-                    output = blockMsg,
-                    durationMs = dur,
-                    verified = false
-                )
+            if (!allowAllCommands) {
+                val guardErr = CmdGuard.check(commandToRun)
+                if (guardErr != null) {
+                    val dur = System.currentTimeMillis() - t0
+                    val blockMsg = "Security Policy Violation: $guardErr"
+                    Log.w(TAG, "[Tool] Command REJECTED by CmdGuard: $blockMsg")
+                    Log.i(TAG, "[Result] tool: $toolName | success: false | verified: false")
+                    return ToolExecutionOutcome(
+                        toolName = toolName,
+                        backend = "CMD_GUARD",
+                        success = false,
+                        exitCode = 126,
+                        output = blockMsg,
+                        durationMs = dur,
+                        verified = false
+                    )
+                }
+            } else {
+                Log.i(TAG, "[Groq Tool] Groq granted full command execution authority: $commandToRun")
             }
         }
 
@@ -914,6 +921,8 @@ object GroqClient {
             "7. execute_android_command: Run Android local shell commands (getprop, pm, am, logcat).\n" +
             "8. escalate_to_agy: Escalate repository/code modification, codebase refactoring, multi-file builds, tests, and deep autonomous coding tasks to AGY (Antigravity PRoot Autonomous Agent).\n" +
             "9. escalate_to_gemini: Escalate to Gemini Cloud LLM for deep multi-step reasoning or high-level analysis.\n\n" +
+            "COMMAND EXECUTION AUTHORITY:\n" +
+            "You have full permission and authorization to run all shell, system, package, and linux commands via execute_termux_command, execute_proot_command, and execute_android_command without restriction.\n\n" +
             "TROUBLESHOOTING & VERIFICATION DIRECTIVE:\n" +
             "When troubleshooting real problems (e.g. 'Why isn't Node working?', broken dependencies, port blocks, service failures):\n" +
             "- Request diagnostic commands first (binary availability via 'which', version, environment variables, logs, process info).\n" +

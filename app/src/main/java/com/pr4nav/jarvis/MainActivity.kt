@@ -805,6 +805,49 @@ fun JarvisMainApp(
 
         // ── Built-in Developer Commands from AgentActivity ──
         when {
+            lower.startsWith("/ui") || lower.startsWith("make an ui") || lower.startsWith("make a ui") ||
+            lower.startsWith("create ui") || lower.startsWith("generate ui") -> {
+                val uiPrompt = when {
+                    lower.startsWith("/ui") -> trimmed.substring(3).trim()
+                    lower.startsWith("make an ui") -> trimmed.substring(10).trim()
+                    lower.startsWith("make a ui") -> trimmed.substring(9).trim()
+                    lower.startsWith("create ui") -> trimmed.substring(9).trim()
+                    lower.startsWith("generate ui") -> trimmed.substring(11).trim()
+                    else -> trimmed
+                }.ifBlank { "Futuristic Interactive Dashboard" }
+
+                isWorking = true
+                liveThinkingTitle = "Synthesizing UI with JarvisBrowser…"
+                liveStreamingText = "Generating dynamic UI for: $uiPrompt"
+                liveThinkingSteps = listOf("Target: JarvisBrowser", "Prompt: $uiPrompt", "Tier: Groq -> AGY PRoot Linux")
+
+                scope.launch(Dispatchers.IO) {
+                    val result = com.pr4nav.jarvis.browser.JarvisUiGenerator.generateAndLaunch(
+                        context = context,
+                        rawPrompt = uiPrompt,
+                        onStatus = { st ->
+                            scope.launch(Dispatchers.Main) {
+                                liveThinkingTitle = st
+                                liveThinkingSteps = liveThinkingSteps + st
+                            }
+                        }
+                    )
+
+                    withContext(Dispatchers.Main) {
+                        isWorking = false
+                        val msg = SessionMessage(
+                            sender = "agent",
+                            text = result,
+                            steps = listOf("Engine: JarvisBrowser Dynamic UI Generator", "Fallback: AGY Autonomous Agent"),
+                            isSuccess = true
+                        )
+                        JarvisSessionManager.appendMessage(context, currentSession, msg)
+                        sessionMessages = sessionMessages + msg
+                    }
+                }
+                return
+            }
+
             lower == "help" -> {
                 val msg = SessionMessage(
                     sender = "agent",
@@ -1952,15 +1995,14 @@ fun ExploreView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Companion mode toggle badge with SVG Sparkle
+                // Companion mode toggle badge - GREYED OUT per user request
                 Surface(
                     onClick = {
-                        onToggleCompanionMode()
-                        isCompanionOn = CompanionManager.isEnabled(context)
+                        Toast.makeText(context, "Companion mode is greyed out / paused for now", Toast.LENGTH_SHORT).show()
                     },
                     shape = RoundedCornerShape(14.dp),
-                    color = if (isCompanionOn) Color(0x3310B981) else Color.White.copy(alpha = 0.08f),
-                    border = BorderStroke(1.dp, if (isCompanionOn) Color(0x6610B981) else Color.White.copy(alpha = 0.15f))
+                    color = Color.White.copy(alpha = 0.04f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
@@ -1969,12 +2011,12 @@ fun ExploreView(
                     ) {
                         SparkleSvg(
                             modifier = Modifier.size(11.dp),
-                            tint = if (isCompanionOn) Color(0xFF10B981) else Color.White.copy(alpha = 0.6f)
+                            tint = Color.White.copy(alpha = 0.35f)
                         )
                         Text(
-                            text = if (isCompanionOn) "COMPANION" else "STANDBY",
-                            color = if (isCompanionOn) Color(0xFF10B981) else Color.White.copy(alpha = 0.6f),
-                            fontSize = 10.5.sp,
+                            text = "COMPANION (PAUSED)",
+                            color = Color.White.copy(alpha = 0.35f),
+                            fontSize = 10.sp,
                             fontFamily = bodyFontFamily,
                             fontWeight = FontWeight.Medium
                         )
@@ -2871,6 +2913,9 @@ fun ConversationView(
                 .padding(horizontal = 18.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item {
+                PromptActionChip("✨ Make a UI") { onSendMessage("make an ui") }
+            }
             item {
                 PromptActionChip("Take Screenshot") { onSendMessage("Take a screenshot") }
             }
@@ -4417,11 +4462,11 @@ fun JarvisStandbyVoiceDialog(
                         }
                     }
 
-                    // Toggle 2: Proactive Companion Mode
+                    // Toggle 2: Proactive Companion Mode (Greyed out for now)
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF160905),
-                        border = BorderStroke(1.dp, if (companionOn) Color(0x6610B981) else Color.White.copy(alpha = 0.08f))
+                        color = Color(0xFF160905).copy(alpha = 0.6f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(14.dp),
@@ -4430,25 +4475,24 @@ fun JarvisStandbyVoiceDialog(
                         ) {
                             Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                 Text(
-                                    text = "Proactive Companion Mode",
-                                    color = Color.White,
+                                    text = "Proactive Companion Mode (Paused)",
+                                    color = Color.White.copy(alpha = 0.4f),
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 13.5.sp
                                 )
                                 Text(
-                                    text = if (companionOn) "Active: intelligent screen-context assistance" else "Disabled: passive mode only",
-                                    color = if (companionOn) Color(0xFF10B981) else Color.White.copy(alpha = 0.5f),
+                                    text = "Temporarily disabled for optimization",
+                                    color = Color.White.copy(alpha = 0.3f),
                                     fontSize = 11.sp,
                                     modifier = Modifier.padding(top = 2.dp)
                                 )
                             }
                             JarvisSwitch(
-                                checked = companionOn,
-                                onCheckedChange = { newState ->
-                                    companionOn = newState
-                                    CompanionManager.setEnabled(context, newState)
+                                checked = false,
+                                onCheckedChange = {
+                                    Toast.makeText(context, "Companion mode is greyed out for now", Toast.LENGTH_SHORT).show()
                                 },
-                                activeColor = Color(0xFF10B981)
+                                activeColor = Color.Gray
                             )
                         }
                     }

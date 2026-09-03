@@ -21,4 +21,18 @@ object SetupManager {
             .putBoolean(KEY_SETUP_COMPLETED, completed)
             .apply()
     }
+
+    private const val KEY_AGY_CHECK_COMPLETED = "key_agy_check_completed"
+
+    fun isAgyCheckCompleted(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_AGY_CHECK_COMPLETED, false)
+    }
+
+    fun setAgyCheckCompleted(context: Context, completed: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_AGY_CHECK_COMPLETED, completed)
+            .apply()
+    }
 }

@@ -116,37 +116,100 @@ class JarvisAccessibilityService : AccessibilityService() {
             return s.performGlobalAction(action)
         }
 
-        /** Coordinate fallback — only when no semantic action fits. */
+        private val BOUNDS_REGEX = Regex("""\[(\d+),(\d+)\]\[(\d+),(\d+)\]""")
+
+        /** Coordinate tap: attempts Accessibility gesture, falls back to root input tap */
         fun gestureTap(x: Float, y: Float): Boolean {
-            val s = instance ?: return false
-            if (Build.VERSION.SDK_INT < 24) return false
-            val stroke = GestureDescription.Builder()
-                .addStroke(GestureDescription.StrokeDescription(android.graphics.Path().apply {
-                    moveTo(x, y); lineTo(x + 0.1f, y + 0.1f)
-                }, 0, 60))
-                .build()
-            return s.dispatchGesture(stroke, null, null)
+            val s = instance
+            if (s != null && Build.VERSION.SDK_INT >= 24) {
+                val stroke = GestureDescription.Builder()
+                    .addStroke(GestureDescription.StrokeDescription(android.graphics.Path().apply {
+                        moveTo(x, y); lineTo(x + 0.1f, y + 0.1f)
+                    }, 0, 60))
+                    .build()
+                val ok = s.dispatchGesture(stroke, null, null)
+                if (ok) return true
+            }
+            // Root fallback guarantees tap works anywhere
+            val rootRes = Shell.root("input tap ${x.toInt()} ${y.toInt()}")
+            return rootRes.rc == 0
         }
 
-        fun screenText(): String {
-            val nodes = walk(200)
-            val sb = StringBuilder()
-            var lastDepth = -1
-            for (n in nodes) {
-                val depth = n.path.size
-                val indent = "  ".repeat(depth.coerceAtMost(8))
-                val label = listOf(n.text, n.desc).firstOrNull { it.isNotBlank() } ?: ""
-                if (label.isBlank() && !n.clickable && !n.editable && !n.scrollable) continue
-                if (depth <= lastDepth && sb.isNotEmpty()) sb.append('\n')
-                sb.append(indent)
-                if (n.clickable) sb.append("[CLICK] ")
-                if (n.editable) sb.append("[INPUT] ")
-                if (n.scrollable) sb.append("[SCROLL] ")
-                sb.append(label.ifBlank { n.cls.substringAfterLast('.') })
-                if (n.bounds.isNotBlank()) sb.append(" @${n.bounds}")
-                lastDepth = depth
+        fun screenText(): String = screenTextWithCoordinates()
+
+        fun screenTextWithCoordinates(): String {
+            val nodes = walk(250)
+            if (nodes.isNotEmpty()) {
+                val sb = StringBuilder()
+                sb.append("=== SCREEN TEXT & COORDINATES (ASAP FORMAT) ===\n")
+                for (n in nodes) {
+                    val label = listOf(n.text, n.desc).firstOrNull { it.isNotBlank() }?.trim() ?: ""
+                    if (label.isBlank() && !n.clickable && !n.editable && !n.scrollable) continue
+
+                    val match = BOUNDS_REGEX.matchEntire(n.bounds)
+                    val centerStr = if (match != null) {
+                        val (l, t, r, b) = match.destructured
+                        val cx = (l.toInt() + r.toInt()) / 2
+                        val cy = (t.toInt() + b.toInt()) / 2
+                        " center=($cx, $cy)"
+                    } else ""
+
+                    val tag = when {
+                        n.editable -> "[INPUT]"
+                        n.clickable -> "[BUTTON]"
+                        n.scrollable -> "[SCROLL]"
+                        else -> "[TEXT]"
+                    }
+                    val idStr = if (n.viewId.isNotBlank()) " id=${n.viewId.substringAfterLast('/')}" else ""
+                    val content = if (label.isNotBlank()) "\"$label\"" else n.cls.substringAfterLast('.')
+                    sb.append("$tag $content$centerStr bounds=${n.bounds}$idStr\n")
+                }
+                val result = sb.toString().trim()
+                saveScreenCaptureTxt(result)
+                return result
             }
-            return sb.toString()
+
+            // Fallback via uiautomator dump when Accessibility is off or empty
+            return dumpViaUiAutomator()
+        }
+
+        private fun dumpViaUiAutomator(): String {
+            try {
+                Shell.root("uiautomator dump /data/local/tmp/window_dump.xml")
+                val dumpRes = Shell.root("cat /data/local/tmp/window_dump.xml")
+                if (dumpRes.out.isNotBlank()) {
+                    val nodeRegex = Regex("""<node[^>]*text="([^"]*)"[^>]*content-desc="([^"]*)"[^>]*clickable="([^"]*)"[^>]*bounds="([^"]*)"[^>]*>""")
+                    val sb = StringBuilder()
+                    sb.append("=== SCREEN TEXT & COORDINATES (UIAUTOMATOR DUMP) ===\n")
+                    for (m in nodeRegex.findAll(dumpRes.out)) {
+                        val (t, desc, clickable, bounds) = m.destructured
+                        val label = listOf(t, desc).firstOrNull { it.isNotBlank() } ?: continue
+                        val match = BOUNDS_REGEX.matchEntire(bounds)
+                        val centerStr = if (match != null) {
+                            val (l, top, r, b) = match.destructured
+                            val cx = (l.toInt() + r.toInt()) / 2
+                            val cy = (top.toInt() + b.toInt()) / 2
+                            " center=($cx, $cy)"
+                        } else ""
+                        val tag = if (clickable == "true") "[BUTTON]" else "[TEXT]"
+                        sb.append("$tag \"$label\"$centerStr bounds=$bounds\n")
+                    }
+                    val out = sb.toString().trim()
+                    if (out.length > 50) {
+                        saveScreenCaptureTxt(out)
+                        return out
+                    }
+                }
+            } catch (_: Exception) {}
+            return "No readable elements detected on screen."
+        }
+
+        private fun saveScreenCaptureTxt(content: String) {
+            try {
+                val dir = java.io.File("/storage/emulated/0/JARVIS/workspace")
+                if (!dir.exists()) dir.mkdirs()
+                java.io.File(dir, "screen_capture.txt").writeText(content)
+            } catch (_: Exception) {}
         }
     }
 

@@ -33,8 +33,8 @@ object CompanionManager {
     private var lastActivePackage: String? = null
 
     fun isEnabled(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(KEY_COMPANION_ENABLED, false) // Default: OFF
+        // Greyed out for now per user directive
+        return false
     }
 
     fun setEnabled(context: Context, enabled: Boolean) {

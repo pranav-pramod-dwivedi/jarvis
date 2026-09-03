@@ -3,6 +3,7 @@ package com.pr4nav.jarvis.tools.catalog
 import android.content.Intent
 import android.os.Environment
 import android.os.StatFs
+import com.pr4nav.jarvis.JarvisAccessibilityService
 import com.pr4nav.jarvis.Shell
 import com.pr4nav.jarvis.capabilities.AccessibilityCapability
 import com.pr4nav.jarvis.response.AnswerSynthesizer
@@ -49,19 +50,12 @@ object AppSystemShortcutTools {
         // High-speed text-based screen capture (eliminates screenshot latency & token overhead)
         val readScreenDef = CanonicalToolDef(
             name = "read_screen_text",
-            description = "High-speed screen capture that reads all text, buttons, inputs, and UI elements on the current display via Accessibility. Eliminates image screenshot latency entirely.",
+            description = "High-speed text-only screen capture that reads all text and coordinates on the current display. Saves to /storage/emulated/0/JARVIS/workspace/screen_capture.txt for immediate agent reading and virtual tap targeting.",
             argumentSchema = schema(),
             execute = { _, _ ->
-                if (!AccessibilityCapability.enabled()) {
-                    return@CanonicalToolDef CatalogSchemaHelper.fail("ACCESSIBILITY_DISABLED", "Accessibility Service is not enabled. Please enable 'Jarvis' in Android Settings -> Accessibility.")
-                }
-                val res = AccessibilityCapability.readScreen()
-                if (res.success) {
-                    val text = res.data ?: "Screen is empty or blank."
-                    ok("📱 Screen Content:\n$text", mapOf("screenText" to text))
-                } else {
-                    CatalogSchemaHelper.fail("READ_SCREEN_FAILED", res.error ?: "Failed to read screen text")
-                }
+                val txt = JarvisAccessibilityService.screenTextWithCoordinates()
+                ok("📱 Text Screen Capture (+ coordinates saved to /storage/emulated/0/JARVIS/workspace/screen_capture.txt):\n$txt",
+                    mapOf("screenText" to txt, "txtPath" to "/storage/emulated/0/JARVIS/workspace/screen_capture.txt"))
             }
         )
         reg(readScreenDef)
@@ -71,27 +65,37 @@ object AppSystemShortcutTools {
         // Virtual touches & gestures (tapping coordinates or clicking by text)
         val virtualTouchDef = CanonicalToolDef(
             name = "virtual_touch",
-            description = "Dispatches a virtual touch tap on the screen at coordinates (x, y) or clicks an element by visible text label.",
+            description = "Dispatches a virtual touch tap on the screen at coordinates (x, y) or clicks an element by visible text label. Automatically uses root fallback if accessibility is unavailable.",
             argumentSchema = schema(
                 prop("text", "string", "Optional visible text or button description to click"),
                 prop("x", "integer", "Optional X coordinate on screen"),
                 prop("y", "integer", "Optional Y coordinate on screen")
             ),
             execute = { _, args ->
-                if (!AccessibilityCapability.enabled()) {
-                    return@CanonicalToolDef CatalogSchemaHelper.fail("ACCESSIBILITY_DISABLED", "Accessibility Service is not enabled. Please enable 'Jarvis' in Android Settings -> Accessibility.")
-                }
                 val text = args.optString("text").trim()
                 val x = args.optInt("x", -1)
                 val y = args.optInt("y", -1)
 
                 if (text.isNotEmpty()) {
-                    val r = AccessibilityCapability.clickByText(text)
-                    if (r.success) ok("👆 Virtual touch clicked: \"$text\".", mapOf("target" to text))
-                    else CatalogSchemaHelper.fail("CLICK_FAILED", "Element with text '$text' not found on screen")
+                    var clicked = AccessibilityCapability.clickByText(text).success
+                    if (!clicked) {
+                        // Fallback: search bounds in screenTextWithCoordinates and tap center via root
+                        val dump = JarvisAccessibilityService.screenTextWithCoordinates()
+                        val line = dump.lines().firstOrNull { it.contains(text, ignoreCase = true) }
+                        if (line != null) {
+                            val match = Regex("""center=\((\d+),\s*(\d+)\)""").find(line)
+                            if (match != null) {
+                                val (cx, cy) = match.destructured
+                                val tapRes = Shell.root("input tap $cx $cy")
+                                clicked = tapRes.rc == 0
+                            }
+                        }
+                    }
+                    if (clicked) ok("👆 Virtual touch clicked: \"$text\".", mapOf("target" to text))
+                    else CatalogSchemaHelper.fail("CLICK_FAILED", "Element with text '$text' not found or could not be clicked")
                 } else if (x >= 0 && y >= 0) {
-                    val r = AccessibilityCapability.tap(x, y)
-                    if (r.success) ok("👆 Virtual touch tapped at ($x, $y).", mapOf("x" to x, "y" to y))
+                    val tapped = JarvisAccessibilityService.gestureTap(x.toFloat(), y.toFloat())
+                    if (tapped) ok("👆 Virtual touch tapped at ($x, $y).", mapOf("x" to x, "y" to y))
                     else CatalogSchemaHelper.fail("TAP_FAILED", "Failed to tap coordinates ($x, $y)")
                 } else {
                     CatalogSchemaHelper.fail("INVALID_ARGS", "Must provide 'text' label or ('x', 'y') coordinates")

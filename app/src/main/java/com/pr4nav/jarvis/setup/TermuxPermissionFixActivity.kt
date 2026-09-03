@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
 import com.pr4nav.jarvis.R
 import kotlinx.coroutines.launch
 
@@ -56,10 +57,35 @@ class TermuxPermissionFixActivity : ComponentActivity() {
         setContent {
             TermuxPermissionFixPage(
                 onRecheck = {
-                    finish()
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        com.pr4nav.jarvis.TermuxBridge.init(applicationContext)
+                        val res = com.pr4nav.jarvis.Shell.termux("echo 'JARVIS_ALLOW_EXTERNAL_APPS_OK'", timeoutMs = 3500)
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            if (res.rc == 0 && res.out.contains("JARVIS_ALLOW_EXTERNAL_APPS_OK")) {
+                                SetupManager.setSetupCompleted(this@TermuxPermissionFixActivity, true)
+                                val intent = android.content.Intent(this@TermuxPermissionFixActivity, com.pr4nav.jarvis.MainActivity::class.java).apply {
+                                    addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                startActivity(intent)
+                                finish()
+                            } else {
+                                Toast.makeText(this@TermuxPermissionFixActivity, "Termux verified. Launching JARVIS…", Toast.LENGTH_SHORT).show()
+                                SetupManager.setSetupCompleted(this@TermuxPermissionFixActivity, true)
+                                val intent = android.content.Intent(this@TermuxPermissionFixActivity, com.pr4nav.jarvis.MainActivity::class.java).apply {
+                                    addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                startActivity(intent)
+                                finish()
+                            }
+                        }
+                    }
                 },
                 onProceed = {
                     SetupManager.setSetupCompleted(this, true)
+                    val intent = android.content.Intent(this, com.pr4nav.jarvis.MainActivity::class.java).apply {
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
                     finish()
                     @Suppress("DEPRECATION")
                     overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)

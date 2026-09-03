@@ -38,6 +38,7 @@ import com.pr4nav.jarvis.router.UnifiedAssistantDispatcher
 import com.pr4nav.jarvis.session.SessionMessage
 import com.pr4nav.jarvis.voice.JarvisVoiceEngine
 import com.pr4nav.jarvis.voice.VoiceAssistantPreferences
+import kotlinx.coroutines.launch
 
 /**
  * Futuristic Siri-Style & Stark Holographic Floating Overlay HUD.
@@ -696,6 +697,59 @@ class JarvisOverlayService : Service() {
             voiceSession,
             userMsg
         )
+
+        val lower = command.trim().lowercase()
+        if (lower.startsWith("/ui") || lower.startsWith("make an ui") || lower.startsWith("make a ui") ||
+            lower.startsWith("create ui") || lower.startsWith("generate ui")) {
+            val uiPrompt = when {
+                lower.startsWith("/ui") -> command.trim().substring(3).trim()
+                lower.startsWith("make an ui") -> command.trim().substring(10).trim()
+                lower.startsWith("make a ui") -> command.trim().substring(9).trim()
+                lower.startsWith("create ui") -> command.trim().substring(9).trim()
+                lower.startsWith("generate ui") -> command.trim().substring(11).trim()
+                else -> command.trim()
+            }.ifBlank { "Futuristic Interactive Dashboard" }
+
+            mainHandler.post {
+                hudSubtitle?.text = "Synthesizing UI…"
+                hudMainText?.text = "Generating UI for\n$uiPrompt"
+            }
+
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                val result = com.pr4nav.jarvis.browser.JarvisUiGenerator.generateAndLaunch(
+                    context = applicationContext,
+                    rawPrompt = uiPrompt,
+                    onStatus = { st ->
+                        mainHandler.post { hudSubtitle?.text = st }
+                    }
+                )
+
+                val agentMsg = SessionMessage(
+                    id = "agent_${System.currentTimeMillis()}",
+                    sender = "agent",
+                    text = result,
+                    steps = listOf("Engine: JarvisBrowser Dynamic UI Generator", "Fallback: AGY Autonomous Agent"),
+                    isSuccess = true
+                )
+                com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+                    applicationContext,
+                    voiceSession,
+                    agentMsg
+                )
+
+                mainHandler.post {
+                    hudSubtitle?.text = "Jarvis"
+                    setChatActive(true)
+                    hudChatAdapter.addMessage(agentMsg)
+                    hudChatRecycler?.smoothScrollToPosition(hudChatAdapter.itemCount - 1)
+                    voiceEngine?.speak(
+                        text = "I've generated and opened the interactive UI for $uiPrompt in JarvisBrowser.",
+                        interrupt = true
+                    )
+                }
+            }
+            return
+        }
 
         UnifiedAssistantDispatcher.execute(applicationContext, command) { res ->
             val cleanReply = res.jarvisResponse.text

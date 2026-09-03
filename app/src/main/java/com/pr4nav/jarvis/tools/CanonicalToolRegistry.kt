@@ -157,8 +157,9 @@ object CanonicalToolRegistry {
             argumentSchema = JSONObject().apply { put("type", "object") },
             backend = ToolBackend.ANDROID_NATIVE,
             defaultTimeoutMs = 5_000L,
-            execute = { ctx, _ ->
-                ToolResult.ok(JSONObject().put("action", "SCREENSHOT_REQUESTED"))
+            execute = { _, _ ->
+                val txt = com.pr4nav.jarvis.JarvisAccessibilityService.screenTextWithCoordinates()
+                ToolResult.ok(JSONObject().put("action", "SCREENSHOT_CAPTURED").put("file", "/storage/emulated/0/JARVIS/workspace/screen_capture.txt").put("screenText", txt))
             }
         )
         register(screenshotDef)
@@ -914,25 +915,24 @@ object CanonicalToolRegistry {
             }
         ))
 
-        // take_screenshot
+        // take_screenshot (Text-only + coordinates for zero-latency agent reading; graphical screenshots reserved for AGY)
         register(CanonicalToolDef(
             name = "take_screenshot",
-            description = "Captures the current screen display.",
+            description = "High-speed text-only screen capture that reads all text and coordinates on current display into /storage/emulated/0/JARVIS/workspace/screen_capture.txt. Graphic image screenshots are restricted to AGY.",
             argumentSchema = JSONObject().apply {
                 put("type", "object")
                 put("properties", JSONObject())
             },
             defaultTimeoutMs = 15_000L,
             execute = { _, _ ->
-                val cap = com.pr4nav.jarvis.capabilities.ScreenshotCapability.capture()
-                if (cap.success) {
-                    val d = cap.data ?: "{}"
-                    ToolResult.ok(JSONObject(d))
-                } else if (cap.error?.contains("consent") == true) {
-                    ToolResult.requiresUser("CONSENT_REQUIRED", cap.error)
-                } else {
-                    ToolResult.failure("SCREENSHOT_FAILED", cap.error ?: "Screenshot failed")
+                val txt = com.pr4nav.jarvis.JarvisAccessibilityService.screenTextWithCoordinates()
+                val json = JSONObject().apply {
+                    put("type", "text_coordinates")
+                    put("file", "/storage/emulated/0/JARVIS/workspace/screen_capture.txt")
+                    put("content", txt)
+                    put("note", "Text-only capture with coordinates. Graphic image screenshots are restricted to AGY.")
                 }
+                ToolResult.ok(json)
             }
         ))
 

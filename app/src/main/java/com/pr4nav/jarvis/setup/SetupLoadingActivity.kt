@@ -52,7 +52,8 @@ private const val STAGE_2_VIDEO_URL =
 enum class SetupStage {
     STAGE_1_FIRST_TIME_SETUP,
     STAGE_2_TERMUX_CHECK,
-    STAGE_3_PERMISSION_DENIED_FIX
+    STAGE_3_AGY_CHECK,
+    STAGE_4_PERMISSION_DENIED_FIX
 }
 
 class SetupLoadingActivity : ComponentActivity() {
@@ -71,6 +72,10 @@ class SetupLoadingActivity : ComponentActivity() {
             SetupFlowScreen(
                 onFlowComplete = {
                     SetupManager.setSetupCompleted(this, true)
+                    val intent = android.content.Intent(this, com.pr4nav.jarvis.MainActivity::class.java).apply {
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
                     finish()
                     @Suppress("DEPRECATION")
                     overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
@@ -144,13 +149,36 @@ fun SetupFlowScreen(onFlowComplete: () -> Unit) {
         }
 
         if (termuxAllowed) {
-            // Success -> Fast Fade Out Page 2 (300ms) & Complete
-            pageAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
-            onFlowComplete()
+            val needsAgyCheck = !SetupManager.isAgyCheckCompleted(context)
+            if (needsAgyCheck) {
+                // Transition to AGY Check stage (first time only)
+                pageAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
+                currentStage = SetupStage.STAGE_3_AGY_CHECK
+                pageAlpha.animateTo(1f, animationSpec = tween(durationMillis = 350, easing = LinearEasing))
+
+                val agyStartTime = System.currentTimeMillis()
+                withContext(Dispatchers.IO) {
+                    try {
+                        val res = Shell.ubuntu("which agy || test -x /usr/local/bin/agy", timeoutMs = 4000)
+                        android.util.Log.i("SetupFlow", "AGY check result: ${res.rc}")
+                    } catch (_: Exception) {}
+                    SetupManager.setAgyCheckCompleted(context, true)
+                }
+                val agyElapsed = System.currentTimeMillis() - agyStartTime
+                if (agyElapsed < 2600L) {
+                    delay(2600L - agyElapsed)
+                }
+                pageAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
+                onFlowComplete()
+            } else {
+                // Success -> Fast Fade Out Page 2 (300ms) & Complete
+                pageAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
+                onFlowComplete()
+            }
         } else {
-            // Denied -> Transition into Termux Permission Fix Screen (Stage 3)
+            // Denied -> Transition into Termux Permission Fix Screen (Stage 4)
             pageAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
-            currentStage = SetupStage.STAGE_3_PERMISSION_DENIED_FIX
+            currentStage = SetupStage.STAGE_4_PERMISSION_DENIED_FIX
             pageAlpha.animateTo(1f, animationSpec = tween(durationMillis = 350, easing = LinearEasing))
         }
     }
@@ -168,7 +196,10 @@ fun SetupFlowScreen(onFlowComplete: () -> Unit) {
             SetupStage.STAGE_2_TERMUX_CHECK -> {
                 StageTwoContent(dmSansFamily = dmSansFamily)
             }
-            SetupStage.STAGE_3_PERMISSION_DENIED_FIX -> {
+            SetupStage.STAGE_3_AGY_CHECK -> {
+                StageAgyContent(dmSansFamily = dmSansFamily)
+            }
+            SetupStage.STAGE_4_PERMISSION_DENIED_FIX -> {
                 TermuxPermissionFixPage(
                     onRecheck = {
                         // Fast fade out and redirect back to Stage 2 check screen
@@ -368,4 +399,66 @@ private fun ShimmerText(
             lineHeight = 27.sp
         )
     )
+}
+
+// ─── Stage: Checking AGY Autonomous Agent (First Time Only) ──────────────────
+
+@Composable
+private fun StageAgyContent(dmSansFamily: FontFamily) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        FullscreenVideo(
+            url = STAGE_2_VIDEO_URL,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = 1.25f
+                    scaleY = 1.25f
+                }
+        )
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 28.dp, bottom = 36.dp)
+        ) {
+            ShimmerText(
+                text = "Checking AGY Autonomous Agent…\nReady to solve complex tasks.",
+                fontSize = 21.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = dmSansFamily,
+                shimmerDuration = 2600
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "</>",
+                    fontSize = 11.5.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White.copy(alpha = 0.55f),
+                    letterSpacing = (-0.5).sp
+                )
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                Text(
+                    text = "verifying antigravity in proot linux",
+                    fontSize = 11.sp,
+                    fontFamily = dmSansFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = Color.White.copy(alpha = 0.45f),
+                    letterSpacing = 0.1.sp,
+                    lineHeight = 15.sp,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
+    }
 }

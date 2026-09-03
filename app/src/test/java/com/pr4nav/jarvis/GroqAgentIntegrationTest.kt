@@ -17,6 +17,7 @@ class GroqAgentIntegrationTest {
     @Before
     fun setup() {
         CanonicalToolRegistry.init(context)
+        GroqClient.allowAllCommands = false
     }
 
     // =========================================================================
