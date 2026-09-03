@@ -83,7 +83,7 @@ class PermissionsActivity : ComponentActivity() {
                 items = items,
                 onGrantAll = { grantAll() },
                 onProceedToChat = {
-                    val intent = Intent(this, MainActivity::class.java).apply {
+                    val intent = Intent(this, com.pr4nav.jarvis.setup.JarvisWakeLoadingActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                     startActivity(intent)

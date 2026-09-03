@@ -126,6 +126,11 @@
             android:theme="@style/Theme.Splash" />
 
         <activity
+            android:name=".setup.JarvisWakeLoadingActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Splash" />
+
+        <activity
             android:name=".MainActivity"
             android:launchMode="singleTop"
             android:exported="true" />
@@ -148,7 +153,7 @@
         <activity android:name=".ModelTestLabActivity" android:exported="false" />
         <activity
             android:name=".PermissionsActivity"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/app_name" />
         <activity android:name=".CommanderActivity" android:exported="false" />
         <activity android:name=".EditorActivity" android:exported="false" />
