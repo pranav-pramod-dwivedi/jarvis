@@ -33,6 +33,8 @@ for arg in sys.argv[1:]:
 
 active_proc = None
 active_proc_lock = threading.Lock()
+last_request_time = 0.0
+MIN_REQUEST_INTERVAL = 1.0  # seconds; throttles /api/prompt to mitigate resource exhaustion
 conversation_history = []
 history_lock = threading.Lock()
 cached_agy_path = None
@@ -503,7 +505,7 @@ class AgyHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(b'{"error":"not found"}')
 
     def do_POST(self):
-        global active_proc
+        global active_proc, last_request_time
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/")
 
@@ -554,6 +556,12 @@ class AgyHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
 
             with active_proc_lock:
+                now = time.time()
+                if now - last_request_time < MIN_REQUEST_INTERVAL:
+                    err_json = json.dumps({"event": "error", "error": "rate_limited"})
+                    self.wfile.write(f"data: {err_json}\n\n".encode("utf-8"))
+                    return
+                last_request_time = now
                 if active_proc is not None:
                     try:
                         active_proc.terminate()
