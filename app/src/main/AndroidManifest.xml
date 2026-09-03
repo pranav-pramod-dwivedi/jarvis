@@ -19,6 +19,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29"
@@ -63,6 +64,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <!-- display over other apps (overlay orb) — declaration makes JARVIS
          appear in the system "Display over other apps" list -->
@@ -192,7 +194,11 @@
         <service
             android:name=".companion.JarvisOverlayService"
             android:exported="true"
-            android:foregroundServiceType="microphone" />
+            android:foregroundServiceType="microphone|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating assistant companion overlay and HUD" />
+        </service>
 
         <!-- Quick Settings Tile -->
         <service
@@ -248,7 +254,10 @@
         <service
             android:name=".voice.JarvisVoiceService"
             android:exported="false"
-            android:foregroundServiceType="microphone">
+            android:foregroundServiceType="microphone|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Hands-free assistant voice listener and wake-word detector" />
             <intent-filter>
                 <action android:name="com.pr4nav.jarvis.voice.START" />
                 <action android:name="com.pr4nav.jarvis.voice.STOP" />

@@ -21,6 +21,10 @@ import java.util.regex.Pattern
  */
 object DeviceCommandHandler {
 
+    private fun launch(context: Context, intent: Intent): Boolean {
+        return com.pr4nav.jarvis.capabilities.Android16SafeLauncher.startActivitySafe(context, intent)
+    }
+
     fun tryHandle(context: Context, input: String, onResult: (String) -> Unit): Boolean {
         val q = input.trim().lowercase(Locale.US)
         val raw = input.trim()
@@ -89,7 +93,7 @@ object DeviceCommandHandler {
                     putExtra(AlarmClock.EXTRA_SKIP_UI, false)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("⏳ Timer set for $num $unit ($secs seconds).")
             } catch (e: Exception) {
                 Shell.termux("am start -a android.intent.action.SET_TIMER --ei android.intent.extra.alarm.LENGTH $secs")
@@ -114,7 +118,7 @@ object DeviceCommandHandler {
                     putExtra(AlarmClock.EXTRA_SKIP_UI, false)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 val timeStr = String.format(Locale.US, "%02d:%02d", hour, min)
                 onResult("⏰ Alarm set for $timeStr.")
             } catch (e: Exception) {
@@ -130,7 +134,7 @@ object DeviceCommandHandler {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com")).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
             } catch (_: Exception) {
                 Shell.termux("am start -a android.intent.action.VIEW -d 'https://www.youtube.com'")
             }
@@ -139,7 +143,7 @@ object DeviceCommandHandler {
         }
         if (q.contains("open settings") || q == "settings") {
             try {
-                context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                launch(context, Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Exception) {
                 Shell.termux("am start -a android.settings.SETTINGS")
             }
@@ -148,7 +152,7 @@ object DeviceCommandHandler {
         }
         if (q.contains("turn on wi-fi") || q.contains("turn on wifi") || q.contains("turn off wifi") || q.contains("open wifi")) {
             try {
-                context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                launch(context, Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Exception) {
                 Shell.termux("am start -a android.settings.WIFI_SETTINGS")
             }
@@ -157,7 +161,7 @@ object DeviceCommandHandler {
         }
         if (q.contains("turn on bluetooth") || q.contains("turn off bluetooth") || q.contains("open bluetooth")) {
             try {
-                context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                launch(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Exception) {
                 Shell.termux("am start -a android.settings.BLUETOOTH_SETTINGS")
             }
@@ -166,7 +170,7 @@ object DeviceCommandHandler {
         }
         if (q.contains("do not disturb") || q.contains("dnd")) {
             try {
-                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                launch(context, Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Exception) {
                 Shell.termux("am start -a android.settings.NOTIFICATION_POLICY_ACCESS_SETTINGS")
             }
@@ -184,16 +188,8 @@ object DeviceCommandHandler {
         // 7. Communication
         if (q.startsWith("call ")) {
             val target = raw.substring(5).trim()
-            try {
-                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(target)}")).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(intent)
-                onResult("📞 Dialing $target...")
-            } catch (e: Exception) {
-                Shell.termux("am start -a android.intent.action.DIAL -d 'tel:${Uri.encode(target)}'")
-                onResult("📞 Opening dialer for $target...")
-            }
+            val res = com.pr4nav.jarvis.capabilities.PhoneCallManager.placeCall(context, target)
+            onResult(res.message)
             return true
         }
         if (q.startsWith("text ") || q.startsWith("sms ")) {
@@ -206,7 +202,7 @@ object DeviceCommandHandler {
                     putExtra("sms_body", msg)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("💬 Opening SMS to $recipient: \"$msg\"")
             } catch (e: Exception) {
                 Shell.termux("am start -a android.intent.action.SENDTO -d 'smsto:${Uri.encode(recipient)}' --es sms_body '$msg'")
@@ -220,7 +216,7 @@ object DeviceCommandHandler {
                     addCategory(Intent.CATEGORY_APP_MESSAGING)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("📨 Opening Messages app...")
             } catch (_: Exception) {
                 Shell.termux("termux-sms-list -l 1 2>/dev/null || am start -a android.intent.action.MAIN -c android.intent.category.APP_MESSAGING")
@@ -234,7 +230,7 @@ object DeviceCommandHandler {
                 val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${Uri.encode(recipient)}")).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("✉️ Opening email composer to $recipient...")
             } catch (_: Exception) {
                 onResult("✉️ Ready to email $recipient.")
@@ -266,7 +262,7 @@ object DeviceCommandHandler {
                     putExtra(SearchManager.QUERY, query)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("🎶 Playing '$query'...")
             } catch (_: Exception) {
                 Shell.termux("am start -a android.media.action.MEDIA_PLAY_FROM_SEARCH --es query '$query'")
@@ -281,7 +277,7 @@ object DeviceCommandHandler {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=my+location")).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("📍 Showing your location on Google Maps...")
             } catch (_: Exception) {
                 onResult("📍 Opening Maps...")
@@ -293,7 +289,7 @@ object DeviceCommandHandler {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=Home")).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("🧭 Starting navigation to Home...")
             } catch (_: Exception) {
                 onResult("🧭 Opening Maps navigation Home...")
@@ -306,7 +302,7 @@ object DeviceCommandHandler {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=${Uri.encode(dest)}")).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("🧭 Navigating to $dest on Google Maps...")
             } catch (_: Exception) {
                 onResult("🧭 Opening Maps navigation to $dest...")
@@ -319,7 +315,7 @@ object DeviceCommandHandler {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=nearest+${Uri.encode(place)}")).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("🔍 Finding nearest $place on Maps...")
             } catch (_: Exception) {
                 onResult("🔍 Searching nearest $place...")
@@ -336,7 +332,7 @@ object DeviceCommandHandler {
                     putExtra(CalendarContract.Events.TITLE, task)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("📅 Reminder scheduled: \"$task\"")
             } catch (_: Exception) {
                 Shell.termux("termux-notification --title 'Reminder' --content '$task' 2>/dev/null || true")
@@ -351,7 +347,7 @@ object DeviceCommandHandler {
                     putExtra(Intent.EXTRA_TEXT, "")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("📝 Opening Notes editor...")
             } catch (_: Exception) {
                 onResult("📝 Notes ready.")
@@ -372,7 +368,7 @@ object DeviceCommandHandler {
                     data = Uri.parse("content://com.android.calendar/time")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launch(context, intent)
                 onResult("📆 Opening your Calendar...")
             } catch (_: Exception) {
                 onResult("📆 Opening Calendar...")

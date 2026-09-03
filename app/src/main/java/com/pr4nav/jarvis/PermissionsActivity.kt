@@ -173,6 +173,27 @@ class PermissionsActivity : ComponentActivity() {
             }
         ),
         PermItem(
+            title = "Phone Calls",
+            description = "Initiate hands-free phone calls via voice commands without touching the device.",
+            isEssential = false,
+            isGranted = granted(Manifest.permission.CALL_PHONE),
+            onGrant = { requestRuntime(Manifest.permission.CALL_PHONE) }
+        ),
+        PermItem(
+            title = "Contacts",
+            description = "Resolve contact names (e.g. 'Call Mom') into phone numbers from your address book.",
+            isEssential = false,
+            isGranted = granted(Manifest.permission.READ_CONTACTS),
+            onGrant = { requestRuntime(Manifest.permission.READ_CONTACTS) }
+        ),
+        PermItem(
+            title = "SMS & Messages",
+            description = "Send and read text messages via voice commands and quick assistant actions.",
+            isEssential = false,
+            isGranted = granted(Manifest.permission.SEND_SMS),
+            onGrant = { requestRuntime(Manifest.permission.SEND_SMS) }
+        ),
+        PermItem(
             title = "Root (Superuser)",
             description = "Direct system-level execution via su with automated safety gating.",
             isEssential = false,
@@ -199,6 +220,9 @@ class PermissionsActivity : ComponentActivity() {
         }
         group(Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= 33) group(Manifest.permission.POST_NOTIFICATIONS)
+        group(Manifest.permission.CALL_PHONE)
+        group(Manifest.permission.READ_CONTACTS)
+        group(Manifest.permission.SEND_SMS)
         group("com.termux.permission.RUN_COMMAND")
         return groups
     }

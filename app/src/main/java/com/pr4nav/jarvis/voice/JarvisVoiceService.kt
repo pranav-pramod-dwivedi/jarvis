@@ -204,14 +204,25 @@ class JarvisVoiceService : Service() {
         // Android 14+ Compliant Foreground Service Start
         val notif = buildNotification("JARVIS Core Initializing")
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 val hasMic = ContextCompat.checkSelfPermission(
                     this,
                     android.Manifest.permission.RECORD_AUDIO
                 ) == PackageManager.PERMISSION_GRANTED
-
-                if (hasMic) {
-                    startForeground(NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+                val fgsType = if (hasMic) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                } else {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                }
+                startForeground(NOTIFICATION_ID, notif, fgsType)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val hasMic = ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+                val fgsType = if (hasMic) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
+                if (fgsType != 0) {
+                    startForeground(NOTIFICATION_ID, notif, fgsType)
                 } else {
                     startForeground(NOTIFICATION_ID, notif)
                 }

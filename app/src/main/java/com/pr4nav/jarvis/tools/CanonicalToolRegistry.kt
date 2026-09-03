@@ -378,42 +378,26 @@ object CanonicalToolRegistry {
                     }
                 }
 
-                // Check CALL_PHONE permission for direct call initiation
-                val hasCallPermission = try {
-                    ctx.checkCallingOrSelfPermission(android.Manifest.permission.CALL_PHONE) ==
-                            android.content.pm.PackageManager.PERMISSION_GRANTED
-                } catch (_: Exception) { false }
-
-                if (hasCallPermission) {
-                    try {
-                        val callIntent = android.content.Intent(android.content.Intent.ACTION_CALL, android.net.Uri.parse("tel:$resolvedNumber")).apply {
-                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        ctx.startActivity(callIntent)
+                val res = com.pr4nav.jarvis.capabilities.PhoneCallManager.placeCall(ctx, target)
+                if (res.success) {
+                    if (res.status == "DIALER_OPENED") {
+                        ToolResult.requiresUser(
+                            "DIALER_OPENED",
+                            res.message
+                        )
+                    } else {
                         ToolResult.ok(
                             JSONObject().apply {
                                 put("action", "CALL_INITIATED")
-                                put("contact", resolvedName)
-                                put("number", resolvedNumber)
+                                put("contact", res.contactName)
+                                put("number", res.phoneNumber)
+                                put("method", res.method)
+                                put("message", res.message)
                             }
                         )
-                    } catch (e: Exception) {
-                        ToolResult.failure("CALL_ERROR", e.message ?: "Failed to initiate call")
                     }
                 } else {
-                    // ACTION_DIAL opens the dialer prefilled without placing the call automatically
-                    try {
-                        val dialIntent = android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:$resolvedNumber")).apply {
-                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        ctx.startActivity(dialIntent)
-                        ToolResult.requiresUser(
-                            "DIALER_OPENED",
-                            "Opened dialer for $resolvedName ($resolvedNumber). Direct call requires CALL_PHONE permission."
-                        )
-                    } catch (e: Exception) {
-                        ToolResult.failure("DIAL_ERROR", e.message ?: "Failed to open dialer")
-                    }
+                    ToolResult.failure(res.status, res.message)
                 }
             }
         ))

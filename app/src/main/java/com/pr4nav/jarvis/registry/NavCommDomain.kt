@@ -204,7 +204,7 @@ object NavCommDomain {
                     putExtra("sms_body", msg)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                ctx.startActivity(intent)
+                com.pr4nav.jarvis.capabilities.Android16SafeLauncher.startActivitySafe(ctx, intent)
                 CapabilityExecutionResult.ok("💬 Composing SMS to $phone.")
             }
         ),
@@ -212,15 +212,18 @@ object NavCommDomain {
         CapabilityDef(
             id = "comm.phone.dial",
             category = "communication",
-            name = "Open Phone Dialer",
-            description = "Open phone dialer with number pre-filled",
+            name = "Phone Call / Dialer",
+            description = "Initiate phone call or open dialer with contact/number resolved",
             aliases = listOf("dial", "call", "phone", "open dialer"),
-            optionalParams = listOf("number"),
+            optionalParams = listOf("number", "target"),
             execute = { ctx, params ->
-                val num = (params["number"] as? String) ?: ""
-                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$num")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                CapabilityExecutionResult.ok("📞 Opening phone dialer for $num.")
+                val num = (params["number"] as? String) ?: (params["target"] as? String) ?: ""
+                val res = com.pr4nav.jarvis.capabilities.PhoneCallManager.placeCall(ctx, num)
+                if (res.success) {
+                    CapabilityExecutionResult.ok(res.message)
+                } else {
+                    CapabilityExecutionResult.fail(res.message)
+                }
             }
         ),
 
@@ -232,7 +235,7 @@ object NavCommDomain {
             aliases = listOf("open contacts", "show contacts", "contacts"),
             execute = { ctx, _ ->
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("content://contacts/people/")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
+                com.pr4nav.jarvis.capabilities.Android16SafeLauncher.startActivitySafe(ctx, intent)
                 CapabilityExecutionResult.ok("👥 Contacts opened.")
             }
         )

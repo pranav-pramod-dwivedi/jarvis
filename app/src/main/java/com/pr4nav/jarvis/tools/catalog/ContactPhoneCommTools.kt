@@ -6,6 +6,7 @@ import android.provider.ContactsContract
 import com.pr4nav.jarvis.router.JarvisIntentRouter
 import com.pr4nav.jarvis.tools.CanonicalToolDef
 import com.pr4nav.jarvis.tools.CanonicalToolRegistry
+import com.pr4nav.jarvis.tools.catalog.CatalogSchemaHelper.fail
 import com.pr4nav.jarvis.tools.catalog.CatalogSchemaHelper.ok
 import com.pr4nav.jarvis.tools.catalog.CatalogSchemaHelper.prop
 import com.pr4nav.jarvis.tools.catalog.CatalogSchemaHelper.schema
@@ -71,8 +72,12 @@ object ContactPhoneCommTools {
             ),
             execute = { ctx, args ->
                 val target = args.optString("target", "")
-                JarvisIntentRouter.routeAndExecute(ctx, "Call $target") {}
-                ok("📞 Calling $target.", mapOf("target" to target))
+                val res = com.pr4nav.jarvis.capabilities.PhoneCallManager.placeCall(ctx, target)
+                if (res.success) {
+                    ok(res.message, mapOf("target" to res.contactName, "number" to res.phoneNumber, "method" to res.method))
+                } else {
+                    fail(res.status, res.message)
+                }
             }
         ))
 
@@ -85,9 +90,12 @@ object ContactPhoneCommTools {
             ),
             execute = { ctx, args ->
                 val num = args.optString("number", "")
-                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$num")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                ok("📞 Dialing $num.", mapOf("number" to num))
+                val res = com.pr4nav.jarvis.capabilities.PhoneCallManager.dialNumber(ctx, num)
+                if (res.success) {
+                    ok(res.message, mapOf("number" to res.phoneNumber))
+                } else {
+                    fail(res.status, res.message)
+                }
             }
         ))
 

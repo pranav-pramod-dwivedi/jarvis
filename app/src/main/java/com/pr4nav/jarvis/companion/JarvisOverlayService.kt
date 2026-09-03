@@ -208,16 +208,27 @@ class JarvisOverlayService : Service() {
 
         val notif = buildNotification("JARVIS Companion Overlay Active")
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 val hasMic = androidx.core.content.ContextCompat.checkSelfPermission(
                     this, android.Manifest.permission.RECORD_AUDIO
                 ) == android.content.pm.PackageManager.PERMISSION_GRANTED
                 val fgsType = if (hasMic) {
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
+                            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
                 } else {
-                    0
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
                 }
                 startForeground(NOTIFICATION_ID, notif, fgsType)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val hasMic = androidx.core.content.ContextCompat.checkSelfPermission(
+                    this, android.Manifest.permission.RECORD_AUDIO
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                val fgsType = if (hasMic) android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
+                if (fgsType != 0) {
+                    startForeground(NOTIFICATION_ID, notif, fgsType)
+                } else {
+                    startForeground(NOTIFICATION_ID, notif)
+                }
             } else {
                 startForeground(NOTIFICATION_ID, notif)
             }

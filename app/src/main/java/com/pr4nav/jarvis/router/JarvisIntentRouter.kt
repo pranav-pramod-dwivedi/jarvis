@@ -28,6 +28,10 @@ import java.util.regex.Pattern
  */
 object JarvisIntentRouter {
 
+    private fun launchSafe(context: Context, intent: Intent): Boolean {
+        return com.pr4nav.jarvis.capabilities.Android16SafeLauncher.startActivitySafe(context, intent)
+    }
+
     enum class CapabilityType(val label: String, val icon: String) {
         MUSIC("Music Capability", "🎵"),
         NAVIGATION("Navigation Capability", "🗺️"),
@@ -272,14 +276,14 @@ object JarvisIntentRouter {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:${Uri.encode(query)}")).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to Spotify → Playing \"$query\""
             } else if (isYtMusic) {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/search?q=${Uri.encode(query)}")).apply {
                     setPackage("com.google.android.apps.youtube.music")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to YouTube Music → Playing \"$query\""
             } else {
                 val intent = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
@@ -287,7 +291,7 @@ object JarvisIntentRouter {
                     putExtra(SearchManager.QUERY, query)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to Media Provider → Searching \"$query\""
             }
         } catch (e: Exception) {
@@ -303,7 +307,7 @@ object JarvisIntentRouter {
                     setPackage("com.google.android.apps.maps")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to Google Maps → Navigating Home"
             } else {
                 val uri = if (destination.startsWith("nearest")) "geo:0,0?q=${Uri.encode(destination)}"
@@ -311,7 +315,7 @@ object JarvisIntentRouter {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to Google Maps → Navigating to \"$destination\""
             }
         } catch (e: Exception) {
@@ -330,7 +334,7 @@ object JarvisIntentRouter {
             val driveIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://drive.google.com/drive/search?q=${Uri.encode(query)}")).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(driveIntent)
+            launchSafe(context, driveIntent)
             "Searching Local Storage & Google Drive for \"$query\""
         } catch (e: Exception) {
             "Searching files for \"$query\""
@@ -345,14 +349,14 @@ object JarvisIntentRouter {
                     putExtra(CalendarContract.Events.TITLE, "Meeting")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to Google Calendar → Opening Event Scheduler"
             } else {
                 val intent = Intent(Intent.ACTION_VIEW).apply {
                     data = Uri.parse("content://com.android.calendar/time")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to Google Calendar → Opening Schedule"
             }
         } catch (e: Exception) {
@@ -376,7 +380,7 @@ object JarvisIntentRouter {
                     if (isKeep) setPackage("com.google.android.keep")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to Google Keep → Creating Note"
             }
         } catch (e: Exception) {
@@ -397,14 +401,14 @@ object JarvisIntentRouter {
                     setPackage("com.whatsapp")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to WhatsApp → Messaging $target"
             } else {
                 val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${Uri.encode(target)}")).apply {
                     putExtra("sms_body", msg)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to Messages (SMS) → Sending to $target"
             }
         } catch (e: Exception) {
@@ -418,14 +422,14 @@ object JarvisIntentRouter {
                 val intent = context.packageManager.getLaunchIntentForPackage("com.google.android.gm") ?:
                              Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_EMAIL)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to Gmail → Opening Inbox"
             } else {
                 val target = query.replace(Regex("^(?i)(send an email to|send email to|email)\\s*"), "").trim()
                 val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${Uri.encode(target)}")).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(intent)
+                launchSafe(context, intent)
                 "Resolved to Gmail → Drafting email to $target"
             }
         } catch (e: Exception) {
@@ -439,7 +443,7 @@ object JarvisIntentRouter {
                 putExtra(SearchManager.QUERY, query)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(intent)
+            launchSafe(context, intent)
             "Resolved to Google Chrome → Searching \"$query\""
         } catch (e: Exception) {
             "Searching web: $query"
@@ -451,7 +455,7 @@ object JarvisIntentRouter {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(query)}")).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(intent)
+            launchSafe(context, intent)
             "Resolved to YouTube → Playing video \"$query\""
         } catch (e: Exception) {
             Shell.termux("am start -a android.intent.action.VIEW -d 'https://www.youtube.com/results?search_query=${Uri.encode(query)}'")
@@ -469,7 +473,7 @@ object JarvisIntentRouter {
                 Intent(Intent.ACTION_VIEW, Uri.parse("content://media/internal/images/media"))
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
+            launchSafe(context, intent)
             "Resolved to Google Photos → Opening photo gallery"
         } catch (e: Exception) {
             "Opening Photos..."
@@ -486,7 +490,7 @@ object JarvisIntentRouter {
                 Intent(MediaStore.ACTION_IMAGE_CAPTURE)
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
+            launchSafe(context, intent)
             "Resolved to Google Lens → Opening visual lookup"
         } catch (e: Exception) {
             "Opening Camera/Lens..."
@@ -494,15 +498,8 @@ object JarvisIntentRouter {
     }
 
     private fun executeCall(context: Context, target: String): String {
-        return try {
-            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(target)}")).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-            "Resolved to Phone Dialer → Calling $target"
-        } catch (e: Exception) {
-            "Dialing $target..."
-        }
+        val res = com.pr4nav.jarvis.capabilities.PhoneCallManager.placeCall(context, target)
+        return res.message
     }
 
     private fun isPackageInstalled(context: Context, packageName: String): Boolean {
