@@ -469,8 +469,9 @@ class MainActivity : ComponentActivity() {
             }
             .setNeutralButton("Switch Model") { _, _ ->
                 val models = arrayOf(
-                    "⚡ groq/compound-mini (Default · Ultra-Fast Compound Agent)",
+                    "⚡ openai/gpt-oss-120b (Default · Flagship OSS 120B)",
                     "🧠 groq/compound (Complex Multi-Tool Compound Agent)",
+                    "⚡ groq/compound-mini (Ultra-Fast Compound Agent)",
                     "llama-3.3-70b-versatile (Flagship 70B)",
                     "llama-3.1-8b-instant (Fast 8B)",
                     "mixtral-8x7b-32768 (32k Context)",
@@ -481,26 +482,30 @@ class MainActivity : ComponentActivity() {
                     .setItems(models) { _, which ->
                         when (which) {
                             0 -> {
-                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound-mini")
-                                Toast.makeText(this, "Model set to groq/compound-mini (Default)", Toast.LENGTH_SHORT).show()
+                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "openai/gpt-oss-120b")
+                                Toast.makeText(this, "Model set to openai/gpt-oss-120b (Default)", Toast.LENGTH_SHORT).show()
                             }
                             1 -> {
                                 com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound")
                                 Toast.makeText(this, "Model set to groq/compound", Toast.LENGTH_SHORT).show()
                             }
                             2 -> {
+                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound-mini")
+                                Toast.makeText(this, "Model set to groq/compound-mini", Toast.LENGTH_SHORT).show()
+                            }
+                            3 -> {
                                 com.pr4nav.jarvis.llm.GroqClient.setModel(this, "llama-3.3-70b-versatile")
                                 Toast.makeText(this, "Model set to llama-3.3-70b-versatile", Toast.LENGTH_SHORT).show()
                             }
-                            3 -> {
+                            4 -> {
                                 com.pr4nav.jarvis.llm.GroqClient.setModel(this, "llama-3.1-8b-instant")
                                 Toast.makeText(this, "Model set to llama-3.1-8b-instant", Toast.LENGTH_SHORT).show()
                             }
-                            4 -> {
+                            5 -> {
                                 com.pr4nav.jarvis.llm.GroqClient.setModel(this, "mixtral-8x7b-32768")
                                 Toast.makeText(this, "Model set to mixtral-8x7b-32768", Toast.LENGTH_SHORT).show()
                             }
-                            5 -> {
+                            6 -> {
                                 Toast.makeText(this, "Fetching models from Groq...", Toast.LENGTH_SHORT).show()
                                 com.pr4nav.jarvis.llm.GroqClient.fetchAvailableModels(
                                     context = this,
@@ -1929,6 +1934,11 @@ fun ExploreView(
         label = "headlineOffsetY"
     )
 
+    val userName = remember { com.pr4nav.jarvis.setup.SetupManager.getUserName(context) }
+    val avatarInitial = remember(userName) {
+        if (userName.isNotBlank()) userName.first().uppercase() else "J"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1956,7 +1966,7 @@ fun ExploreView(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "J",
+                        text = avatarInitial,
                         color = Color.White,
                         fontSize = 16.sp,
                         fontFamily = titleFontFamily,
@@ -1966,7 +1976,7 @@ fun ExploreView(
 
                 Column {
                     Text(
-                        text = "JARVIS",
+                        text = userName,
                         color = Color.White,
                         fontSize = 14.sp,
                         fontFamily = titleFontFamily,

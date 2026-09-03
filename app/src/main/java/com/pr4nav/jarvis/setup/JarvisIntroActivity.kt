@@ -27,6 +27,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -61,7 +62,23 @@ class JarvisIntroActivity : ComponentActivity() {
         setContent {
             IntroLoadingScreen(
                 onProceed = { proceedToMain() },
-                bindPlayer = { player -> exoPlayer = player }
+                bindPlayer = { player ->
+                    exoPlayer = player
+                    var loopCount = 0
+                    player.addListener(object : Player.Listener {
+                        override fun onPlaybackStateChanged(playbackState: Int) {
+                            if (playbackState == Player.STATE_ENDED) {
+                                loopCount++
+                                if (loopCount < 2) {
+                                    player.seekTo(0)
+                                    player.play()
+                                } else {
+                                    proceedToMain()
+                                }
+                            }
+                        }
+                    })
+                }
             )
         }
     }
@@ -70,7 +87,7 @@ class JarvisIntroActivity : ComponentActivity() {
         if (isNavigating || isFinishing || isDestroyed) return
         isNavigating = true
         SetupManager.setSetupCompleted(this, true)
-        val intent = Intent(this, MainActivity::class.java).apply {
+        val intent = Intent(this, UserNameSetupActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
@@ -108,11 +125,6 @@ fun IntroLoadingScreen(
         }
         delay(180)
         jarvisVisible = true
-
-        // Display the reveal for 3.6s, then smoothly transition into chat
-        delay(3600)
-        screenAlpha.animateTo(0f, animationSpec = tween(durationMillis = 350, easing = LinearEasing))
-        onProceed()
     }
 
     Box(
@@ -205,7 +217,7 @@ private fun IntroFullscreenVideo(
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(Uri.parse(url)))
-            repeatMode = ExoPlayer.REPEAT_MODE_ALL
+            repeatMode = ExoPlayer.REPEAT_MODE_OFF
             volume = 0f
             prepare()
             playWhenReady = true

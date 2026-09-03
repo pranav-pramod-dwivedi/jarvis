@@ -35,4 +35,20 @@ object SetupManager {
             .putBoolean(KEY_AGY_CHECK_COMPLETED, completed)
             .apply()
     }
+
+    private const val KEY_USER_NAME = "key_user_name"
+
+    fun getUserName(context: Context): String {
+        val saved = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_USER_NAME, null)
+        return if (!saved.isNullOrBlank()) saved.trim() else "JARVIS"
+    }
+
+    fun setUserName(context: Context, name: String) {
+        val trimmed = name.trim()
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_USER_NAME, trimmed)
+            .apply()
+    }
 }

@@ -904,7 +904,14 @@ object GroqClient {
 
     private fun buildSystemPrompt(modelName: String, activeContext: String): String {
         val isCompound = modelName.startsWith("groq/compound")
+        val userName = com.pr4nav.jarvis.JarvisApp.instance?.let {
+            com.pr4nav.jarvis.setup.SetupManager.getUserName(it)
+        } ?: ""
+        val userGreeting = if (userName.isNotBlank() && userName != "JARVIS") {
+            "USER IDENTITY:\nThe user's name is $userName. Address the user by their name ($userName) naturally when appropriate.\n\n"
+        } else ""
         val base = "${JarvisIdentity.UNIFIED_SYSTEM_PROMPT}\n" +
+            userGreeting +
             "You are JARVIS, an autonomous AI system running on an Android mobile device with full access to 500+ skills and capabilities across Android, native Termux, Ubuntu PRoot, AGY, and Gemini.\n\n" +
             "CORE SKILLS & CAPABILITIES AT YOUR DISPOSAL:\n" +
             "1. Screencapture & Screen Reading (read_screen_text): Reads the live Android UI hierarchy and visible text (buttons, labels, input fields, coordinates) instantly with ZERO image screenshot latency.\n" +

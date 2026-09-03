@@ -128,11 +128,22 @@
         <activity
             android:name=".setup.JarvisWakeLoadingActivity"
             android:exported="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:theme="@style/Theme.Splash" />
 
         <activity
             android:name=".setup.JarvisIntroActivity"
             android:exported="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.Splash" />
+
+        <activity
+            android:name=".setup.UserNameSetupActivity"
+            android:exported="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:theme="@style/Theme.Splash" />
 
         <activity

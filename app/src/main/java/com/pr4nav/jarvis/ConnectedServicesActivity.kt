@@ -128,8 +128,9 @@ class ConnectedServicesActivity : AppCompatActivity() {
 
         btnSelectGroqModel.setOnClickListener {
             val defaultModels = arrayOf(
-                "⚡ groq/compound-mini (Default · Ultra-Fast Compound Agent)",
+                "⚡ openai/gpt-oss-120b (Default · Flagship OSS 120B)",
                 "🧠 groq/compound (Complex Multi-Tool Compound Agent)",
+                "⚡ groq/compound-mini (Ultra-Fast Compound Agent)",
                 "llama-3.3-70b-versatile (Flagship 70B)",
                 "llama-3.1-8b-instant (Fast 8B)",
                 "mixtral-8x7b-32768 (32k Context)",
@@ -140,9 +141,9 @@ class ConnectedServicesActivity : AppCompatActivity() {
                 .setItems(defaultModels) { _, which ->
                     when (which) {
                         0 -> {
-                            com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound-mini")
+                            com.pr4nav.jarvis.llm.GroqClient.setModel(this, "openai/gpt-oss-120b")
                             refreshGroqStatus()
-                            Toast.makeText(this, "Model: groq/compound-mini (Default)", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, "Model: openai/gpt-oss-120b (Default)", Toast.LENGTH_SHORT).show()
                         }
                         1 -> {
                             com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound")
@@ -150,21 +151,26 @@ class ConnectedServicesActivity : AppCompatActivity() {
                             Toast.makeText(this, "Model: groq/compound", Toast.LENGTH_SHORT).show()
                         }
                         2 -> {
+                            com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound-mini")
+                            refreshGroqStatus()
+                            Toast.makeText(this, "Model: groq/compound-mini", Toast.LENGTH_SHORT).show()
+                        }
+                        3 -> {
                             com.pr4nav.jarvis.llm.GroqClient.setModel(this, "llama-3.3-70b-versatile")
                             refreshGroqStatus()
                             Toast.makeText(this, "Model: llama-3.3-70b-versatile", Toast.LENGTH_SHORT).show()
                         }
-                        3 -> {
+                        4 -> {
                             com.pr4nav.jarvis.llm.GroqClient.setModel(this, "llama-3.1-8b-instant")
                             refreshGroqStatus()
                             Toast.makeText(this, "Model: llama-3.1-8b-instant", Toast.LENGTH_SHORT).show()
                         }
-                        4 -> {
+                        5 -> {
                             com.pr4nav.jarvis.llm.GroqClient.setModel(this, "mixtral-8x7b-32768")
                             refreshGroqStatus()
                             Toast.makeText(this, "Model: mixtral-8x7b-32768", Toast.LENGTH_SHORT).show()
                         }
-                        5 -> {
+                        6 -> {
                             Toast.makeText(this, "Fetching models from Groq...", Toast.LENGTH_SHORT).show()
                             com.pr4nav.jarvis.llm.GroqClient.fetchAvailableModels(
                                 context = this,
