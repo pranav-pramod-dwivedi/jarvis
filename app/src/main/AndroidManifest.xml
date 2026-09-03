@@ -134,6 +134,14 @@
         <activity android:name=".AgyWebActivity" android:exported="false" />
         <activity android:name=".OpenCodeActivity" android:exported="false" />
         <activity android:name=".OpenCodeWebActivity" android:exported="false" />
+        <activity
+            android:name=".browser.JarvisBrowserActivity"
+            android:exported="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:hardwareAccelerated="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
         <activity android:name=".BrowserActivity" android:exported="false" />
         <activity android:name=".AgentActivity" android:exported="false" />
         <activity android:name=".DiagnosticsActivity" android:exported="false" />

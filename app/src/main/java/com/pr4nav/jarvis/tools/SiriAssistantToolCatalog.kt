@@ -25,5 +25,6 @@ object SiriAssistantToolCatalog {
         CalculationConverterTools.register(register)
         WebKnowledgeTools.register(register)
         AppSystemShortcutTools.register(register)
+        JarvisBrowserTools.register(register)
     }
 }

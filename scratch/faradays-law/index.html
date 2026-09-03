@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Faraday's Law of Electromagnetic Induction</title>
+    <style>
+        :root {
+            --bg: #070B0E;
+            --surface: #0E161C;
+            --surface-hi: #15222B;
+            --border: rgba(79, 209, 197, 0.2);
+            --accent: #4FD1C5;
+            --accent-glow: rgba(79, 209, 197, 0.35);
+            --north: #FF4757;
+            --south: #1E90FF;
+            --text: #EAF4FC;
+            --text-dim: #708A9E;
+            --font: system-ui, -apple-system, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: var(--font);
+            display: flex;
+            flex-direction: column;
+            -webkit-tap-highlight-color: transparent;
+        }
+        header {
+            padding: 10px 14px;
+            background: linear-gradient(180deg, #101921 0%, rgba(16, 25, 33, 0.6) 100%);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .title-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .title-badge h1 {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: var(--text);
+        }
+        .pill {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            background: rgba(79, 209, 197, 0.12);
+            color: var(--accent);
+            padding: 2px 7px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            font-weight: 600;
+        }
+        .formula {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--accent);
+            text-shadow: 0 0 8px var(--accent-glow);
+        }
+        .sim-container {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            width: 100%;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            touch-action: none;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            padding: 8px 12px;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .metric-card {
+            background: var(--surface-hi);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            padding: 6px 8px;
+            text-align: center;
+        }
+        .metric-label {
+            font-size: 9px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+        .metric-val {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .controls-bar {
+            padding: 10px 12px 14px;
+            background: #0B1116;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        .btn {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.15s ease;
+        }
+        .btn:active {
+            transform: scale(0.96);
+            background: var(--surface-hi);
+        }
+        .btn-accent {
+            background: rgba(79, 209, 197, 0.15);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            min-width: 120px;
+        }
+        .slider-group label {
+            font-size: 11px;
+            color: var(--text-dim);
+            white-space: nowrap;
+        }
+        input[type=range] {
+            flex: 1;
+            accent-color: var(--accent);
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="title-badge">
+        <span class="pill">Physics Sim</span>
+        <h1>Faraday's Law</h1>
+    </div>
+    <div class="formula">ℰ = -N (dΦ/dt)</div>
+</header>
+
+<div class="sim-container">
+    <canvas id="simCanvas"></canvas>
+</div>
+
+<div class="metrics-grid">
+    <div class="metric-card">
+        <div class="metric-label">EMF Voltage</div>
+        <div class="metric-val" id="valEmf">0.0 mV</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Flux (Φ)</div>
+        <div class="metric-val" id="valFlux">0.0 Wb</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Speed</div>
+        <div class="metric-val" id="valSpeed">0 cm/s</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Coil Turns</div>
+        <div class="metric-val" id="valTurns">3 N</div>
+    </div>
+</div>
+
+<div class="controls-bar">
+    <button class="btn btn-accent" id="btnAuto">▶ Auto</button>
+    <button class="btn" id="btnFlip">⇄ Flip</button>
+    <button class="btn" id="btnVoice">🎙 Explain</button>
+    <div class="slider-group">
+        <label for="turnsSlider">Turns:</label>
+        <input type="range" id="turnsSlider" min="1" max="4" value="3" step="1">
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+
+let width, height;
+function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    width = canvas.parentElement.clientWidth;
+    height = canvas.parentElement.clientHeight;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+}
+window.addEventListener('resize', resize);
+setTimeout(resize, 50);
+
+// State
+let magnet = {
+    x: 0,
+    y: 0,
+    w: 110,
+    h: 42,
+    isNorthLeft: false,
+    isDragging: false
+};
+let turns = 3;
+let autoOscillate = false;
+let autoAngle = 0;
+let lastX = 0;
+let lastTime = performance.now();
+let inducedEmf = 0;
+let smoothedEmf = 0;
+
+const elEmf = document.getElementById('valEmf');
+const elFlux = document.getElementById('valFlux');
+const elSpeed = document.getElementById('valSpeed');
+const elTurns = document.getElementById('valTurns');
+
+function getCoilBounds() {
+    return {
+        x: width * 0.65,
+        y: height * 0.5,
+        w: 45 + turns * 14,
+        h: Math.min(height * 0.55, 120)
+    };
+}
+
+function calculateFluxAt(x) {
+    const coil = getCoilBounds();
+    const dist = x - coil.x;
+    const sign = magnet.isNorthLeft ? -1 : 1;
+    const scale = 75;
+    return sign * (1000 / (1 + Math.pow(dist / scale, 2)));
+}
+
+function getPointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
+function onPointerDown(e) {
+    const pos = getPointerPos(e);
+    if (Math.abs(pos.x - magnet.x) < magnet.w * 0.75 && Math.abs(pos.y - magnet.y) < magnet.h * 1.2) {
+        magnet.isDragging = true;
+        autoOscillate = false;
+        document.getElementById('btnAuto').innerText = "▶ Auto";
+    }
+}
+function onPointerMove(e) {
+    if (!magnet.isDragging) return;
+    const pos = getPointerPos(e);
+    magnet.x = Math.max(magnet.w * 0.6, Math.min(width - magnet.w * 0.6, pos.x));
+}
+function onPointerUp() { magnet.isDragging = false; }
+
+canvas.addEventListener('mousedown', onPointerDown);
+window.addEventListener('mousemove', onPointerMove);
+window.addEventListener('mouseup', onPointerUp);
+canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+window.addEventListener('touchmove', onPointerMove, { passive: false });
+window.addEventListener('touchend', onPointerUp);
+
+document.getElementById('btnAuto').onclick = () => {
+    autoOscillate = !autoOscillate;
+    document.getElementById('btnAuto').innerText = autoOscillate ? "⏸ Pause" : "▶ Auto";
+};
+document.getElementById('btnFlip').onclick = () => {
+    magnet.isNorthLeft = !magnet.isNorthLeft;
+};
+document.getElementById('turnsSlider').oninput = (e) => {
+    turns = parseInt(e.target.value);
+    elTurns.innerText = turns + " N";
+};
+document.getElementById('btnVoice').onclick = () => {
+    if (window.jarvis) {
+        window.jarvis.speak("According to Faraday's law, induced electromotive force is proportional to the rate of change of magnetic flux through the coil and the number of turns.");
+    }
+};
+
+function render(now) {
+    if (!width || !height) resize();
+    if (!magnet.x) {
+        magnet.x = width * 0.22;
+        magnet.y = height * 0.5;
+        lastX = magnet.x;
+    }
+
+    const dt = Math.max(0.001, (now - lastTime) / 1000);
+    lastTime = now;
+
+    if (autoOscillate) {
+        autoAngle += dt * 3.5;
+        const coil = getCoilBounds();
+        magnet.x = coil.x + Math.sin(autoAngle) * (width * 0.32);
+    }
+
+    const speed = (magnet.x - lastX) / dt;
+    lastX = magnet.x;
+
+    const currentFlux = calculateFluxAt(magnet.x);
+    const prevFlux = calculateFluxAt(magnet.x - speed * dt);
+    const dPhi_dt = (currentFlux - prevFlux) / dt;
+
+    inducedEmf = -turns * dPhi_dt * 0.16;
+    smoothedEmf += (inducedEmf - smoothedEmf) * 0.25;
+
+    elEmf.innerText = smoothedEmf.toFixed(1) + " mV";
+    elEmf.style.color = Math.abs(smoothedEmf) > 5 ? (smoothedEmf > 0 ? '#4FD1C5' : '#FF4757') : 'var(--text)';
+    elFlux.innerText = (currentFlux / 10).toFixed(1) + " Wb";
+    elSpeed.innerText = Math.abs(speed / 10).toFixed(0) + " cm/s";
+
+    ctx.clearRect(0, 0, width, height);
+
+    const coil = getCoilBounds();
+
+    // 1. Magnetic Field Lines
+    ctx.lineWidth = 1.2;
+    for (let r = 20; r <= 70; r += 24) {
+        ctx.strokeStyle = `rgba(79, 209, 197, ${Math.max(0.06, 0.20 - r * 0.002)})`;
+        ctx.beginPath();
+        ctx.ellipse(magnet.x, magnet.y, magnet.w * 0.5 + r, r * 0.65, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // 2. Back loops of coil
+    ctx.strokeStyle = '#D97706';
+    ctx.lineWidth = 4;
+    const loopSpacing = 14;
+    const startX = coil.x - (turns * loopSpacing) / 2;
+
+    for (let i = 0; i < turns; i++) {
+        const lx = startX + i * loopSpacing;
+        ctx.beginPath();
+        ctx.ellipse(lx, coil.y, 8, coil.h * 0.5, 0, Math.PI * 0.5, Math.PI * 1.5);
+        ctx.stroke();
+    }
+
+    // 3. Bar Magnet
+    const hw = magnet.w * 0.5;
+    const hh = magnet.h * 0.5;
+
+    // North
+    ctx.fillStyle = magnet.isNorthLeft ? 'var(--north)' : 'var(--south)';
+    ctx.shadowColor = 'rgba(255, 71, 87, 0.4)';
+    ctx.shadowBlur = 10;
+    ctx.fillRect(magnet.x - hw, magnet.y - hh, hw, magnet.h);
+
+    // South
+    ctx.fillStyle = magnet.isNorthLeft ? 'var(--south)' : 'var(--north)';
+    ctx.shadowColor = 'rgba(30, 144, 255, 0.4)';
+    ctx.fillRect(magnet.x, magnet.y - hh, hw, magnet.h);
+    ctx.shadowBlur = 0;
+
+    // Pole labels
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 15px var(--font)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(magnet.isNorthLeft ? 'N' : 'S', magnet.x - hw * 0.5, magnet.y);
+    ctx.fillText(magnet.isNorthLeft ? 'S' : 'N', magnet.x + hw * 0.5, magnet.y);
+
+    // 4. Front loops of coil
+    ctx.strokeStyle = '#F59E0B';
+    ctx.lineWidth = 4;
+    for (let i = 0; i < turns; i++) {
+        const lx = startX + i * loopSpacing;
+        ctx.beginPath();
+        ctx.ellipse(lx, coil.y, 8, coil.h * 0.5, 0, Math.PI * 1.5, Math.PI * 0.5);
+        ctx.stroke();
+    }
+
+    // 5. Galvanometer Meter
+    const meterX = width * 0.65;
+    const meterY = Math.max(34, height * 0.18);
+    const meterR = 30;
+
+    // Circuit wires
+    ctx.strokeStyle = '#374151';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(startX, coil.y - coil.h * 0.5);
+    ctx.lineTo(startX, meterY);
+    ctx.lineTo(meterX - meterR, meterY);
+    ctx.moveTo(startX + (turns - 1) * loopSpacing, coil.y + coil.h * 0.5);
+    ctx.lineTo(startX + (turns - 1) * loopSpacing, meterY + 24);
+    ctx.lineTo(meterX + meterR, meterY + 24);
+    ctx.lineTo(meterX + meterR, meterY);
+    ctx.stroke();
+
+    // Galvanometer circle
+    ctx.fillStyle = '#101820';
+    ctx.strokeStyle = 'var(--accent)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(meterX, meterY, meterR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Needle
+    const deflection = Math.max(-1.1, Math.min(1.1, smoothedEmf * 0.05));
+    const needleAngle = -Math.PI * 0.5 + deflection;
+    ctx.strokeStyle = Math.abs(smoothedEmf) > 8 ? '#4FD1C5' : '#E6F2FF';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(meterX, meterY);
+    ctx.lineTo(meterX + Math.cos(needleAngle) * (meterR * 0.75), meterY + Math.sin(needleAngle) * (meterR * 0.75));
+    ctx.stroke();
+
+    ctx.fillStyle = 'var(--text-dim)';
+    ctx.font = 'bold 10px var(--font-mono)';
+    ctx.fillText('G', meterX, meterY + 14);
+
+    // Glowing bulb indicator
+    const bulbIntensity = Math.min(1.0, Math.abs(smoothedEmf) * 0.04);
+    if (bulbIntensity > 0.05) {
+        ctx.fillStyle = `rgba(255, 230, 100, ${bulbIntensity})`;
+        ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
+        ctx.shadowBlur = 20 * bulbIntensity;
+        ctx.beginPath();
+        ctx.arc(meterX, meterY, meterR * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    requestAnimationFrame(render);
+}
+
+requestAnimationFrame(render);
+</script>
+</body>
+</html>

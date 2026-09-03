@@ -1,0 +1,9 @@
+{
+  "id": "faradays-law",
+  "title": "Faraday's Law Simulation",
+  "description": "Interactive electromagnetic induction visualizer with magnetic flux and moving coil physics",
+  "icon": "⚡",
+  "version": "1.0.0",
+  "tags": ["physics", "induction", "magnetism", "education"],
+  "is_temporary": false
+}

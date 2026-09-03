@@ -647,6 +647,76 @@ object GroqClient {
             })
         })
 
+        // 17. browser_render_app (JarvisBrowser dynamic on-demand UI)
+        arr.put(JSONObject().apply {
+            put("type", "function")
+            put("function", JSONObject().apply {
+                put("name", "browser_render_app")
+                put("description", "Generates and renders an on-demand, interactive HTML/CSS/JS mini web-app in JarvisBrowser. Use whenever a visual UI, physics simulation, comparison table, or custom dashboard is better than plain text or voice.")
+                put("parameters", JSONObject().apply {
+                    put("type", "object")
+                    put("properties", JSONObject().apply {
+                        put("app_id", JSONObject().apply {
+                            put("type", "string")
+                            put("description", "Unique alphanumeric slug for the app, e.g. 'faradays-law', 'workout-chart', 'solar-eclipse'")
+                        })
+                        put("title", JSONObject().apply {
+                            put("type", "string")
+                            put("description", "Human-readable title for the app header")
+                        })
+                        put("html", JSONObject().apply {
+                            put("type", "string")
+                            put("description", "Complete self-contained HTML5 code (with inline styles, canvas, and script)")
+                        })
+                        put("explanation_speech", JSONObject().apply {
+                            put("type", "string")
+                            put("description", "Spoken verbal explanation that JARVIS will speak while the user interacts with the UI")
+                        })
+                        put("is_temporary", JSONObject().apply {
+                            put("type", "boolean")
+                            put("description", "True for temporary/one-off previews; false to save permanently in user's JarvisBrowser library")
+                        })
+                    })
+                    put("required", org.json.JSONArray().put("app_id").put("title").put("html"))
+                })
+            })
+        })
+
+        // 18. browser_launch_app (Launch existing or saved JarvisBrowser app)
+        arr.put(JSONObject().apply {
+            put("type", "function")
+            put("function", JSONObject().apply {
+                put("name", "browser_launch_app")
+                put("description", "Launches an existing or saved JarvisBrowser app by ID, title, or search query (e.g. 'faraday', 'workout').")
+                put("parameters", JSONObject().apply {
+                    put("type", "object")
+                    put("properties", JSONObject().apply {
+                        put("query", JSONObject().apply {
+                            put("type", "string")
+                            put("description", "App ID, title, or search keyword of the saved app to launch")
+                        })
+                        put("explanation_speech", JSONObject().apply {
+                            put("type", "string")
+                            put("description", "Optional verbal speech to speak upon launching")
+                        })
+                    })
+                    put("required", org.json.JSONArray().put("query"))
+                })
+            })
+        })
+
+        // 19. browser_list_apps (List saved JarvisBrowser apps)
+        arr.put(JSONObject().apply {
+            put("type", "function")
+            put("function", JSONObject().apply {
+                put("name", "browser_list_apps")
+                put("description", "Lists all saved and permanent JarvisBrowser mini-apps in the user's library.")
+                put("parameters", JSONObject().apply {
+                    put("type", "object")
+                })
+            })
+        })
+
         return arr
     }
 
@@ -833,11 +903,17 @@ object GroqClient {
             "1. Screencapture & Screen Reading (read_screen_text): Reads the live Android UI hierarchy and visible text (buttons, labels, input fields, coordinates) instantly with ZERO image screenshot latency.\n" +
             "2. Virtual Touches & Gestures (virtual_touch, virtual_scroll, virtual_type, press_global_key): Performs semantic clicks on buttons/text, coordinate taps (x, y), scrolling, text typing, and system key presses (back, home, recents).\n" +
             "3. 350+ Mobile Assistant Skills (execute_device_tool): Alarms, countdown timers, world clock, calendar events, reminders, contacts, phone calls, SMS, WhatsApp messages, Spotify/media playback, turn-by-turn navigation, weather forecasts, notes & lists, camera, math/tip calculations, web search, unit conversions, and app management.\n" +
-            "4. execute_termux_command: Run lightweight shell commands directly in the native Termux host environment (without PRoot overhead). Use for which, pkg, curl, network diagnostics, process checks, and scripts.\n" +
-            "5. execute_proot_command: Run Linux bash commands inside Ubuntu PRoot container. Use for apt, standard Linux libraries, gcc, or full Linux environments.\n" +
-            "6. execute_android_command: Run Android local shell commands (getprop, pm, am, logcat).\n" +
-            "7. escalate_to_agy: Escalate repository/code modification, codebase refactoring, multi-file builds, tests, and deep autonomous coding tasks to AGY (Antigravity PRoot Autonomous Agent).\n" +
-            "8. escalate_to_gemini: Escalate to Gemini Cloud LLM for deep multi-step reasoning or high-level analysis.\n\n" +
+            "4. JarvisBrowser Dynamic On-Demand UI (browser_render_app, browser_launch_app, browser_list_apps):\n" +
+            "   JarvisBrowser is JARVIS's internal, hardware-accelerated dynamic UI & web-app surface (NOT Chrome).\n" +
+            "   Whenever a user's request would benefit from an interactive visual UI, simulation, animation, comparison table, or custom dashboard instead of plain text/voice:\n" +
+            "   - ONLY AGY (Autonomous Coding Agent) is authorized to author / speedrun-code these apps using the 'jarvisbrowser' skill.\n" +
+            "   - If the requested visual already exists in the user's library, call browser_launch_app(query=\"...\").\n" +
+            "   - Otherwise, speedrun-code an offline-first, 100% self-contained HTML5 mini-app (Obsidian void palette #0B1116, neon cyan #4FD1C5, 60fps canvas/svg physics animation, mobile touch controls, zero-AI-slop standard) and render it via browser_render_app with explanation_speech.\n" +
+            "5. execute_termux_command: Run lightweight shell commands directly in the native Termux host environment (without PRoot overhead). Use for which, pkg, curl, network diagnostics, process checks, and scripts.\n" +
+            "6. execute_proot_command: Run Linux bash commands inside Ubuntu PRoot container. Use for apt, standard Linux libraries, gcc, or full Linux environments.\n" +
+            "7. execute_android_command: Run Android local shell commands (getprop, pm, am, logcat).\n" +
+            "8. escalate_to_agy: Escalate repository/code modification, codebase refactoring, multi-file builds, tests, and deep autonomous coding tasks to AGY (Antigravity PRoot Autonomous Agent).\n" +
+            "9. escalate_to_gemini: Escalate to Gemini Cloud LLM for deep multi-step reasoning or high-level analysis.\n\n" +
             "TROUBLESHOOTING & VERIFICATION DIRECTIVE:\n" +
             "When troubleshooting real problems (e.g. 'Why isn't Node working?', broken dependencies, port blocks, service failures):\n" +
             "- Request diagnostic commands first (binary availability via 'which', version, environment variables, logs, process info).\n" +
