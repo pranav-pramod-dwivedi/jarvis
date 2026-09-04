@@ -17,11 +17,9 @@ import json
 import os
 import re
 import shutil
-import signal
 import subprocess
 import sys
 import threading
-import time
 import urllib.parse
 
 PORT = int(os.environ.get("AGY_PORT", "5050"))
@@ -33,10 +31,14 @@ for arg in sys.argv[1:]:
 
 active_proc = None
 active_proc_lock = threading.Lock()
-conversation_history = []
-history_lock = threading.Lock()
 cached_agy_path = None
 cached_version = None
+
+
+def _is_busy():
+    """Thread-safe check for whether a prompt process is active."""
+    with active_proc_lock:
+        return active_proc is not None
 
 def find_agy():
     global cached_agy_path
@@ -476,7 +478,7 @@ class AgyHandler(http.server.BaseHTTPRequestHandler):
                 "version": get_agy_version(),
                 "port": PORT,
                 "agy_path": find_agy(),
-                "busy": active_proc is not None
+                "busy": _is_busy()
             }
             self.wfile.write(json.dumps(resp).encode("utf-8"))
             return
