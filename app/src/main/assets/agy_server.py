@@ -590,6 +590,14 @@ class AgyHandler(http.server.BaseHTTPRequestHandler):
                 with active_proc_lock:
                     if active_proc == proc:
                         active_proc = None
+                # Terminate subprocess if still running (e.g. client disconnected mid-stream).
+                # In the normal case proc.wait() has returned and poll() is non-None, so
+                # this only fires when the streaming loop was interrupted by an exception.
+                if proc.poll() is None:
+                    try:
+                        proc.terminate()
+                    except Exception:
+                        pass
             return
 
         if path == "/api/abort":
