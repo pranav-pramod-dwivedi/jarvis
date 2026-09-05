@@ -22,12 +22,12 @@
     </td>
   </tr>
 </table>
-<center></center>
+
 [![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-blue.svg)](https://android.com)
 [![Voice Model](https://img.shields.io/badge/Neural%20TTS-Kokoro--82M%20INT8-cyan.svg)](https://github.com/pranav-pramod-dwivedi/jarvis/releases/tag/v1.0.0-models)
 [![Wake Word](https://img.shields.io/badge/KWS-openWakeWord%20ONNX-green.svg)](https://github.com/pranav-pramod-dwivedi/jarvis/releases/tag/v1.0.0-models)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
-</center>
+
 **JARVIS** is an autonomous, on-device AI personal assistant built for Android that rivals Siri and Google Assistant. It features high-fidelity neural speech synthesis, 100% offline keyword spotting, dynamic floating companion overlays, on-screen context awareness, and a 3-tier hybrid intelligence pipeline (Needle + Local SLM + Autonomous AGY CLI).
 
 **Author & Maintainer**: Pranav Pramod Dwivedi ([@pranav-pramod-dwivedi](https://github.com/pranav-pramod-dwivedi))
@@ -173,20 +173,6 @@ app/src/main/
    adb install -r app/build/outputs/apk/debug/app-debug.apk
    ```
 
-3. **Grant Permissions**:
-   ```bash
-   adb shell pm grant com.pr4nav.jarvis android.permission.RECORD_AUDIO
-   adb shell pm grant com.pr4nav.jarvis android.permission.CALL_PHONE
-   adb shell pm grant com.pr4nav.jarvis android.permission.READ_CONTACTS
-   adb shell appops set com.pr4nav.jarvis SYSTEM_ALERT_WINDOW allow
-   ```
-
-4. **Launch JARVIS**:
-   ```bash
-   adb shell am start -n com.pr4nav.jarvis/.MainActivity
-   ```
-
----
 
 ## 📄 License
 
