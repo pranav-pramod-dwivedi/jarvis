@@ -8,8 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
-import android.graphics.SurfaceTexture
-import android.media.MediaPlayer
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -20,8 +18,6 @@ import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
-import android.view.Surface
-import android.view.TextureView
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
@@ -120,8 +116,6 @@ class JarvisOverlayService : Service() {
     private var hudHeader: View? = null
     private var hudCard: View? = null
     private var floatingBubble: View? = null
-    private var hudTextureView: TextureView? = null
-    private var hudMediaPlayer: MediaPlayer? = null
     private var hudSubtitle: TextView? = null
     private var hudMainText: TextView? = null
     private var hudOrbContainer: View? = null
@@ -168,7 +162,6 @@ class JarvisOverlayService : Service() {
                 setChatActive(true)
                 val userMsg = SessionMessage(sender = "user", text = text)
                 hudChatAdapter.addMessage(userMsg)
-                hudChatRecycler?.smoothScrollToPosition(hudChatAdapter.itemCount - 1)
             }
         }
 
@@ -184,7 +177,6 @@ class JarvisOverlayService : Service() {
                     isSuccess = true
                 )
                 hudChatAdapter.addMessage(agentMsg)
-                hudChatRecycler?.smoothScrollToPosition(hudChatAdapter.itemCount - 1)
             }
         }
 
@@ -202,7 +194,7 @@ class JarvisOverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
-        voiceEngine = JarvisVoiceEngine(applicationContext)
+        voiceEngine = JarvisVoiceEngine.getInstance(applicationContext)
         com.pr4nav.jarvis.voice.JarvisVoiceService.registerObserver(coreObserver)
         createNotificationChannel()
 
@@ -236,7 +228,7 @@ class JarvisOverlayService : Service() {
             Log.w(TAG, "Foreground service start exception: ${e.message}")
         }
 
-        initOverlayView()
+        preInflateOverlay()
     }
 
     private fun createNotificationChannel() {
@@ -277,7 +269,10 @@ class JarvisOverlayService : Service() {
             .build()
     }
 
-    private fun initOverlayView() {
+    private var isViewPreInflated = false
+
+    private fun preInflateOverlay() {
+        if (isViewPreInflated) return
         if (!Settings.canDrawOverlays(this)) {
             Log.w(TAG, "Cannot show overlay: SYSTEM_ALERT_WINDOW permission not granted")
             return
@@ -319,7 +314,8 @@ class JarvisOverlayService : Service() {
         setupViews()
         try {
             windowManager?.addView(overlayView, layoutParams)
-            startOverlayVoiceFlow()
+            isViewPreInflated = true
+            overlayView?.visibility = View.GONE
         } catch (e: Exception) {
             Log.e(TAG, "Failed adding overlay view: ${e.message}", e)
         }
@@ -340,7 +336,6 @@ class JarvisOverlayService : Service() {
         hudHeader = root.findViewById(R.id.hud_header)
         hudCard = root.findViewById(R.id.hud_card)
         floatingBubble = root.findViewById(R.id.hud_floating_bubble)
-        hudTextureView = root.findViewById(R.id.hud_video_view)
         hudSubtitle = root.findViewById(R.id.hud_subtitle)
         hudMainText = root.findViewById(R.id.hud_main_text)
         hudOrbContainer = root.findViewById(R.id.hud_orb_container)
@@ -361,8 +356,6 @@ class JarvisOverlayService : Service() {
         btnHudMinimize = root.findViewById(R.id.btn_hud_minimize)
         btnHudMaximize = root.findViewById(R.id.btn_hud_maximize)
         btnHudClose = root.findViewById(R.id.btn_hud_close)
-
-        setupHudVideoPlayer()
 
         // 1. Minimize button (-) -> collapse into floating bubble
         btnHudMinimize?.setOnClickListener {
@@ -418,71 +411,6 @@ class JarvisOverlayService : Service() {
         }
     }
 
-    private fun setupHudVideoPlayer() {
-        val tv = hudTextureView ?: return
-        tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                adjustTextureViewAspect(width, height)
-                playHudVideo(surface)
-            }
-            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-                adjustTextureViewAspect(width, height)
-            }
-            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                releaseHudVideo()
-                return true
-            }
-            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
-        }
-        if (tv.isAvailable) {
-            adjustTextureViewAspect(tv.width, tv.height)
-            tv.surfaceTexture?.let { playHudVideo(it) }
-        }
-    }
-
-    private fun adjustTextureViewAspect(width: Int, height: Int) {
-        val tv = hudTextureView ?: return
-        if (width <= 0 || height <= 0) return
-        val matrix = android.graphics.Matrix()
-        val minSide = Math.min(width, height)
-        val sx = minSide.toFloat() / width
-        val sy = minSide.toFloat() / height
-        matrix.setScale(sx, sy, width / 2f, height / 2f)
-        tv.setTransform(matrix)
-    }
-
-    private fun playHudVideo(surfaceTexture: SurfaceTexture) {
-        try {
-            if (hudMediaPlayer == null) {
-                hudMediaPlayer = MediaPlayer()
-            } else {
-                hudMediaPlayer?.reset()
-            }
-            hudMediaPlayer?.setSurface(Surface(surfaceTexture))
-            val afd = assets.openFd("voice/apple_siri_orb.mp4")
-            hudMediaPlayer?.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-            afd.close()
-            hudMediaPlayer?.isLooping = true
-            hudMediaPlayer?.setVolume(0f, 0f)
-            hudMediaPlayer?.prepareAsync()
-            hudMediaPlayer?.setOnPreparedListener { mp ->
-                mp.start()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error playing Apple Siri orb video: ${e.message}")
-        }
-    }
-
-    private fun releaseHudVideo() {
-        try {
-            hudMediaPlayer?.stop()
-            hudMediaPlayer?.release()
-            hudMediaPlayer = null
-        } catch (e: Exception) {
-            Log.w(TAG, "Error releasing HUD video: ${e.message}")
-        }
-    }
-
     private fun setupBubbleDragger() {
         val bubble = floatingBubble ?: return
         var initialX = 0
@@ -521,20 +449,8 @@ class JarvisOverlayService : Service() {
 
     private fun minimizeToBubble() {
         isExpanded = false
-        hudCard?.visibility = View.GONE
-        hudHeader?.visibility = View.GONE
-        hudBgImage?.visibility = View.GONE
-        hudRoot?.clipToOutline = false
-        hudRoot?.setBackgroundColor(Color.TRANSPARENT)
+        overlayView?.visibility = View.GONE
         floatingBubble?.visibility = View.VISIBLE
-        layoutParams?.let { lp ->
-            lp.width = WindowManager.LayoutParams.WRAP_CONTENT
-            lp.height = WindowManager.LayoutParams.WRAP_CONTENT
-            lp.gravity = Gravity.CENTER_VERTICAL or Gravity.END
-            lp.x = 20
-            lp.y = 0
-            windowManager?.updateViewLayout(overlayView, lp)
-        }
     }
 
     private fun setChatActive(hasChats: Boolean) {
@@ -577,7 +493,6 @@ class JarvisOverlayService : Service() {
 
         val displayMetrics = resources.displayMetrics
         val halfScreenHeight = (displayMetrics.heightPixels * 0.54).toInt()
-        wakeScreen(this)
         layoutParams?.let { lp ->
             lp.width = WindowManager.LayoutParams.MATCH_PARENT
             lp.height = halfScreenHeight
@@ -594,7 +509,6 @@ class JarvisOverlayService : Service() {
         hudSubtitle?.setTextColor(Color.parseColor("#99FFFFFF"))
 
         if (!preserveSession) {
-            // New session every time HUD is freshly opened!
             com.pr4nav.jarvis.session.JarvisSessionManager.createSession(
                 applicationContext,
                 com.pr4nav.jarvis.session.SessionType.VOICE_CHAT
@@ -602,7 +516,6 @@ class JarvisOverlayService : Service() {
             hudChatAdapter.clear()
             setChatActive(false)
         } else {
-            // Reopening minimized bubble -> keep session!
             val activeSession = com.pr4nav.jarvis.session.JarvisSessionManager.getActiveSession(
                 applicationContext,
                 com.pr4nav.jarvis.session.SessionType.VOICE_CHAT
@@ -616,7 +529,12 @@ class JarvisOverlayService : Service() {
             }
         }
 
-        startOverlayVoiceFlow()
+        overlayView?.visibility = View.VISIBLE
+        wakeScreen(this)
+
+        mainHandler.postDelayed({
+            startOverlayVoiceFlow()
+        }, 100L)
     }
 
     fun startOverlayVoiceFlow() {
@@ -647,7 +565,6 @@ class JarvisOverlayService : Service() {
                                 SessionMessage(id = currentSttMsgId, sender = "user", text = partial)
                             )
                         }
-                        hudChatRecycler?.smoothScrollToPosition(hudChatAdapter.itemCount - 1)
                     }
                 }
             },
@@ -668,23 +585,28 @@ class JarvisOverlayService : Service() {
                             hudChatAdapter.addMessage(finalUserMsg)
                         }
                         isStreamingUserStt = false
-                        hudChatRecycler?.smoothScrollToPosition(hudChatAdapter.itemCount - 1)
                         executeHudCommand(result)
                     } else {
                         isStreamingUserStt = false
-                        startOverlayVoiceFlow()
+                        // Delayed restart: relaunching SpeechRecognizer back-to-back
+                        // replays its start/stop earcons and blips audio routing,
+                        // so pause briefly instead of hot-looping.
+                        mainHandler.postDelayed({ startOverlayVoiceFlow() }, 2000L)
                     }
                 }
             },
             onError = { _ ->
                 isListening = false
                 isStreamingUserStt = false
+                // Back off before relistening: rapid SpeechRecognizer restarts
+                // replay start/stop earcons and interrupt device audio, so wait
+                // instead of hammering the recognizer while the overlay is open.
                 mainHandler.postDelayed({
                     if (isExpanded && !isListening) {
                         hudSubtitle?.text = "Listening"
-                        startOverlayVoiceFlow() // Resume listening silently while overlay is open
+                        startOverlayVoiceFlow()
                     }
-                }, 1200L)
+                }, 1000L)
             }
         )
     }
@@ -752,7 +674,6 @@ class JarvisOverlayService : Service() {
                     hudSubtitle?.text = "Jarvis"
                     setChatActive(true)
                     hudChatAdapter.addMessage(agentMsg)
-                    hudChatRecycler?.smoothScrollToPosition(hudChatAdapter.itemCount - 1)
                     voiceEngine?.speak(
                         text = "I've generated and opened the interactive UI for $uiPrompt in JarvisBrowser.",
                         interrupt = true
@@ -782,7 +703,6 @@ class JarvisOverlayService : Service() {
                 hudSubtitle?.text = "Jarvis"
                 setChatActive(true)
                 hudChatAdapter.addMessage(agentMsg)
-                hudChatRecycler?.smoothScrollToPosition(hudChatAdapter.itemCount - 1)
 
                 val speech = res.jarvisResponse.speechText
                 val display = if (speech.isNotBlank()) speech else res.jarvisResponse.text
@@ -844,7 +764,6 @@ class JarvisOverlayService : Service() {
                         setChatActive(true)
                         val userMsg = SessionMessage(sender = "user", text = cmd)
                         hudChatAdapter.addMessage(userMsg)
-                        hudChatRecycler?.smoothScrollToPosition(hudChatAdapter.itemCount - 1)
                         executeHudCommand(cmd)
                     }
                 }
@@ -860,9 +779,7 @@ class JarvisOverlayService : Service() {
         super.onDestroy()
         isRunning = false
         com.pr4nav.jarvis.voice.JarvisVoiceService.unregisterObserver(coreObserver)
-        releaseHudVideo()
         stopAssistantSpeech()
-        voiceEngine?.destroy()
         try {
             if (overlayView != null) {
                 windowManager?.removeView(overlayView)

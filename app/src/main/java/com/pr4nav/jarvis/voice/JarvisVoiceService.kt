@@ -210,7 +210,7 @@ class JarvisVoiceService : Service() {
         super.onCreate()
         instance = this
         isRunning = true
-        voiceEngine = JarvisVoiceEngine(applicationContext)
+        voiceEngine = JarvisVoiceEngine.getInstance(applicationContext)
         audioCoordinator = JarvisAudioCoordinator(applicationContext).apply {
             startDeviceMonitoring()
         }
@@ -416,6 +416,17 @@ class JarvisVoiceService : Service() {
                             Log.w(TAG, "Failed to launch overlay on wake word: ${e.message}")
                         }
 
+                        // Haptic feedback on wake word detection
+                        try {
+                            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                vibrator?.vibrate(android.os.VibrationEffect.createOneShot(50, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                            } else {
+                                @Suppress("DEPRECATION")
+                                vibrator?.vibrate(50)
+                            }
+                        } catch (_: Exception) {}
+
                         // Respond immediately with a short, natural acknowledgement: "Yes?", "At your service.", "Hi!"
                         val acks = listOf("Yes?", "At your service.", "I'm listening.", "Hi!")
                         val ack = acks.random()
@@ -482,10 +493,31 @@ class JarvisVoiceService : Service() {
 
             try {
                 speechRecognizer?.destroy()
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(applicationContext)
+                speechRecognizer = if (Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(applicationContext)) {
+                    SpeechRecognizer.createOnDeviceSpeechRecognizer(applicationContext)
+                } else {
+                    SpeechRecognizer.createSpeechRecognizer(applicationContext)
+                }
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    val lang = when (VoiceAssistantPreferences.getLanguage(applicationContext)) {
+                        "hi" -> Locale("hi", "IN")
+                        "en" -> Locale.US
+                        else -> Locale.getDefault()
+                    }
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    putExtra("android.speech.extras.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 2000L)
+                    putExtra("android.speech.extras.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 1500L)
+                    putExtra("android.speech.extras.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 1500L)
+                }
+                audioCoordinator?.silenceEarconForStart(intent)
+
                 speechRecognizer?.setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         Log.d(TAG, "Recognizer ready for speech")
+                        audioCoordinator?.restoreEarconAfterStart()
                     }
 
                     override fun onBeginningOfSpeech() {
@@ -499,10 +531,12 @@ class JarvisVoiceService : Service() {
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {
                         Log.d(TAG, "Speech input ended")
+                        audioCoordinator?.silenceEarconForEnd(intent)
                     }
 
                     override fun onError(error: Int) {
                         activeSttSessionRunning = false
+                        audioCoordinator?.restoreEarconAfterResult()
                         val errorMsg = when (error) {
                             SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
                             SpeechRecognizer.ERROR_CLIENT -> "Client error"
@@ -523,6 +557,7 @@ class JarvisVoiceService : Service() {
 
                     override fun onResults(results: Bundle?) {
                         activeSttSessionRunning = false
+                        audioCoordinator?.restoreEarconAfterResult()
                         VoiceInstrumentation.onListenerStop("Results received", currentState.name)
 
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -552,24 +587,10 @@ class JarvisVoiceService : Service() {
                     override fun onEvent(eventType: Int, params: Bundle?) {}
                 })
 
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    val lang = when (VoiceAssistantPreferences.getLanguage(applicationContext)) {
-                        "hi" -> Locale("hi", "IN")
-                        "en" -> Locale.US
-                        else -> Locale.getDefault()
-                    }
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                    putExtra("android.speech.extras.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 2000L)
-                    putExtra("android.speech.extras.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 1500L)
-                    putExtra("android.speech.extras.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 1500L)
-                }
-
                 speechRecognizer?.startListening(intent)
             } catch (e: Exception) {
                 activeSttSessionRunning = false
+                audioCoordinator?.restoreEarconAfterResult()
                 Log.e(TAG, "Failed to start speechRecognizer: ${e.message}")
                 handleSttErrorWithBackoff(-1, e.message ?: "Exception")
             }
@@ -745,6 +766,7 @@ class JarvisVoiceService : Service() {
     private fun stopActiveSttSession(reason: String) {
         if (activeSttSessionRunning) {
             activeSttSessionRunning = false
+            audioCoordinator?.restoreEarconAfterResult()
             VoiceInstrumentation.onListenerStop(reason, currentState.name)
             try {
                 speechRecognizer?.stopListening()
@@ -834,6 +856,16 @@ class JarvisVoiceService : Service() {
         try {
             val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return
             telephonyManager = tm
+            
+            val hasReadPhoneState = ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.READ_PHONE_STATE
+            ) == PackageManager.PERMISSION_GRANTED
+            
+            if (!hasReadPhoneState) {
+                Log.w(TAG, "READ_PHONE_STATE permission not granted; skipping telephony listener registration")
+                return
+            }
+            
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val cb = object : TelephonyCallback(), TelephonyCallback.CallStateListener {
                     override fun onCallStateChanged(state: Int) {

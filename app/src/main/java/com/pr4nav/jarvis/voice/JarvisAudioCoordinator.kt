@@ -20,6 +20,11 @@ class JarvisAudioCoordinator(private val context: Context) {
 
     companion object {
         private const val TAG = "JarvisAudioCoord"
+        /**
+         * Best-effort earcon-suppression extra. Not part of AOSP RecognizerIntent;
+         * honored only by recognizers that opt in, ignored (harmlessly) elsewhere.
+         */
+        private const val EXTRA_SUPPRESS_EARCONS = "android.speech.extra.SUPPRESS_EARCONS"
     }
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -169,6 +174,45 @@ class JarvisAudioCoordinator(private val context: Context) {
         } catch (e: Exception) {
             Log.w(TAG, "Error updating communication device: ${e.message}")
         }
+    }
+
+    /**
+     * Best-effort request to the speech-recognition service to skip its
+     * start/end-of-listening earcon beeps, via intent extras.
+     *
+     * There is no AOSP-guaranteed extra for this (RecognizerIntent has none),
+     * so this is honored only by recognizers that opt in — it is harmless
+     * everywhere else. The real "no beeps" guarantee is structural: hands-free
+     * IDLE never runs SpeechRecognizer (only the silent AudioRecord VAD loop),
+     * STT starts only after a confirmed wake word, and we never mute duck or
+     * touch user audio streams for listening.
+     */
+    fun silenceEarconForStart(intent: android.content.Intent) {
+        intent.putExtra(EXTRA_SUPPRESS_EARCONS, true)
+    }
+
+    /**
+     * Same best-effort suppression for the end-of-speech earcon.
+     * Call this when speech input ends.
+     */
+    fun silenceEarconForEnd(intent: android.content.Intent) {
+        intent.putExtra(EXTRA_SUPPRESS_EARCONS, true)
+    }
+
+    /**
+     * Restores normal earcon behavior after recognition starts.
+     * No-op since we suppress via intent flags.
+     */
+    fun restoreEarconAfterStart() {
+        // Earcons suppressed via intent flags, nothing to restore
+    }
+
+    /**
+     * Restores normal earcon behavior after recognition result/error.
+     * No-op since we suppress via intent flags.
+     */
+    fun restoreEarconAfterResult() {
+        // Earcons suppressed via intent flags, nothing to restore
     }
 
     fun release() {

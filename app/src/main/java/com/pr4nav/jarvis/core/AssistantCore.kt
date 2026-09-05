@@ -79,7 +79,7 @@ object AssistantCore {
         JarvisWorkspace.initWorkspace(context)
         CanonicalToolRegistry.init(context)
         try {
-            voiceEngine = com.pr4nav.jarvis.voice.JarvisVoiceEngine(context.applicationContext)
+            voiceEngine = com.pr4nav.jarvis.voice.JarvisVoiceEngine.getInstance(context)
         } catch (_: Exception) {}
     }
 

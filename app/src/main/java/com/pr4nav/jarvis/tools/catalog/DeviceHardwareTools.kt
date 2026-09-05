@@ -1,11 +1,18 @@
 package com.pr4nav.jarvis.tools.catalog
 
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import com.pr4nav.jarvis.AdminReceiver
+import com.pr4nav.jarvis.JarvisAccessibilityService
+import com.pr4nav.jarvis.Shell
 import com.pr4nav.jarvis.capabilities.AudioCapability
 import com.pr4nav.jarvis.capabilities.DeviceCapability
 import com.pr4nav.jarvis.tools.CanonicalToolDef
 import com.pr4nav.jarvis.tools.CanonicalToolRegistry
+import com.pr4nav.jarvis.tools.ToolResult
 import com.pr4nav.jarvis.tools.catalog.CatalogSchemaHelper.ok
 import com.pr4nav.jarvis.tools.catalog.CatalogSchemaHelper.prop
 import com.pr4nav.jarvis.tools.catalog.CatalogSchemaHelper.schema
@@ -141,5 +148,50 @@ object DeviceHardwareTools {
                 ok("⚙️ Opened Settings ${if (sub.isNotBlank()) "for $sub" else ""}.")
             }
         ))
+
+        reg(CanonicalToolDef(
+            name = "device_lock_screen",
+            description = "Locks the device screen immediately (lock screen / lock the phone / turn off screen / sleep display).",
+            argumentSchema = schema(),
+            execute = { ctx, _ ->
+                lockScreen(ctx)
+            }
+        ))
+    }
+
+    /**
+     * Tiered screen lock: Accessibility global action first (no extra setup),
+     * then Device Admin lockNow(), then rooted keyevent sleep.
+     */
+    private fun lockScreen(ctx: Context): ToolResult {
+        // Tier 1: Accessibility GLOBAL_ACTION_LOCK_SCREEN (API 28+)
+        try {
+            if (JarvisAccessibilityService.global("lock")) {
+                return ok("🔒 Screen locked.")
+            }
+        } catch (_: Exception) {}
+
+        // Tier 2: Device Admin lockNow()
+        try {
+            val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+            val admin = ComponentName(ctx, AdminReceiver::class.java)
+            if (dpm != null && dpm.isAdminActive(admin)) {
+                dpm.lockNow()
+                return ok("🔒 Screen locked via device admin.")
+            }
+        } catch (_: Exception) {}
+
+        // Tier 3: Rooted sleep keyevent
+        try {
+            val res = Shell.root("input keyevent 223")
+            if (res.rc == 0) {
+                return ok("🔒 Screen locked.")
+            }
+        } catch (_: Exception) {}
+
+        return CatalogSchemaHelper.fail(
+            "LOCK_UNAVAILABLE",
+            "Could not lock the screen. Enable one of: Settings → Accessibility → JARVIS, or activate JARVIS as a device admin."
+        )
     }
 }

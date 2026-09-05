@@ -1,10 +1,15 @@
 package com.pr4nav.jarvis.registry
 
 import android.app.ActivityManager
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.media.AudioManager
 import android.os.Build
 import android.os.SystemClock
+import com.pr4nav.jarvis.AdminReceiver
+import com.pr4nav.jarvis.JarvisAccessibilityService
+import com.pr4nav.jarvis.Shell
 import com.pr4nav.jarvis.capabilities.AudioCapability
 import com.pr4nav.jarvis.capabilities.DeviceCapability
 import java.io.File
@@ -258,6 +263,37 @@ object DeviceDomain {
                 val cores = Runtime.getRuntime().availableProcessors()
                 val arch = System.getProperty("os.arch") ?: "arm64"
                 CapabilityExecutionResult.ok("⚡ CPU: $cores cores ($arch architecture) ready.")
+            }
+        ),
+
+        CapabilityDef(
+            id = "system.screen.lock",
+            category = "device",
+            name = "Lock Screen",
+            description = "Lock the device screen immediately",
+            aliases = listOf("lock screen", "lock the screen", "lock my phone", "lock phone", "lock the phone", "lock device", "screen off", "turn off screen", "turn off the screen", "sleep phone", "lock it"),
+            execute = { ctx, _ ->
+                try {
+                    // Tier 1: Accessibility global action (no extra setup)
+                    if (JarvisAccessibilityService.global("lock")) {
+                        CapabilityExecutionResult.ok("🔒 Screen locked.")
+                    } else {
+                        // Tier 2: Device Admin lockNow()
+                        val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+                        val admin = ComponentName(ctx, AdminReceiver::class.java)
+                        if (dpm != null && dpm.isAdminActive(admin)) {
+                            dpm.lockNow()
+                            CapabilityExecutionResult.ok("🔒 Screen locked via device admin.")
+                        } else {
+                            // Tier 3: Rooted sleep keyevent
+                            val res = Shell.root("input keyevent 223")
+                            if (res.rc == 0) CapabilityExecutionResult.ok("🔒 Screen locked.")
+                            else CapabilityExecutionResult.fail("Could not lock the screen. Enable JARVIS in Settings → Accessibility or activate it as a device admin.")
+                        }
+                    }
+                } catch (e: Exception) {
+                    CapabilityExecutionResult.fail("Could not lock the screen: ${e.message}")
+                }
             }
         ),
 

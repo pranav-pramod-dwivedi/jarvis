@@ -99,7 +99,7 @@ class JarvisBrowserActivity : AppCompatActivity() {
             return
         }
 
-        voiceEngine = JarvisVoiceEngine(applicationContext)
+        voiceEngine = JarvisVoiceEngine.getInstance(applicationContext)
 
         initViews()
         setupWebView()

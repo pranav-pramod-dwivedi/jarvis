@@ -18,7 +18,7 @@ object VoiceAssistantPreferences {
     const val KEY_FOLLOW_UP_DURATION_SEC = "follow_up_duration_sec"
     const val KEY_BARGE_IN_ENABLED = "barge_in_enabled"
     const val KEY_START_ON_BOOT = "start_on_boot"
-    const val KEY_WAKE_CONFIDENCE = "wake_confidence_threshold" // default 0.50f
+    const val KEY_WAKE_CONFIDENCE = "wake_confidence_threshold" // default 0.35f (Balanced)
     const val KEY_USE_KOKORO_TTS = "use_kokoro_tts" // default false (Android Native HD TTS is clean & crystal clear)
 
     fun getPrefs(context: Context): SharedPreferences {
@@ -38,8 +38,11 @@ object VoiceAssistantPreferences {
     }
 
     fun getWakeConfidenceThreshold(context: Context): Float {
-        val stored = getPrefs(context).getFloat(KEY_WAKE_CONFIDENCE, 0.22f)
-        return if (stored > 0.24f) 0.22f else stored
+        // Respect the user's chosen sensitivity (Sensitive / Balanced / Strict).
+        // Previously this clamped everything above 0.24 back down to 0.22, which
+        // is why Strict mode still false-triggered. Now honor 0.10–0.95.
+        val stored = getPrefs(context).getFloat(KEY_WAKE_CONFIDENCE, 0.35f)
+        return stored.coerceIn(0.10f, 0.95f)
     }
 
     fun setWakeConfidenceThreshold(context: Context, threshold: Float) =

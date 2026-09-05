@@ -262,7 +262,7 @@ class MainActivity : ComponentActivity() {
         }
 
         // 3. Voice Engine Initialization
-        voiceEngine = JarvisVoiceEngine(this)
+        voiceEngine = JarvisVoiceEngine.getInstance(this)
 
         // 4. First Run Permissions Check
         checkFirstRunPermissions()
@@ -4522,11 +4522,11 @@ fun JarvisStandbyVoiceDialog(
                         ) {
                             val presets = listOf(
                                 Triple(0.20f, "Sensitive", "0.20"),
-                                Triple(0.28f, "Balanced", "0.28"),
-                                Triple(0.45f, "Strict", "0.45")
+                                Triple(0.35f, "Balanced", "0.35"),
+                                Triple(0.60f, "Strict", "0.60")
                             )
                             presets.forEach { (thresh, name, valueStr) ->
-                                val isSelected = kotlin.math.abs(currentThreshold - thresh) < 0.04f
+                                val isSelected = kotlin.math.abs(currentThreshold - thresh) < 0.06f
                                 Surface(
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(12.dp),

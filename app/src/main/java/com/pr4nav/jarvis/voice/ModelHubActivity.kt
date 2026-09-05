@@ -40,7 +40,7 @@ class ModelHubActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_model_hub)
 
-        voiceEngine = JarvisVoiceEngine(this)
+        voiceEngine = JarvisVoiceEngine.getInstance(this)
 
         findViewById<View>(R.id.btn_back).setOnClickListener { finish() }
 

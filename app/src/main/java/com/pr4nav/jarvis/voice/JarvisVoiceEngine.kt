@@ -21,10 +21,20 @@ import java.util.Locale
  * Handles Speech-to-Text (STT) and Text-to-Speech (TTS) with
  * instant interruptibility and natural cadence.
  */
-class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListener {
+class JarvisVoiceEngine private constructor(private val context: Context) : TextToSpeech.OnInitListener {
 
     companion object {
         private const val TAG = "JarvisVoiceEngine"
+
+        @Volatile private var instance: JarvisVoiceEngine? = null
+
+        fun getInstance(context: Context): JarvisVoiceEngine {
+            return instance ?: synchronized(this) {
+                instance ?: JarvisVoiceEngine(context.applicationContext).also { instance = it }
+            }
+        }
+
+        fun isInitialized(): Boolean = instance != null
     }
 
     private var tts: TextToSpeech? = null
@@ -32,6 +42,10 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
     private var speechRecognizer: SpeechRecognizer? = null
     @Volatile var isListening = false
         private set
+
+    private constructor() : this(android.app.Application()) {
+        throw UnsupportedOperationException("Use getInstance()")
+    }
 
     init {
         tts = TextToSpeech(context.applicationContext, this)
@@ -286,18 +300,30 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
                 }
 
                 speechRecognizer = recognizer
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    putExtra("android.speech.extra.DICTATION_MODE", true)
+                }
+                audioCoordinator.silenceEarconForStart(intent)
+
                 recognizer.setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         isListening = true
+                        audioCoordinator.restoreEarconAfterStart()
                     }
                     override fun onBeginningOfSpeech() {}
                     override fun onRmsChanged(rmsdB: Float) {}
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {
                         isListening = false
+                        audioCoordinator.silenceEarconForEnd(intent)
                     }
                     override fun onError(error: Int) {
                         isListening = false
+                        audioCoordinator.restoreEarconAfterResult()
                         val msg = when (error) {
                             SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
                             SpeechRecognizer.ERROR_CLIENT -> "Client side error"
@@ -315,6 +341,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
 
                     override fun onResults(results: Bundle?) {
                         isListening = false
+                        audioCoordinator.restoreEarconAfterResult()
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val text = matches?.firstOrNull() ?: ""
                         if (text.isNotBlank()) {
@@ -332,16 +359,10 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
                     override fun onEvent(eventType: Int, params: Bundle?) {}
                 })
 
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                    putExtra("android.speech.extra.DICTATION_MODE", true)
-                }
                 recognizer.startListening(intent)
             } catch (e: Exception) {
                 isListening = false
+                audioCoordinator.restoreEarconAfterResult()
                 onError("Failed to start speech recognizer: ${e.message}")
             }
         }
@@ -349,6 +370,7 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
 
     fun stopListening() {
         try {
+            audioCoordinator.restoreEarconAfterResult()
             speechRecognizer?.stopListening()
             isListening = false
         } catch (_: Exception) {}
@@ -360,8 +382,15 @@ class JarvisVoiceEngine(private val context: Context) : TextToSpeech.OnInitListe
             speechRecognizer = null
             audioCoordinator.release()
             tts?.stop()
+        } catch (_: Exception) {}
+    }
+
+    fun destroyFully() {
+        destroy()
+        try {
             tts?.shutdown()
             tts = null
         } catch (_: Exception) {}
+        instance = null
     }
 }

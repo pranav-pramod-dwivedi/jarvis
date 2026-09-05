@@ -1,13 +1,18 @@
 package com.pr4nav.jarvis.capabilities
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.telecom.TelecomManager
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.pr4nav.jarvis.Shell
 
@@ -140,7 +145,17 @@ object PhoneCallManager {
             }
         }
 
-        // ─── Tier 4: Fallback to ACTION_DIAL (Opens dialer with number pre-filled) ───
+        // ─── Tier 4: Tap-to-call notification (Android 14–16 BAL-proof) ───
+        // Background activity starts are blocked on Android 16, but a notification
+        // tap is explicit user interaction, so the dialer/call always opens from it.
+        if (hasCallPermission) {
+            val callIntent = Intent(Intent.ACTION_CALL, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (postTapToCallNotification(context, "📞 Tap to call $resolvedName", cleanNumber, callIntent, 4101)) {
+                return CallResult(true, "CALL_PENDING_TAP", resolvedName, cleanNumber, "NOTIFICATION_TAP", "📞 Tap the notification to call $resolvedName ($cleanNumber)...")
+            }
+        }
+
+        // ─── Tier 5: Fallback to ACTION_DIAL (Opens dialer with number pre-filled) ───
         try {
             val dialIntent = Intent(Intent.ACTION_DIAL, uri)
             if (Android16SafeLauncher.startActivitySafe(context, dialIntent)) {
@@ -157,7 +172,13 @@ object PhoneCallManager {
             Log.w(TAG, "ACTION_DIAL failed: ${e.message}")
         }
 
-        // ─── Tier 5: Shell Termux fallback ───
+        // ─── Tier 6: Tap-to-dial notification (needs no Phone permission) ───
+        val dialTapIntent = Intent(Intent.ACTION_DIAL, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (postTapToCallNotification(context, "📞 Tap to dial $resolvedName", cleanNumber, dialTapIntent, 4102)) {
+            return CallResult(true, "DIALER_PENDING_TAP", resolvedName, cleanNumber, "NOTIFICATION_TAP", "📞 Tap the notification to dial $resolvedName ($cleanNumber)...")
+        }
+
+        // ─── Tier 7: Shell Termux fallback ───
         try {
             Shell.termux("am start -a android.intent.action.DIAL -d 'tel:$cleanNumber'")
             return CallResult(true, "DIALER_OPENED", resolvedName, cleanNumber, "TERMUX_SHELL", "Opening dialer for $resolvedName ($cleanNumber)...")
@@ -174,10 +195,61 @@ object PhoneCallManager {
         val uri = Uri.parse("tel:$cleanNumber")
         val dialIntent = Intent(Intent.ACTION_DIAL, uri)
         val success = Android16SafeLauncher.startActivitySafe(context, dialIntent)
-        return if (success) {
-            CallResult(true, "DIALER_OPENED", cleanNumber, cleanNumber, "ACTION_DIAL", "📞 Dialing $cleanNumber...")
-        } else {
-            CallResult(false, "DIAL_FAILED", cleanNumber, cleanNumber, "FAILED", "Failed to open dialer for $cleanNumber.")
+        if (success) {
+            return CallResult(true, "DIALER_OPENED", cleanNumber, cleanNumber, "ACTION_DIAL", "📞 Dialing $cleanNumber...")
+        }
+        val dialTapIntent = Intent(Intent.ACTION_DIAL, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (postTapToCallNotification(context, "📞 Tap to dial $cleanNumber", cleanNumber, dialTapIntent, 4103)) {
+            return CallResult(true, "DIALER_PENDING_TAP", cleanNumber, cleanNumber, "NOTIFICATION_TAP", "📞 Tap the notification to dial $cleanNumber...")
+        }
+        return CallResult(false, "DIAL_FAILED", cleanNumber, cleanNumber, "FAILED", "Failed to open dialer for $cleanNumber.")
+    }
+
+    /**
+     * Posts a high-priority tap-to-call notification. Used as the Android 16
+     * fallback: direct background launches may be blocked, but a notification
+     * tap is user interaction and always launches the dialer/call screen.
+     */
+    private fun postTapToCallNotification(
+        context: Context,
+        title: String,
+        number: String,
+        target: Intent,
+        notifId: Int
+    ): Boolean {
+        try {
+            if (Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.w(TAG, "POST_NOTIFICATIONS not granted; skipping tap-to-call notification")
+                return false
+            }
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                nm.createNotificationChannel(
+                    NotificationChannel("jarvis_calls", "JARVIS Calls", NotificationManager.IMPORTANCE_HIGH).apply {
+                        description = "Tap-to-call fallback for outgoing calls"
+                    }
+                )
+            }
+            val pi = PendingIntent.getActivity(
+                context, notifId, target,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            val notif = NotificationCompat.Builder(context, "jarvis_calls")
+                .setSmallIcon(android.R.drawable.ic_menu_call)
+                .setContentTitle(title)
+                .setContentText(number)
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .build()
+            nm.notify(notifId, notif)
+            Log.i(TAG, "Posted tap-to-call notification for $number")
+            return true
+        } catch (e: Exception) {
+            Log.w(TAG, "Tap-to-call notification failed: ${e.message}")
+            return false
         }
     }
 }

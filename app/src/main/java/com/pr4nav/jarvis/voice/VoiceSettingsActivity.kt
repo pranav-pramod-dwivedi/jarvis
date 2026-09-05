@@ -29,7 +29,7 @@ class VoiceSettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_voice_settings)
 
-        voiceEngine = JarvisVoiceEngine(this)
+        voiceEngine = JarvisVoiceEngine.getInstance(this)
 
         findViewById<View>(R.id.btn_back)?.setOnClickListener { finish() }
 

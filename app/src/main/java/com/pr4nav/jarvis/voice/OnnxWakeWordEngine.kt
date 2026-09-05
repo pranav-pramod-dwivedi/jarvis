@@ -60,14 +60,21 @@ class OnnxWakeWordEngine : WakeWordEngine {
 
     // Anti-False-Positive Gating & Calibration
     private var lastDetectionTimestamp = 0L
-    private val MIN_VOCAL_PEAK = 20 // Fully sensitive; neural ONNX model handles noise and silence discrimination
-    private val DETECTION_COOLDOWN_MS = 1000L
+    private var consecutiveHits = 0
+    // Energy floor: 16-bit speech peaks are in the thousands; anything below
+    // this is ambient hum/silence and must never open the HUD on its own.
+    private val MIN_VOCAL_PEAK = 350
+    private val DETECTION_COOLDOWN_MS = 4000L
+    // Require sustained neural agreement across consecutive inference steps so a
+    // single noisy frame can never trigger a wake.
+    private val REQUIRED_CONSECUTIVE_HITS = 2
 
     init {
         resetBuffers()
     }
 
     private fun resetBuffers() {
+        consecutiveHits = 0
         rawAudioBuffer.clear()
         // Pre-fill history samples with silence
         for (i in 0 until HISTORY_SAMPLES) {
@@ -226,7 +233,7 @@ class OnnxWakeWordEngine : WakeWordEngine {
             totalInferenceTimeMs += latency
             averageInferenceLatencyMs = totalInferenceTimeMs / totalInferenceCount
 
-            val threshold = contextRef?.get()?.let { VoiceAssistantPreferences.getWakeConfidenceThreshold(it) } ?: 0.28f
+            val threshold = contextRef?.get()?.let { VoiceAssistantPreferences.getWakeConfidenceThreshold(it) } ?: 0.45f
 
             logThrottleCounter++
             if (DEBUG_WAKE && (prob >= 0.15f || logThrottleCounter % 25 == 0)) {
@@ -236,20 +243,30 @@ class OnnxWakeWordEngine : WakeWordEngine {
 
             val now = System.currentTimeMillis()
             if (now - lastDetectionTimestamp < DETECTION_COOLDOWN_MS) {
+                consecutiveHits = 0
                 return false
             }
 
             // Energy Gate: Reject low-power ambient noise / silence
             if (peak < MIN_VOCAL_PEAK) {
+                consecutiveHits = 0
                 return false
             }
 
             if (prob >= threshold) {
+                consecutiveHits++
+                if (consecutiveHits < REQUIRED_CONSECUTIVE_HITS) {
+                    Log.d(TAG, "[DEBUG_WAKE] First over-threshold frame (Prob: %.4f), awaiting confirmation frame".format(prob))
+                    return false
+                }
                 Log.i(TAG, "★ WAKE_DETECTED! Confirmed 'Hey Jarvis' wake word (Prob: %.4f, Threshold: %.2f, Latency: %dms, Peak: %d)"
                     .format(prob, threshold, latency, peak))
                 lastDetectionTimestamp = now
+                consecutiveHits = 0
                 resetBuffers()
                 return true
+            } else {
+                consecutiveHits = 0
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error in streaming step: ${e.message}", e)

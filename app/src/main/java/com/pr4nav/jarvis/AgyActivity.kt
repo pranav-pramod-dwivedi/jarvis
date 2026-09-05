@@ -66,7 +66,7 @@ class AgyActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_agy)
 
-        voiceEngine = com.pr4nav.jarvis.voice.JarvisVoiceEngine(this)
+        voiceEngine = com.pr4nav.jarvis.voice.JarvisVoiceEngine.getInstance(this)
         com.pr4nav.jarvis.automation.JarvisAutomationEngine.init(this)
 
         bindViews()

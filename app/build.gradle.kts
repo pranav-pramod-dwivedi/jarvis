@@ -15,8 +15,8 @@ android {
         applicationId = "com.pr4nav.jarvis"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1-installer"
+        versionCode = 3
+        versionName = "1.1.1-hotfix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -26,6 +26,7 @@ android {
             optimization {
                 enable = false
             }
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {

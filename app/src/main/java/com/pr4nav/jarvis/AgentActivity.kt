@@ -100,7 +100,7 @@ class AgentActivity : AppCompatActivity() {
             }
         }
 
-        voiceEngine = JarvisVoiceEngine(this)
+        voiceEngine = JarvisVoiceEngine.getInstance(this)
 
         findViewById<View>(R.id.btn_back)?.setOnClickListener { finish() }
 
