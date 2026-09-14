@@ -37,6 +37,28 @@ object KiraTtsClient {
     /** Legacy fallback voice if the selected voice errors. */
     const val FALLBACK_VOICE = "alloy"
 
+    /** Last cloud failure, surfaced in Voice Settings so errors are never silent. */
+    @Volatile var lastError: String? = null
+        private set
+
+    fun lastErrorShort(): String {
+        val e = lastError ?: return "Cloud TTS ready"
+        val lower = e.lowercase()
+        return when {
+            lower.contains("402") || lower.contains("insufficient") || lower.contains("quota") || lower.contains("balance") ->
+                "Cloud TTS quota empty — top up at kiraai.vn (using local voice)"
+            lower.contains("network") || lower.contains("unable to resolve") || lower.contains("timeout") ->
+                "Cloud TTS unreachable — using local voice"
+            else -> "Cloud TTS error — using local voice"
+        }
+    }
+
+    private fun isQuotaError(msg: String): Boolean {
+        val m = msg.lowercase()
+        return m.contains("402") || m.contains("insufficient") || m.contains("quota") ||
+            m.contains("balance") || m.contains("top up")
+    }
+
     private val executor = Executors.newCachedThreadPool()
 
     data class TtsAudioResult(
@@ -159,12 +181,18 @@ object KiraTtsClient {
                 if (code !in 200..299) {
                     val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $code"
                     Log.w(TAG, "Kira TTS HTTP $code error (voice: $currentVoice): $err")
+                    lastError = "HTTP $code: ${err.take(160)}"
+                    if (isQuotaError("HTTP $code $err")) {
+                        // Wallet empty: the fallback voice fails identically — stop here.
+                        return null
+                    }
                     continue
                 }
 
                 val rawAudioBytes = conn.inputStream.use { it.readBytes() }
                 if (rawAudioBytes.isEmpty()) {
                     Log.w(TAG, "Kira TTS returned empty audio stream (voice: $currentVoice)")
+                    lastError = "Empty audio stream"
                     continue
                 }
 
@@ -178,9 +206,11 @@ object KiraTtsClient {
                 val latency = System.currentTimeMillis() - t0
                 Log.i(TAG, "Synthesized via kira-3.0-flash-tts ($currentVoice, ${rawAudioBytes.size} bytes, ${durationMs}ms audio) in ${latency}ms")
 
+                lastError = null
                 return TtsAudioResult(cacheFile, durationMs, rawAudioBytes)
             } catch (e: Exception) {
                 Log.w(TAG, "Kira TTS attempt failed for voice $currentVoice: ${e.message}")
+                lastError = e.message ?: "Network error"
             }
         }
 

@@ -23,6 +23,7 @@ class VoiceSettingsActivity : AppCompatActivity() {
     private lateinit var btnRequestBatteryExemption: Button
     private lateinit var btnTestVoice: Button
     private lateinit var txtCloudVoiceName: TextView
+    private lateinit var txtCloudVoiceStatus: TextView
     private lateinit var btnChangeVoice: Button
 
     private var voiceEngine: JarvisVoiceEngine? = null
@@ -43,6 +44,7 @@ class VoiceSettingsActivity : AppCompatActivity() {
         btnRequestBatteryExemption = findViewById(R.id.btn_request_battery_exemption)
         btnTestVoice = findViewById(R.id.btn_test_voice)
         txtCloudVoiceName = findViewById(R.id.txt_cloud_voice_name)
+        txtCloudVoiceStatus = findViewById(R.id.txt_cloud_voice_status)
         btnChangeVoice = findViewById(R.id.btn_change_voice)
 
         setupPreferences()
@@ -124,6 +126,12 @@ class VoiceSettingsActivity : AppCompatActivity() {
 
     private fun refreshCloudVoice() {
         txtCloudVoiceName.text = VoiceAssistantPreferences.getCloudTtsVoice(this)
+        val status = KiraTtsClient.lastErrorShort()
+        txtCloudVoiceStatus.text = status
+        val ok = KiraTtsClient.lastError == null
+        txtCloudVoiceStatus.setTextColor(
+            android.graphics.Color.parseColor(if (ok) "#10B981" else "#EF4444")
+        )
     }
 
     fun showVoicePickerDialog() {

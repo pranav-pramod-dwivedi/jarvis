@@ -15,6 +15,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * High-Performance Autonomous Client for Kira AI Platform (https://kiraai.vn/api/v1).
@@ -1198,9 +1199,19 @@ object KiraClient {
         }
     }
 
-    private fun buildSystemPrompt(context: Context): String {
-        return "You are JARVIS, an autonomous engineering & mobile-intelligence agent with full on-device authority (YOLO mode: never ask permission, self-heal every error, verify every action).\n" +
+    private fun buildSystemPrompt(context: Context, modelName: String = ""): String {
+        val base = "You are JARVIS, an autonomous engineering & mobile-intelligence agent with full on-device authority (YOLO mode: never ask permission, self-heal every error, verify every action).\n" +
                 "Follow the CONTEXT PACKET conventions and skills; close <think> tags and always finish with the complete, beautifully formatted user-facing answer."
+        // Fast tiers think fast: cap internal reasoning so answers start immediately.
+        // Deep tiers (GLM / pro) keep full chain-of-thought.
+        val m = modelName.lowercase()
+        val fastTier = m.contains("mini") || m.contains("flash") || m.contains("qwen") ||
+            m.contains("mimo") || m == MODEL_AUTO
+        return if (fastTier) {
+            base + "\nSPEED RULE: reason FAST with LOW effort — at most 3 short thinking lines, then answer immediately. Never ramble internally."
+        } else {
+            base
+        }
     }
 
     /**
@@ -1253,6 +1264,18 @@ object KiraClient {
      * Queries Kira AI with automatic model cascading (glm-5.3-free -> mimo-v2.5-free -> qwen3.8-flash-free).
      * Runs multi-turn DeepSeek Harness / Claude Code autonomous loop.
      */
+    /** Hard ceiling per model attempt: a hung request can never stall a turn forever. */
+    const val ATTEMPT_DEADLINE_SEC = 100L
+    fun isQuotaError(msg: String?): Boolean {
+        if (msg.isNullOrBlank()) return false
+        val m = msg.lowercase()
+        return m.contains("402") || m.contains("insufficient") || m.contains("quota") ||
+            m.contains("balance") || m.contains("top up") || m.contains("topup") ||
+            m.contains("vnd_balance_exhausted")
+    }
+
+    fun quotaHint(): String = "Kira wallet empty (0 VND) — top up at kiraai.vn to continue."
+
     fun query(
         context: Context,
         prompt: String,
@@ -1298,17 +1321,31 @@ object KiraClient {
                 Log.i(TAG, "Attempting Kira AI model: $currentModel")
 
                 val attemptT0 = System.currentTimeMillis()
-                val res = attemptQueryWithModel(
-                    context = context,
-                    apiKey = apiKey,
-                    modelName = currentModel,
-                    prompt = prompt,
-                    history = history,
-                    t0 = t0,
-                    onStatus = onStatus,
-                    onChunk = onChunk,
-                    onEvent = onEvent
-                )
+                // Hard deadline: a hung socket can never stall a turn forever.
+                val future = executor.submit<KiraResponse?> {
+                    attemptQueryWithModel(
+                        context = context,
+                        apiKey = apiKey,
+                        modelName = currentModel,
+                        prompt = prompt,
+                        history = history,
+                        t0 = t0,
+                        onStatus = onStatus,
+                        onChunk = onChunk,
+                        onEvent = onEvent
+                    )
+                }
+                val res = try {
+                    future.get(ATTEMPT_DEADLINE_SEC, TimeUnit.SECONDS)
+                } catch (e: java.util.concurrent.TimeoutException) {
+                    future.cancel(true)
+                    Log.w(TAG, "Model $currentModel timed out after $ATTEMPT_DEADLINE_SEC s; escalating.")
+                    KiraResponse(success = false, response = "",
+                        error = "Model $currentModel timed out after ${ATTEMPT_DEADLINE_SEC}s", modelUsed = currentModel)
+                } catch (e: Exception) {
+                    KiraResponse(success = false, response = "",
+                        error = e.message ?: "Attempt failed", modelUsed = currentModel)
+                }
                 if (res != null && res.success) {
                     recordModelLatency(context, currentModel, System.currentTimeMillis() - attemptT0)
                 }
@@ -1319,6 +1356,13 @@ object KiraClient {
                     return@execute
                 } else {
                     val err = res?.error ?: "Model $currentModel yielded empty or invalid response"
+                    if (isQuotaError(err)) {
+                        // Wallet empty: every other Kira model will fail identically — skip the cascade.
+                        lastError = quotaHint()
+                        Log.w(TAG, "Quota exhausted; skipping remaining Kira cascade.")
+                        onStatus?.invoke("Kira wallet empty — Top up at kiraai.vn. Trying next engine…")
+                        break
+                    }
                     lastError = err
                     Log.w(TAG, "Model $currentModel yielded no usable response ($err); escalating to next in cascade...")
                 }
@@ -1348,7 +1392,7 @@ object KiraClient {
         val messages = JSONArray()
 
         // 2-line system prompt. Everything else travels as a [CONTEXT PACKET] user message.
-        val systemPrompt = buildSystemPrompt(context)
+        val systemPrompt = buildSystemPrompt(context, modelName)
         messages.put(JSONObject().put("role", "system").put("content", systemPrompt))
 
         // Real context: deep history (128k–1M windows), context packet right before the prompt.
@@ -1388,8 +1432,8 @@ object KiraClient {
 
                 val conn = (URL(KIRA_CHAT_ENDPOINT).openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
-                    connectTimeout = 10_000
-                    readTimeout = 45_000
+                    connectTimeout = 8_000
+                    readTimeout = 30_000
                     doOutput = true
                     doInput = true
                     setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -1503,6 +1547,9 @@ object KiraClient {
                     }
                     if (onEvent == null) onChunk?.invoke(finalResponseText)
                     onEvent?.invoke(
+                        com.pr4nav.jarvis.chat.AgentStreamEvent.TextDelta(finalResponseText)
+                    )
+                    onEvent?.invoke(
                         com.pr4nav.jarvis.chat.AgentStreamEvent.ThinkingDone(System.currentTimeMillis() - t0)
                     )
                     onEvent?.invoke(
@@ -1542,6 +1589,9 @@ object KiraClient {
                                 "Completed requested operations."
                             }
                             if (onEvent == null) onChunk?.invoke(finalResponseText)
+                            onEvent?.invoke(
+                                com.pr4nav.jarvis.chat.AgentStreamEvent.TextDelta(finalResponseText)
+                            )
                             onEvent?.invoke(
                                 com.pr4nav.jarvis.chat.AgentStreamEvent.Final(
                                     text = finalResponseText,
@@ -1624,6 +1674,9 @@ object KiraClient {
                                 "Completed requested operations."
                             }
                             if (onEvent == null) onChunk?.invoke(finalResponseText)
+                            onEvent?.invoke(
+                                com.pr4nav.jarvis.chat.AgentStreamEvent.TextDelta(finalResponseText)
+                            )
                             onEvent?.invoke(
                                 com.pr4nav.jarvis.chat.AgentStreamEvent.Final(
                                     text = finalResponseText,

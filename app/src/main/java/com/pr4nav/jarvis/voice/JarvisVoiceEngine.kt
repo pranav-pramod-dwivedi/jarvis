@@ -50,6 +50,7 @@ class JarvisVoiceEngine private constructor(private val context: Context) : Text
     private var speechRecognizer: SpeechRecognizer? = null
     @Volatile var isListening = false
         private set
+    @Volatile private var lastToastedTtsError: String? = null
 
     private constructor() : this(android.app.Application()) {
         throw UnsupportedOperationException("Use getInstance()")
@@ -178,6 +179,14 @@ class JarvisVoiceEngine private constructor(private val context: Context) : Text
                     Log.w(TAG, "Kira TTS error: $err; falling back to local Android TTS engine")
                     mainHandler.post {
                         if (currentSynthesisJobId == jobId) {
+                            // Surface cloud failures once per distinct error (no spam).
+                            val short = KiraTtsClient.lastErrorShort()
+                            if (KiraTtsClient.lastError != null && short != lastToastedTtsError) {
+                                lastToastedTtsError = short
+                                try {
+                                    android.widget.Toast.makeText(context, short, android.widget.Toast.LENGTH_LONG).show()
+                                } catch (_: Exception) { }
+                            }
                             speakWithLocalTts(cleanText, interrupt = false, onWordSpoken, wrappedOnDone)
                         }
                     }

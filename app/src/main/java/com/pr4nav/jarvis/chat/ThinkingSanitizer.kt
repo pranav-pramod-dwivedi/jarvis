@@ -43,4 +43,16 @@ object ThinkingSanitizer {
         if (t.equals("null", ignoreCase = true)) return ""
         return if (t.length > maxChars) t.take(maxChars).trimEnd() + "…" else t
     }
+
+    /** One-line cleaner for status/step rows: no emoji, no markdown symbols. */
+    fun cleanLine(raw: String, maxChars: Int = 140): String {
+        if (raw.isBlank()) return ""
+        var t = raw.trim()
+        t = EMOJI.replace(t, "")
+        t = t.replace(Regex("[`*#_~>|]"), "")
+        t = t.replace(Regex("\\[([^\\]]+)\\]\\([^)]+\\)"), "$1")
+        t = t.replace(Regex("\\s+"), " ").trim()
+        if (t.equals("null", ignoreCase = true)) return ""
+        return if (t.length > maxChars) t.take(maxChars).trimEnd() + "…" else t
+    }
 }

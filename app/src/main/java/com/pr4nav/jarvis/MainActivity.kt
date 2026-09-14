@@ -30,6 +30,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import java.text.SimpleDateFormat
@@ -100,7 +102,13 @@ import com.pr4nav.jarvis.capabilities.Capabilities
 import com.pr4nav.jarvis.capabilities.RootCapability
 import com.pr4nav.jarvis.companion.CompanionManager
 import com.pr4nav.jarvis.router.AgentExecutionMode
+import com.pr4nav.jarvis.router.RouteEngine
 import com.pr4nav.jarvis.router.UnifiedAssistantDispatcher
+import com.pr4nav.jarvis.llm.KiraClient
+import com.pr4nav.jarvis.chat.AgentStreamEvent
+import com.pr4nav.jarvis.chat.Followups
+import com.pr4nav.jarvis.chat.ThinkingSanitizer
+import com.pr4nav.jarvis.chat.ToolMeta
 import com.pr4nav.jarvis.session.JarvisSession
 import com.pr4nav.jarvis.session.JarvisSessionManager
 import com.pr4nav.jarvis.session.SessionHistoryDialog
@@ -558,6 +566,8 @@ fun JarvisMainApp(
     var liveThinkingTitle by remember { mutableStateOf("Thinking…") }
     var liveStreamingText by remember { mutableStateOf("") }
     var liveThinkingSteps by remember { mutableStateOf<List<String>>(emptyList()) }
+    var liveThinkingBody by remember { mutableStateOf("") }
+    val thinkingBuffer = remember { StringBuilder() }
     var activeJob by remember { mutableStateOf<Job?>(null) }
     var lastSubmittedPrompt by remember { mutableStateOf("") }
 
@@ -690,6 +700,74 @@ fun JarvisMainApp(
         liveStreamingText = "All background processes stopped. 0% CPU & battery active."
         liveThinkingSteps = listOf("Gaming Mode: ACTIVE", "Voice Service: STOPPED", "HUD: HIDDEN", "Subprocesses: TERMINATED")
         Toast.makeText(context, "🛑 GAMING MODE: All processes stopped (0% CPU & Battery)", Toast.LENGTH_LONG).show()
+    }
+
+    /** Posts a lightweight mid-work validation note into the chat trail. */
+    fun postSystemNote(text: String) {
+        val clean = ThinkingSanitizer.cleanLine(text, 160)
+        if (clean.isBlank()) return
+        try {
+            val note = SessionMessage(sender = "system", text = clean, isSuccess = true)
+            JarvisSessionManager.appendMessage(context, currentSession, note)
+            sessionMessages = sessionMessages + note
+        } catch (_: Exception) { }
+    }
+
+    /** Finalizes a turn into a persisted agent message. Never throws. */
+    fun appendAgentResult(
+        res: com.pr4nav.jarvis.router.UnifiedExecutionResult,
+        streamed: String,
+        stepsSoFar: List<String>
+    ) {
+        val rawReply = if (res.jarvisResponse.text.isNotBlank() && !res.jarvisResponse.text.equals("null", ignoreCase = true)) {
+            res.jarvisResponse.text
+        } else if (res.speechResponse.isNotBlank() && !res.speechResponse.equals("null", ignoreCase = true)) {
+            res.speechResponse
+        } else if (streamed.isNotBlank() && !streamed.trim().equals("null", ignoreCase = true)) {
+            streamed
+        } else {
+            "Action executed successfully."
+        }
+        val (_, cleanReply) = com.pr4nav.jarvis.response.UserResponseSanitizer.stripThinking(rawReply)
+        val replyText = if (cleanReply.isNotBlank() && !cleanReply.equals("null", ignoreCase = true)) cleanReply else rawReply
+
+        val steps = mutableListOf<String>()
+        // 1. Reasoning trace, sanitized to clean prose (no symbols).
+        if (res.thinkingTrace.isNotBlank() && !res.thinkingTrace.equals("null", ignoreCase = true)) {
+            val cleanTrace = ThinkingSanitizer.sanitize(
+                res.thinkingTrace.replace(Regex("(?i)</?(think|thought|reasoning)>"), "")
+            )
+            if (cleanTrace.isNotBlank()) {
+                steps.add("Reasoning:\n$cleanTrace")
+            }
+        }
+        // 2. Tool + status trail (already cleaned at emission).
+        if (stepsSoFar.isNotEmpty()) {
+            steps.addAll(stepsSoFar.filter { it.isNotBlank() && !it.contains("null", ignoreCase = true) }.take(6))
+        }
+        steps.add("Engine: ${res.modelName}")
+        if (res.latencyMs > 0) steps.add("Latency: ${res.latencyMs}ms")
+        if (res.source == com.pr4nav.jarvis.router.ExecutionSource.KIRA_AGENT) {
+            steps.add("Kira Full Power Active")
+        }
+
+        val jarvisMsg = SessionMessage(
+            sender = "agent",
+            text = replyText,
+            steps = steps,
+            isSuccess = res.handled
+        )
+        JarvisSessionManager.appendMessage(context, currentSession, jarvisMsg)
+        sessionMessages = sessionMessages + jarvisMsg
+
+        isWorking = false
+        liveStreamingText = ""
+        liveThinkingSteps = emptyList()
+        liveThinkingBody = ""
+
+        if (res.jarvisResponse.speechText.isNotBlank() && !res.jarvisResponse.speechText.equals("null", ignoreCase = true)) {
+            voiceEngine?.speak(res.jarvisResponse.speechText, interrupt = false)
+        }
     }
 
     fun dispatchCommand(prompt: String, isFromVoice: Boolean = false) {
@@ -901,6 +979,8 @@ fun JarvisMainApp(
         liveThinkingTitle = "Thinking…"
         liveStreamingText = ""
         liveThinkingSteps = listOf("Analyzing intent…")
+        liveThinkingBody = ""
+        thinkingBuffer.clear()
 
         activeJob = scope.launch(Dispatchers.IO) {
             val accumulatedChunks = StringBuilder()
@@ -912,9 +992,12 @@ fun JarvisMainApp(
                 onStatus = { status ->
                     if (status.isNotBlank() && !status.contains("null", ignoreCase = true)) {
                         scope.launch(Dispatchers.Main) {
-                            liveThinkingTitle = status
-                            intermediateSteps.add(status)
-                            liveThinkingSteps = intermediateSteps.toList()
+                            val clean = ThinkingSanitizer.cleanLine(status, 90)
+                            if (clean.isNotBlank()) {
+                                liveThinkingTitle = clean
+                                intermediateSteps.add(clean)
+                                liveThinkingSteps = intermediateSteps.toList()
+                            }
                         }
                     }
                 },
@@ -928,55 +1011,74 @@ fun JarvisMainApp(
                 },
                 onResult = { res ->
                     scope.launch(Dispatchers.Main) {
-                        val rawReply = if (res.jarvisResponse.text.isNotBlank() && !res.jarvisResponse.text.equals("null", ignoreCase = true)) {
-                            res.jarvisResponse.text
-                        } else if (res.speechResponse.isNotBlank() && !res.speechResponse.equals("null", ignoreCase = true)) {
-                            res.speechResponse
-                        } else if (accumulatedChunks.isNotBlank() && !accumulatedChunks.toString().trim().equals("null", ignoreCase = true)) {
-                            accumulatedChunks.toString()
-                        } else {
-                            "Action executed successfully."
+                        try {
+                            appendAgentResult(res, accumulatedChunks.toString(), intermediateSteps.toList())
+                        } catch (e: Exception) {
+                            // A reply must never silently vanish: always land a bubble.
+                            android.util.Log.e("JarvisMain", "onResult render failed: ${e.message}", e)
+                            val errMsg = SessionMessage(
+                                sender = "agent",
+                                text = "Reply failed to render (${e.message ?: "unknown error"}). Please try again.",
+                                steps = listOf("Render failure guard"),
+                                isSuccess = false
+                            )
+                            try {
+                                JarvisSessionManager.appendMessage(context, currentSession, errMsg)
+                            } catch (_: Exception) { }
+                            sessionMessages = sessionMessages + errMsg
+                            isWorking = false
+                            liveStreamingText = ""
+                            liveThinkingSteps = emptyList()
+                            liveThinkingBody = ""
                         }
-                        val (_, cleanReply) = com.pr4nav.jarvis.response.UserResponseSanitizer.stripThinking(rawReply)
-                        val replyText = if (cleanReply.isNotBlank() && !cleanReply.equals("null", ignoreCase = true)) cleanReply else rawReply
-
-                        val steps = mutableListOf<String>()
-                        // 1. Preserve reasoning / thinking trace in steps so it's expandable and viewable in the message bubble!
-                        if (res.thinkingTrace.isNotBlank() && !res.thinkingTrace.equals("null", ignoreCase = true)) {
-                            val cleanTrace = res.thinkingTrace
-                                .replace("<think>", "")
-                                .replace("</think>", "")
-                                .trim()
-                            if (cleanTrace.isNotBlank() && !cleanTrace.equals("null", ignoreCase = true)) {
-                                steps.add("🧠 Reasoning:\n$cleanTrace")
+                    }
+                },
+                onEvent = { ev ->
+                    when (ev) {
+                        is AgentStreamEvent.ThinkingDelta -> scope.launch(Dispatchers.Main) {
+                            thinkingBuffer.append(ev.text.trim()).append("\n\n")
+                            liveThinkingBody = ThinkingSanitizer.sanitize(thinkingBuffer.toString(), 700)
+                        }
+                        is AgentStreamEvent.ThinkingDone -> scope.launch(Dispatchers.Main) {
+                            liveThinkingTitle = "Answering…"
+                        }
+                        is AgentStreamEvent.ToolStart -> scope.launch(Dispatchers.Main) {
+                            val meta = ToolMeta.of(ev.tool, ev.detail)
+                            val line = ThinkingSanitizer.cleanLine(
+                                "${meta.label} · ${ev.detail.ifBlank { ev.tool }}", 90)
+                            if (line.isNotBlank()) {
+                                intermediateSteps.add(line)
+                                liveThinkingSteps = intermediateSteps.toList().takeLast(6)
+                                liveThinkingTitle = line.take(52)
                             }
                         }
-                        // 2. Add intermediate tool and status steps
-                        if (intermediateSteps.isNotEmpty()) {
-                            val filtered = intermediateSteps.filter { !it.contains("null", ignoreCase = true) }
-                            steps.addAll(filtered.take(4))
+                        is AgentStreamEvent.ToolEnd -> scope.launch(Dispatchers.Main) {
+                            val meta = ToolMeta.of(ev.tool, ev.detail)
+                            val ok = ev.exitCode == 0 && ev.verified
+                            val dur = if (ev.durationMs < 1000) "${ev.durationMs}ms"
+                                else String.format("%.1fs", ev.durationMs / 1000f)
+                            val doneLine = "${if (ok) "Done" else "Failed"} · ${meta.label} · $dur"
+                            intermediateSteps.add(doneLine)
+                            liveThinkingSteps = intermediateSteps.toList().takeLast(6)
+                            liveThinkingTitle = "Working…"
+                            // Mid-work validation message so progress is visible in the chat.
+                            postSystemNote("${if (ok) "Done" else "Failed"} · ${meta.label} · ${ev.detail.take(80)} · $dur")
                         }
-                        steps.add("Engine: ${res.modelName}")
-                        if (res.latencyMs > 0) steps.add("Latency: ${res.latencyMs}ms")
-                        if (res.source == com.pr4nav.jarvis.router.ExecutionSource.KIRA_AGENT) {
-                            steps.add("Kira Full Power Active ✓")
+                        is AgentStreamEvent.TextDelta -> scope.launch(Dispatchers.Main) {
+                            if (ev.text.isNotBlank()) {
+                                accumulatedChunks.append(ev.text)
+                                liveStreamingText = accumulatedChunks.toString()
+                            }
                         }
-
-                        val jarvisMsg = SessionMessage(
-                            sender = "agent",
-                            text = replyText,
-                            steps = steps,
-                            isSuccess = res.handled
-                        )
-                        JarvisSessionManager.appendMessage(context, currentSession, jarvisMsg)
-                        sessionMessages = sessionMessages + jarvisMsg
-
-                        isWorking = false
-                        liveStreamingText = ""
-                        liveThinkingSteps = emptyList()
-
-                        if (res.jarvisResponse.speechText.isNotBlank() && !res.jarvisResponse.speechText.equals("null", ignoreCase = true)) {
-                            voiceEngine?.speak(res.jarvisResponse.speechText, interrupt = false)
+                        is AgentStreamEvent.ArtifactSaved -> scope.launch(Dispatchers.Main) {
+                            intermediateSteps.add("Saved artifact: ${ev.title}")
+                            liveThinkingSteps = intermediateSteps.toList().takeLast(6)
+                        }
+                        is AgentStreamEvent.Status -> Unit // onStatus already covers this
+                        is AgentStreamEvent.Final -> Unit // onResult renders the final bubbles
+                        is AgentStreamEvent.Error -> scope.launch(Dispatchers.Main) {
+                            accumulatedChunks.append("\n\n${ev.message}")
+                            liveStreamingText = accumulatedChunks.toString()
                         }
                     }
                 }
@@ -1079,6 +1181,7 @@ fun JarvisMainApp(
                         thinkingTitle = liveThinkingTitle,
                         streamingText = liveStreamingText,
                         thinkingSteps = liveThinkingSteps,
+                        thinkingBody = liveThinkingBody,
                         currentMode = currentMode,
                         titleFontFamily = spaceGroteskFamily,
                         bodyFontFamily = dmSansFamily,
@@ -2556,6 +2659,7 @@ fun ConversationView(
     thinkingTitle: String,
     streamingText: String,
     thinkingSteps: List<String>,
+    thinkingBody: String,
     currentMode: AgentExecutionMode,
     titleFontFamily: FontFamily,
     bodyFontFamily: FontFamily,
@@ -2576,12 +2680,35 @@ fun ConversationView(
     val context = LocalContext.current
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    var isKiraSheetOpen by remember { mutableStateOf(false) }
+    val convScope = rememberCoroutineScope()
+
+    // Smart scroll: only auto-scroll when the user is already at the bottom.
+    val atBottom by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val total = info.totalItemsCount
+            if (total == 0) true else {
+                val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+                lastVisible >= total - 1
+            }
+        }
+    }
+
+    // Live Kira model + route labels (re-read from prefs on every recomposition).
+    val kiraRaw = KiraClient.getModel(context)
+    val kiraEffective = if (kiraRaw == KiraClient.MODEL_AUTO) KiraClient.lastAutoModel() else kiraRaw
+    val kiraLabel = KiraClient.modelLabel(kiraEffective)
+    val kiraPrefix = if (kiraRaw == KiraClient.MODEL_AUTO) "AUTO" else "MODEL"
+    val routeShort = UnifiedAssistantDispatcher.routeShort(UnifiedAssistantDispatcher.getRoute(context))
 
     LaunchedEffect(messages.size, isWorking, streamingText) {
-        if (messages.isNotEmpty() || isWorking) {
+        if ((messages.isNotEmpty() || isWorking) && atBottom) {
             val target = if (isWorking) messages.size else messages.size - 1
             if (target >= 0) {
-                listState.animateScrollToItem(target)
+                try {
+                    listState.animateScrollToItem(target)
+                } catch (_: Exception) { }
             }
         }
     }
@@ -2697,6 +2824,22 @@ fun ConversationView(
                 .padding(horizontal = 18.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item {
+                QuickNavChip(
+                    label = "$kiraPrefix · $kiraLabel",
+                    icon = { ModelHubSvg(modifier = Modifier.size(13.dp), tint = Color(0xFF7DD3FC)) }
+                ) {
+                    isKiraSheetOpen = true
+                }
+            }
+            item {
+                QuickNavChip(
+                    label = "ROUTE · $routeShort",
+                    icon = { SettingsSvg(modifier = Modifier.size(13.dp), tint = Color(0xFFF0ABFC)) }
+                ) {
+                    context.startActivity(Intent(context, RouteHarnessActivity::class.java))
+                }
+            }
             item {
                 QuickNavChip(
                     label = "Files",
@@ -2817,6 +2960,8 @@ fun ConversationView(
                                     bodyFontFamily = bodyFontFamily,
                                     onCopy = { onCopyText(msg.text) }
                                 )
+                            } else if (msg.sender == "system") {
+                                SystemNoteRow(text = msg.text, bodyFontFamily = bodyFontFamily)
                             } else {
                                 JarvisBubble(
                                     text = msg.text,
@@ -2842,11 +2987,66 @@ fun ConversationView(
                                     title = thinkingTitle,
                                     steps = thinkingSteps,
                                     streamingText = streamingText,
+                                    thinkingBody = thinkingBody,
                                     titleFontFamily = titleFontFamily,
                                     bodyFontFamily = bodyFontFamily,
                                     onCancel = onCancelTask,
                                     onRaceAgy = onRaceAgy
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+            // Scroll-to-latest button (only when the user scrolled up).
+            if (!atBottom && messages.isNotEmpty()) {
+                Surface(
+                    onClick = {
+                        convScope.launch {
+                            try {
+                                val total = listState.layoutInfo.totalItemsCount
+                                if (total > 0) listState.animateScrollToItem(total - 1)
+                            } catch (_: Exception) { }
+                        }
+                    },
+                    shape = CircleShape,
+                    color = Color(0xFFFF8A00),
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 14.dp, bottom = 14.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.KeyboardArrowDown,
+                        contentDescription = "Scroll to latest",
+                        tint = Color.White,
+                        modifier = Modifier.padding(10.dp).size(20.dp)
+                    )
+                }
+            }
+        }
+
+        // Follow-up suggestions under the latest agent message (tap to send).
+        if (!isWorking) {
+            val lastMsg = messages.lastOrNull()
+            if (lastMsg != null && lastMsg.sender == "agent") {
+                val lastUser = remember(messages) { messages.lastOrNull { it.sender == "user" } }
+                val chips = remember(lastMsg.id) {
+                    Followups.forTurn(
+                        lastUser?.text.orEmpty(),
+                        lastMsg.text,
+                        lastMsg.toolCall?.isNotBlank() == true,
+                        lastMsg.isSuccess
+                    )
+                }
+                if (chips.isNotEmpty()) {
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(chips) { chip ->
+                            QuickNavChip(
+                                label = chip.label,
+                                icon = { SparkleSvg(modifier = Modifier.size(13.dp), tint = Color(0xFF7DD3FC)) }
+                            ) {
+                                onSendMessage(chip.send)
                             }
                         }
                     }
@@ -2907,15 +3107,55 @@ fun ConversationView(
             onMicClick = onOpenVoice
         )
     }
+
+    if (isKiraSheetOpen) {
+        KiraModelSheet(
+            titleFontFamily = titleFontFamily,
+            bodyFontFamily = bodyFontFamily,
+            onDismiss = { isKiraSheetOpen = false }
+        )
+    }
 }
 
 // ─── Live Streaming & Thinking Execution Card with Animated Cursor ────────────
+
+@Composable
+fun ThinkingDots(
+    tint: Color = Color(0xFFFF9636),
+    modifier: Modifier = Modifier
+) {
+    val inf = rememberInfiniteTransition(label = "thinkDots")
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(3) { i ->
+            val a by inf.animateFloat(
+                initialValue = 0.25f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(550, delayMillis = i * 180, easing = EaseInOutSine),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "dot$i"
+            )
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .alpha(a)
+                    .background(tint, CircleShape)
+            )
+        }
+    }
+}
 
 @Composable
 fun StreamingExecutionCard(
     title: String,
     steps: List<String>,
     streamingText: String,
+    thinkingBody: String = "",
     titleFontFamily: FontFamily,
     bodyFontFamily: FontFamily,
     onCancel: () -> Unit,
@@ -2997,6 +3237,29 @@ fun StreamingExecutionCard(
                                 fontFamily = bodyFontFamily
                             )
                         }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Clean thinking section: animated dots + sanitized prose (no symbols).
+                if (streamingText.isBlank() && thinkingBody.isNotBlank()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                            .padding(10.dp)
+                    ) {
+                        ThinkingDots()
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = thinkingBody,
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 12.sp,
+                            fontFamily = bodyFontFamily,
+                            lineHeight = 17.sp,
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -3758,6 +4021,28 @@ fun FrostedGrainyGlassContainer(
 }
 
 @Composable
+fun SystemNoteRow(text: String, bodyFontFamily: FontFamily) {
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = Color.White.copy(alpha = 0.07f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+        ) {
+            Text(
+                text = text,
+                color = Color.White.copy(alpha = 0.65f),
+                fontSize = 11.sp,
+                fontFamily = bodyFontFamily,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+            )
+        }
+    }
+}
+
+@Composable
 fun UserBubble(
     text: String,
     timestampMs: Long,
@@ -4237,6 +4522,294 @@ fun ModelPickerSheet(
 }
 
 // ─── Standby, Voice Intelligence & Tools Dialogs ───────────────────────────────
+
+@Composable
+fun KiraModelSheet(
+    titleFontFamily: FontFamily,
+    bodyFontFamily: FontFamily,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var refreshTick by remember { mutableStateOf(0) }
+    var liveModels by remember { mutableStateOf<List<String>?>(null) }
+    var fetchingLive by remember { mutableStateOf(false) }
+
+    val current = remember(refreshTick) { KiraClient.getModel(context) }
+    val soloOn = remember(refreshTick) { KiraClient.isSoloModel(context) }
+    val autoOn = remember(refreshTick) { KiraClient.isAutoRouter(context) }
+    val route = remember(refreshTick) { UnifiedAssistantDispatcher.getRoute(context) }
+
+    fun picked() {
+        refreshTick++
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF15100D),
+        contentColor = Color.White,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp)
+                .padding(bottom = 36.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Text(
+                text = "Kira Model · Route Harness",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontFamily = titleFontFamily,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(vertical = 12.dp)
+            )
+
+            // ── Kira models ──
+            SheetSectionLabel("KIRA MODEL", bodyFontFamily)
+            KiraClient.BUILTIN_MODELS.forEach { m ->
+                val selected = current == m.id
+                SheetRadioRow(
+                    title = m.label + "  ·  " + m.contextWindow +
+                        if (m.tier == "REASONING" || m.tier == "FLAGSHIP") "  ·  high reasoning" else "",
+                    desc = m.description,
+                    selected = selected,
+                    titleFontFamily = titleFontFamily,
+                    bodyFontFamily = bodyFontFamily,
+                    onClick = {
+                        if (m.id != current) {
+                            KiraClient.setModel(context, m.id)
+                            Toast.makeText(context, "${m.label} active", Toast.LENGTH_SHORT).show()
+                        }
+                        picked()
+                    }
+                )
+            }
+
+            if (liveModels == null) {
+                SheetActionButton(
+                    label = if (fetchingLive) "Fetching live models…" else "Fetch all live models",
+                    bodyFontFamily = bodyFontFamily,
+                    onClick = {
+                        if (fetchingLive) return@SheetActionButton
+                        fetchingLive = true
+                        KiraClient.fetchAvailableModels(
+                            context = context,
+                            onSuccess = { fetched: List<String> ->
+                                scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                    fetchingLive = false
+                                    liveModels = fetched
+                                }
+                            },
+                            onError = { err: String ->
+                                scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                    fetchingLive = false
+                                    Toast.makeText(context, "Fetch error: $err", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        )
+                    }
+                )
+            } else {
+                SheetSectionLabel("LIVE MODELS (${liveModels!!.size})", bodyFontFamily)
+                liveModels!!.forEach { id ->
+                    val known = KiraClient.BUILTIN_MODELS.firstOrNull { it.id == id }
+                    val selected = current == id
+                    SheetRadioRow(
+                        title = (known?.label ?: id) +
+                            if (KiraClient.isHighReasoning(id)) "  ·  high reasoning" else "",
+                        desc = known?.description ?: id,
+                        selected = selected,
+                        titleFontFamily = titleFontFamily,
+                        bodyFontFamily = bodyFontFamily,
+                        onClick = {
+                            KiraClient.setModel(context, id)
+                            Toast.makeText(context, "Model: $id", Toast.LENGTH_SHORT).show()
+                            picked()
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            SheetSwitchRow(
+                title = if (soloOn) "Solo model · ON" else "Solo model · OFF",
+                desc = "Selected model only — no cascade fallback",
+                checked = soloOn,
+                bodyFontFamily = bodyFontFamily,
+                onChange = {
+                    KiraClient.setSoloModel(context, it)
+                    Toast.makeText(
+                        context,
+                        if (it) "Solo model: cascade disabled" else "Cascade enabled",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    picked()
+                }
+            )
+            SheetSwitchRow(
+                title = if (autoOn) "Auto-router · ON" else "Auto-router · OFF",
+                desc = "Casual → Mini 1.0 · code → GLM 5.3 · mid → Qwen 3.8",
+                checked = autoOn,
+                bodyFontFamily = bodyFontFamily,
+                onChange = {
+                    KiraClient.setAutoRouter(context, it)
+                    picked()
+                }
+            )
+
+            // ── Engine fallback route ──
+            SheetSectionLabel("ENGINE FALLBACK ROUTE", bodyFontFamily)
+            UnifiedAssistantDispatcher.ROUTE_PRESETS.forEach { (name, engines) ->
+                val selected = engines == route
+                SheetRadioRow(
+                    title = name + if (selected) "  ·  active" else "",
+                    desc = engines.joinToString(" → ") { it.id },
+                    selected = selected,
+                    titleFontFamily = titleFontFamily,
+                    bodyFontFamily = bodyFontFamily,
+                    onClick = {
+                        UnifiedAssistantDispatcher.setRoute(context, engines)
+                        Toast.makeText(
+                            context,
+                            "Route: ${UnifiedAssistantDispatcher.routeShort(engines)}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        picked()
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            SheetActionButton(
+                label = "Open full harness (latency stats)",
+                bodyFontFamily = bodyFontFamily,
+                onClick = {
+                    context.startActivity(Intent(context, RouteHarnessActivity::class.java))
+                    onDismiss()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SheetSectionLabel(text: String, bodyFontFamily: FontFamily) {
+    Text(
+        text = text,
+        color = Color.White.copy(alpha = 0.45f),
+        fontSize = 11.sp,
+        fontFamily = bodyFontFamily,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 14.dp, bottom = 4.dp)
+    )
+}
+
+@Composable
+private fun SheetRadioRow(
+    title: String,
+    desc: String,
+    selected: Boolean,
+    titleFontFamily: FontFamily,
+    bodyFontFamily: FontFamily,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = if (selected) Color(0xFF7DD3FC) else Color.White,
+                fontSize = 14.sp,
+                fontFamily = titleFontFamily,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = desc,
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 12.sp,
+                fontFamily = bodyFontFamily,
+                fontWeight = FontWeight.Light
+            )
+        }
+        if (selected) {
+            CheckSvg(modifier = Modifier.size(18.dp), tint = Color(0xFF7DD3FC))
+        }
+    }
+}
+
+@Composable
+private fun SheetSwitchRow(
+    title: String,
+    desc: String,
+    checked: Boolean,
+    bodyFontFamily: FontFamily,
+    onChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp, horizontal = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = desc,
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 12.sp,
+                fontFamily = bodyFontFamily,
+                fontWeight = FontWeight.Light
+            )
+        }
+        JarvisSwitch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun SheetActionButton(
+    label: String,
+    bodyFontFamily: FontFamily,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = Color.White.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 12.dp, horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SettingsSvg(modifier = Modifier.size(16.dp), tint = Color(0xFFFFB45A))
+            Text(
+                text = label,
+                color = Color(0xFFFFB45A),
+                fontSize = 12.5.sp,
+                fontFamily = bodyFontFamily,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
 
 @Composable
 fun JarvisSwitch(

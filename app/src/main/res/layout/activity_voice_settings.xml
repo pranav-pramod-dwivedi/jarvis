@@ -337,6 +337,15 @@
                         android:textColor="#FFFFFF"
                         android:textSize="16sp"
                         android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/txt_cloud_voice_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Cloud TTS ready"
+                        android:textColor="#10B981"
+                        android:textSize="11sp" />
                 </LinearLayout>
 
                 <Button
