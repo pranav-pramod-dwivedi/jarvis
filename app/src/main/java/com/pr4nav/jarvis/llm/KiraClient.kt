@@ -1320,6 +1320,24 @@ object KiraClient {
      */
     /** Hard ceiling per model attempt: a hung request can never stall a turn forever. */
     const val ATTEMPT_DEADLINE_SEC = 100L
+
+    /** Tiered deadlines: fast models fail fast, deep models get room to think. */
+    fun deadlineFor(model: String): Long {
+        val m = model.lowercase()
+        return when {
+            m.contains("mini") -> 25L
+            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 40L
+            else -> 90L
+        }
+    }
+
+    /** Socket-level stalls share one sick path — never cascade through them. */
+    fun isTimeoutError(msg: String?): Boolean {
+        if (msg.isNullOrBlank()) return false
+        val m = msg.lowercase()
+        return m == "timeout" || m.contains("timed out") || m.contains("sockettimeout") ||
+            m.contains("socket closed") || m.contains("read timed out") || m.contains("connect timed out")
+    }
     fun isQuotaError(msg: String?): Boolean {
         if (msg.isNullOrBlank()) return false
         val m = msg.lowercase()
@@ -1390,12 +1408,13 @@ object KiraClient {
                     )
                 }
                 val res = try {
-                    future.get(ATTEMPT_DEADLINE_SEC, TimeUnit.SECONDS)
+                    future.get(deadlineFor(currentModel), TimeUnit.SECONDS)
                 } catch (e: java.util.concurrent.TimeoutException) {
                     future.cancel(true)
-                    Log.w(TAG, "Model $currentModel timed out after $ATTEMPT_DEADLINE_SEC s; escalating.")
+                    val dl = deadlineFor(currentModel)
+                    Log.w(TAG, "Model $currentModel timed out after ${dl}s; escalating.")
                     KiraResponse(success = false, response = "",
-                        error = "Model $currentModel timed out after ${ATTEMPT_DEADLINE_SEC}s", modelUsed = currentModel)
+                        error = "Model $currentModel timed out after ${dl}s", modelUsed = currentModel)
                 } catch (e: Exception) {
                     KiraResponse(success = false, response = "",
                         error = e.message ?: "Attempt failed", modelUsed = currentModel)
@@ -1417,8 +1436,8 @@ object KiraClient {
                         onStatus?.invoke("Kira wallet empty — Top up at kiraai.vn. Trying next engine…")
                         break
                     }
-                    if (err.contains("timed out after")) {
-                        // Sick network path: sibling models share it — go straight to the next engine.
+                    if (isTimeoutError(err)) {
+                        // Sick network path ("timeout", socket stalls): siblings share it — next engine.
                         lastError = err
                         Log.w(TAG, "Attempt timed out; skipping remaining Kira cascade.")
                         onStatus?.invoke("Kira timed out — trying next engine…")

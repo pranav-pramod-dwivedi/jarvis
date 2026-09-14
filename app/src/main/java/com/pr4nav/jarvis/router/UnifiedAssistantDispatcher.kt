@@ -33,7 +33,8 @@ enum class ExecutionSource(val label: String, val badge: String) {
 enum class RouteEngine(val id: String, val short: String) {
     KIRA("kira", "K"),
     GROQ("groq", "G"),
-    GEMINI("gemini", "Gm")
+    GEMINI("gemini", "Gm"),
+    LOCAL("local", "L")
 }
 
 data class UnifiedExecutionResult(
@@ -175,8 +176,22 @@ object UnifiedAssistantDispatcher {
         "Gemini only (solo engine)" to listOf(RouteEngine.GEMINI),
         "Kira → Gemini (skip Groq)" to listOf(RouteEngine.KIRA, RouteEngine.GEMINI),
         "Groq → Gemini (skip Kira)" to listOf(RouteEngine.GROQ, RouteEngine.GEMINI),
-        "Groq → Kira → Gemini" to listOf(RouteEngine.GROQ, RouteEngine.KIRA, RouteEngine.GEMINI)
+        "Groq → Kira → Gemini" to listOf(RouteEngine.GROQ, RouteEngine.KIRA, RouteEngine.GEMINI),
+        "Local only (offline, no keys needed)" to listOf(RouteEngine.LOCAL)
     )
+
+    /** Saved route plus the offline engine as an unconditional last resort.
+     * LocalEngine never throws: with no runtime it still answers conversationally,
+     * so a dead cloud means an honest offline answer — never a bare route failure. */
+    fun effectiveRoute(context: Context?): List<RouteEngine> {
+        val route = getRoute(context).toMutableList()
+        if (!route.contains(RouteEngine.LOCAL)) {
+            route.add(RouteEngine.LOCAL)
+        }
+        return route.ifEmpty {
+            listOf(RouteEngine.KIRA, RouteEngine.GROQ, RouteEngine.GEMINI, RouteEngine.LOCAL)
+        }
+    }
 
     fun getRoute(context: Context?): List<RouteEngine> {
         val fallback = listOf(RouteEngine.KIRA, RouteEngine.GROQ, RouteEngine.GEMINI)
@@ -425,7 +440,7 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
         // Route-aware engine dispatch: mode picks the start engine, the user
         // fallback route decides the chain. Solo routes run a single engine.
         // =========================================================================
-        val route = getRoute(context)
+        val route = effectiveRoute(context)
         var start: RouteEngine = if (mode == AgentExecutionMode.GROQ_PRIMARY || mode == AgentExecutionMode.GROQ_NEEDLE) {
             RouteEngine.GROQ
         } else {
@@ -442,6 +457,32 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
             RouteEngine.GROQ -> executeGroqWithFallback(context, trimmed, t0, onStatus, onChunk, onEvent, onResult, route)
             RouteEngine.GEMINI -> executeCloudFallback(context, trimmed, t0, onStatus, onChunk, onEvent, onResult)
             RouteEngine.KIRA -> executeKiraWithFallback(context, trimmed, t0, onStatus, onChunk, onEvent, onResult, route)
+            RouteEngine.LOCAL -> executeLocal(context, trimmed, t0, onStatus, onChunk, onEvent, onResult, route)
+        }
+    }
+
+    private fun executeLocal(
+        context: Context,
+        prompt: String,
+        t0: Long,
+        onStatus: ((String) -> Unit)?,
+        onChunk: ((String) -> Unit)?,
+        onEvent: ((AgentStreamEvent) -> Unit)? = null,
+        onResult: (UnifiedExecutionResult) -> Unit,
+        route: List<RouteEngine>? = null
+    ) {
+        onStatus?.invoke("Answering offline on-device…")
+        kotlin.concurrent.thread(name = "jarvis-local-engine") {
+            try {
+                val res = LocalEngine.run(context, prompt, t0, onEvent)
+                if (onEvent == null && res.fullSummary.isNotBlank()) {
+                    try { onChunk?.invoke(res.fullSummary) } catch (_: Exception) { }
+                }
+                onResult(res)
+            } catch (e: Exception) {
+                Log.w(TAG, "Local engine failed: ${e.message}")
+                emitRouteExhausted(onEvent, onResult, e.message ?: "local engine failed", t0)
+            }
         }
     }
 
@@ -455,7 +496,7 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
         onResult: (UnifiedExecutionResult) -> Unit,
         route: List<RouteEngine>? = null
     ) {
-        val rt = route ?: getRoute(context)
+        val rt = route ?: effectiveRoute(context)
         onStatus?.invoke("Querying Kira AI (Full Power)…")
         KiraClient.query(
             context = context,
@@ -525,6 +566,10 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                         Log.w(TAG, "Route ends at Kira; no further fallback.")
                         emitRouteExhausted(onEvent, onResult, kiraErr, t0)
                     }
+                    RouteEngine.LOCAL -> {
+                        onStatus?.invoke("Kira unavailable; answering offline…")
+                        executeLocal(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                    }
                     RouteEngine.KIRA -> {
                         Log.w(TAG, "Route loops back to Kira; stopping to avoid a cycle.")
                         emitRouteExhausted(onEvent, onResult, kiraErr, t0)
@@ -544,7 +589,7 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
         onResult: (UnifiedExecutionResult) -> Unit,
         route: List<RouteEngine>? = null
     ) {
-        val rt = route ?: getRoute(context)
+        val rt = route ?: effectiveRoute(context)
         onStatus?.invoke("Asking Groq Compound Agent…")
         GroqClient.query(
             context = context,
@@ -613,6 +658,10 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                     null -> {
                         Log.w(TAG, "Route ends at Groq; no further fallback.")
                         emitRouteExhausted(onEvent, onResult, groqErr, t0)
+                    }
+                    RouteEngine.LOCAL -> {
+                        onStatus?.invoke("Groq unavailable; answering offline…")
+                        executeLocal(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
                     }
                     RouteEngine.GROQ -> {
                         Log.w(TAG, "Route loops back to Groq; stopping to avoid a cycle.")
