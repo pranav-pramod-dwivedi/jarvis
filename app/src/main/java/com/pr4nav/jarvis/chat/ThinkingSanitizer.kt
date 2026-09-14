@@ -52,6 +52,7 @@ object ThinkingSanitizer {
         t = t.replace(Regex("[`*#_~>|]"), "")
         t = t.replace(Regex("\\[([^\\]]+)\\]\\([^)]+\\)"), "$1")
         t = t.replace(Regex("\\s+"), " ").trim()
+        t = t.replace(Regex("[….]+$"), "").trim()
         if (t.equals("null", ignoreCase = true)) return ""
         return if (t.length > maxChars) t.take(maxChars).trimEnd() + "…" else t
     }

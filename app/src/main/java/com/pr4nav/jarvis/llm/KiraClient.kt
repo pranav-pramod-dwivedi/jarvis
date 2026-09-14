@@ -76,6 +76,39 @@ object KiraClient {
     const val MAX_AGENT_TURNS = 30
     const val MAX_SAFE_CONTEXT_CHARS = 3_200_000 // ~800,000 tokens safe 1M context ceiling
 
+    // ── Latency budgets per tier (probe-measured path: ~100ms TCP, ~1.2s HTTPS) ──
+    // Fast models get small prompts + short completions; deep models get everything.
+
+    /** Max history turns per model: mini stays light, glm gets the full window. */
+    fun historyLimitFor(model: String): Int {
+        val m = model.lowercase()
+        return when {
+            m.contains("mini") -> 30
+            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 80
+            else -> 220
+        }
+    }
+
+    /** Max completion tokens per model: short answers stop the server sooner. */
+    fun maxTokensFor(model: String): Int {
+        val m = model.lowercase()
+        return when {
+            m.contains("mini") -> 2048
+            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 4096
+            else -> MAX_COMPLETION_TOKENS
+        }
+    }
+
+    /** Context-packet budget per model (chars). */
+    fun packetBudgetFor(model: String): Int {
+        val m = model.lowercase()
+        return when {
+            m.contains("mini") -> 6_000
+            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 14_000
+            else -> 26_000
+        }
+    }
+
     private val executor = Executors.newCachedThreadPool()
 
     data class ToolCallRecord(
@@ -230,15 +263,25 @@ object KiraClient {
     // code    → glm-5.3-free (deepest reasoning)
     // mid     → qwen3.8-flash-free (balanced default)
 
-    private val CODE_SIGNALS = listOf(
-        "```", "code", "bug", "debug", "error", "traceback", "exception", "stacktrace",
-        "function", "class", "method", "compile", "build", "script", "program",
-        "python", "kotlin", "java", "javascript", "typescript", "html", "css", "regex",
-        "sql", "api", "json", "git", "refactor", "implement", "deploy", "terminal",
-        "shell", "command", "execute", "gradle", "adb", "/sdcard", ".py", ".kt",
+    // Substring-safe signals (distinctive tokens/phrases that never appear in normal chat).
+    private val CODE_SUBSTR = listOf(
+        "```", "traceback", "exception", "stacktrace", "function", "compile", "build",
+        "refactor", "implement", "program", "deploy", "terminal", "shell", "command", "execute", "gradle",
+        "termux", "proot", "python", "kotlin", "java", "javascript", "typescript",
+        "html", "css", "regex", "sql", "json", "adb", "github", "method", "crash",
+        "algorithm", "database", "bug", "debug", "error", "/sdcard", ".py", ".kt",
         ".js", ".html", "write file", "read file", "edit file", "create file",
-        "fix ", "failing", "not working", "crash", "algorithm", "database"
+        "fix ", "failing", "not working"
     )
+    // Short tokens that MUST match on word boundaries ("capital" is not an "api",
+    // "classic" is not a "class", "description" is not a "script").
+    private val CODE_WORD_RES = listOf("api", "git", "class", "script", "code", "coding")
+        .map { Regex("\\b$it\\b") }
+
+    private fun isCodingTask(lower: String): Boolean {
+        if (CODE_SUBSTR.any { lower.contains(it) }) return true
+        return CODE_WORD_RES.any { it.containsMatchIn(lower) }
+    }
 
     private val CASUAL_PATTERNS = listOf(
         Regex("^(hi+|hey|hello|yo|namaste|ram ram)\\b[!.…]*$"),
@@ -261,7 +304,7 @@ object KiraClient {
         if (q.isEmpty()) return MODEL_KIRA_MINI
         val lower = q.lowercase()
         // 1. Code / build / debug tasks → deepest reasoning.
-        if (CODE_SIGNALS.any { lower.contains(it) }) return MODEL_GLM_5_3_FREE
+        if (isCodingTask(lower)) return MODEL_GLM_5_3_FREE
         // 2. Pure casual chit-chat → fastest model.
         if (CASUAL_PATTERNS.any { it.matches(lower) }) return MODEL_KIRA_MINI
         val words = lower.split(Regex("\\s+"))
@@ -493,13 +536,21 @@ object KiraClient {
 
     /**
      * Dynamically fetches available models from Kira AI platform (/models endpoint).
+     * The response is ~175KB: cached in memory for 5 minutes to avoid re-downloads.
      */
+    @Volatile private var modelsCache: List<String> = emptyList()
+    @Volatile private var modelsCacheAt: Long = 0L
+
     fun fetchAvailableModels(
         context: Context,
         apiKeyOverride: String? = null,
         onSuccess: (List<String>) -> Unit,
         onError: (String) -> Unit
     ) {
+        if (modelsCache.isNotEmpty() && System.currentTimeMillis() - modelsCacheAt < 5 * 60 * 1000L) {
+            onSuccess(modelsCache)
+            return
+        }
         val apiKey = cleanApiKey(apiKeyOverride?.takeIf { it.isNotBlank() } ?: getApiKey(context))
         if (apiKey.isBlank()) {
             onError("Kira API key is empty")
@@ -540,6 +591,8 @@ object KiraClient {
                 for (m in FREE_MODEL_CASCADE) {
                     if (!modelsList.contains(m)) modelsList.add(0, m)
                 }
+                modelsCache = modelsList.toList()
+                modelsCacheAt = System.currentTimeMillis()
                 onSuccess(modelsList)
             } catch (e: Exception) {
                 onError("Network error fetching Kira models: ${e.message}")
@@ -1218,7 +1271,7 @@ object KiraClient {
      * Assembles the [CONTEXT PACKET]: user profile, environment status, memory
      * pointer, artifacts and matched skills — real context without system-prompt bloat.
      */
-    private fun buildContextPacket(context: Context, prompt: String): String {
+    private fun buildContextPacket(context: Context, prompt: String, maxChars: Int = 26_000): String {
         val userName = try {
             com.pr4nav.jarvis.JarvisApp.instance?.let {
                 com.pr4nav.jarvis.setup.SetupManager.getUserName(it)
@@ -1253,7 +1306,8 @@ object KiraClient {
                 query = prompt,
                 envLines = env,
                 profileBlock = profile,
-                memoryPointer = memory
+                memoryPointer = memory,
+                maxChars = maxChars
             )
         } catch (_: Exception) {
             ""
@@ -1363,6 +1417,13 @@ object KiraClient {
                         onStatus?.invoke("Kira wallet empty — Top up at kiraai.vn. Trying next engine…")
                         break
                     }
+                    if (err.contains("timed out after")) {
+                        // Sick network path: sibling models share it — go straight to the next engine.
+                        lastError = err
+                        Log.w(TAG, "Attempt timed out; skipping remaining Kira cascade.")
+                        onStatus?.invoke("Kira timed out — trying next engine…")
+                        break
+                    }
                     lastError = err
                     Log.w(TAG, "Model $currentModel yielded no usable response ($err); escalating to next in cascade...")
                 }
@@ -1396,7 +1457,7 @@ object KiraClient {
         messages.put(JSONObject().put("role", "system").put("content", systemPrompt))
 
         // Real context: deep history (128k–1M windows), context packet right before the prompt.
-        val recentHistory = if (history.isNotEmpty()) history else ConversationalContext.getRecentTurns(220)
+        val recentHistory = if (history.isNotEmpty()) history else ConversationalContext.getRecentTurns(historyLimitFor(modelName))
         for ((role, text) in recentHistory) {
             messages.put(
                 JSONObject().apply {
@@ -1405,7 +1466,7 @@ object KiraClient {
                 }
             )
         }
-        val contextPacket = buildContextPacket(context, prompt)
+        val contextPacket = buildContextPacket(context, prompt, packetBudgetFor(modelName))
         if (contextPacket.isNotBlank()) {
             messages.put(JSONObject().put("role", "user").put("content", contextPacket))
         }
@@ -1424,7 +1485,7 @@ object KiraClient {
                 val payload = JSONObject().apply {
                     put("model", modelName)
                     put("messages", messages)
-                    put("max_tokens", MAX_COMPLETION_TOKENS)
+                    put("max_tokens", maxTokensFor(modelName))
                     put("temperature", 0.6)
                     put("tools", buildJarvisToolsSchema())
                     put("tool_choice", "auto")

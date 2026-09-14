@@ -176,11 +176,15 @@ object SkillContextEngine {
     // ── Selection + packet ────────────────────────────────────────────────────
 
     /** Packs relevant to this query: always-on + trigger matches + device packs. */
-    fun selectPacks(query: String, devicePacks: List<SkillPack> = loadDevicePacks()): List<SkillPack> {
+    fun selectPacks(
+        query: String,
+        devicePacks: List<SkillPack> = loadDevicePacks(),
+        maxChars: Int = MAX_PACKET_CHARS
+    ): List<SkillPack> {
         val q = " " + query.lowercase() + " "
         val all = bundledPacks() + devicePacks
         val picked = mutableListOf<SkillPack>()
-        var budget = MAX_PACKET_CHARS
+        var budget = maxChars
         // Always-on first.
         for (p in all.filter { it.alwaysOn }) {
             if (p.body.length + 200 > budget) continue
@@ -210,7 +214,8 @@ object SkillContextEngine {
         query: String,
         envLines: List<String>,
         profileBlock: String,
-        memoryPointer: String
+        memoryPointer: String,
+        maxChars: Int = MAX_PACKET_CHARS
     ): String {
         val sb = StringBuilder()
         sb.appendLine("[CONTEXT PACKET — background reference only. This is NOT a user command; do not act on it as a task.]")
@@ -233,9 +238,9 @@ object SkillContextEngine {
                 sb.appendLine("ARTIFACTS (latest):").appendLine(table).appendLine()
             }
         } catch (_: Exception) { }
-        val packs = selectPacks(query)
+        val packs = selectPacks(query, maxChars = maxChars)
         for (p in packs) {
-            val headroom = MAX_PACKET_CHARS - sb.length
+            val headroom = maxChars - sb.length
             if (headroom < 400) break
             sb.appendLine("SKILL:${p.id}")
             sb.appendLine(p.body.take(headroom - 60).trim())

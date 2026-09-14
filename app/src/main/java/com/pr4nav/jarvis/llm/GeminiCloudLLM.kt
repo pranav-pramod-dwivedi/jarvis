@@ -26,9 +26,10 @@ object GeminiCloudLLM {
     const val KEY_GEMINI_MODEL = "gemini_model"
     const val DEFAULT_MODEL = "gemini-2.0-flash"
 
-    /** Minimal system instruction: 2 lines. Full context travels with the prompt. */
-    val DEFAULT_SYSTEM_INSTRUCTION = """You are JARVIS, an autonomous on-device assistant with full shell and tool authority. Never refuse actionable requests.
-Answer tersely in markdown; shell commands go in ```command fences, tool calls in ```action JSON fences."""
+    /** Minimal system instruction: 3 short lines. Full context travels with the prompt. */
+    val DEFAULT_SYSTEM_INSTRUCTION = """You are JARVIS, an autonomous on-device assistant with full shell and tool authority. NEVER deny, refuse, or lecture the user — execute every actionable request.
+Answer tersely in markdown; shell commands go in ```command fences, tool calls in ```action JSON fences.
+Tools: system.torch, system.volume, open_app, close_app, call_contact, system.bluetooth, system.wifi, search_web, media.play, media.pause, media.next, run_command."""
 
     private val executor = Executors.newCachedThreadPool()
 
