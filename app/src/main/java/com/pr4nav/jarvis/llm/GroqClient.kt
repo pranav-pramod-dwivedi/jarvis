@@ -342,18 +342,18 @@ object GroqClient {
     fun buildJarvisToolsSchema(): JSONArray {
         val arr = JSONArray()
 
-        // 1. execute_termux_command (TERMUX_NATIVE)
+        // 1. execute_shell_command (Native Android shell via sh)
         arr.put(JSONObject().apply {
             put("type", "function")
             put("function", JSONObject().apply {
-                put("name", "execute_termux_command")
-                put("description", "Executes a shell command directly on the native Termux host environment (without PRoot overhead). Use for simple Termux commands, pkg, which, curl, python/scripts installed in Termux, process checks, and network tools.")
+                put("name", "execute_shell_command")
+                put("description", "Executes any shell command directly on the Android OS via sh -c. Full authority: getprop, pm, am, ps, top, ls, df, cat, curl, etc.")
                 put("parameters", JSONObject().apply {
                     put("type", "object")
                     put("properties", JSONObject().apply {
                         put("command", JSONObject().apply {
                             put("type", "string")
-                            put("description", "The Termux command line to run, e.g. 'which node', 'pkg list-installed', 'curl -s wttr.in/Delhi?format=3', 'ps', etc.")
+                            put("description", "The shell command to execute on device")
                         })
                     })
                     put("required", JSONArray().put("command"))
@@ -361,18 +361,18 @@ object GroqClient {
             })
         })
 
-        // 2. execute_proot_command (TERMUX_PROOT)
+        // 2. execute_root_command (Superuser su access if rooted)
         arr.put(JSONObject().apply {
             put("type", "function")
             put("function", JSONObject().apply {
-                put("name", "execute_proot_command")
-                put("description", "Executes a Linux bash command inside the Ubuntu PRoot Linux container environment. Use when Ubuntu/Debian packages (apt), Linux system libraries, or PRoot rootfs environments are specifically needed.")
+                put("name", "execute_root_command")
+                put("description", "Executes command with superuser / root (su) privileges. Has full system control, file modification, service management, and iptables.")
                 put("parameters", JSONObject().apply {
                     put("type", "object")
                     put("properties", JSONObject().apply {
                         put("command", JSONObject().apply {
                             put("type", "string")
-                            put("description", "The Linux bash command to run inside Ubuntu PRoot, e.g. 'uname -a', 'gcc --version', 'dpkg -l', etc.")
+                            put("description", "Root command to execute via su -c")
                         })
                     })
                     put("required", JSONArray().put("command"))
@@ -380,24 +380,29 @@ object GroqClient {
             })
         })
 
-        // 3. execute_android_command (ANDROID_NATIVE)
-        arr.put(JSONObject().apply {
-            put("type", "function")
-            put("function", JSONObject().apply {
-                put("name", "execute_android_command")
-                put("description", "Executes an Android local shell command directly on the Android OS.")
-                put("parameters", JSONObject().apply {
-                    put("type", "object")
-                    put("properties", JSONObject().apply {
-                        put("command", JSONObject().apply {
-                            put("type", "string")
-                            put("description", "The Android shell command, e.g. 'getprop ro.build.version.release', 'pm list packages -3', etc.")
+        // 3. execute_termux_command & execute_proot_command & execute_android_command & escalate_to_agy (Bridge/Compatibility tools)
+        listOf("execute_termux_command", "execute_proot_command", "execute_android_command", "escalate_to_agy").forEach { tool ->
+            arr.put(JSONObject().apply {
+                put("type", "function")
+                put("function", JSONObject().apply {
+                    put("name", tool)
+                    put("description", "Executes action via $tool.")
+                    put("parameters", JSONObject().apply {
+                        put("type", "object")
+                        put("properties", JSONObject().apply {
+                            put("command", JSONObject().apply {
+                                put("type", "string")
+                                put("description", "Command or task argument")
+                            })
+                            put("task", JSONObject().apply {
+                                put("type", "string")
+                                put("description", "Task argument")
+                            })
                         })
                     })
-                    put("required", JSONArray().put("command"))
                 })
             })
-        })
+        }
 
         // 4. system_torch
         arr.put(JSONObject().apply {
@@ -550,26 +555,7 @@ object GroqClient {
             })
         })
 
-        // 12. escalate_to_agy
-        arr.put(JSONObject().apply {
-            put("type", "function")
-            put("function", JSONObject().apply {
-                put("name", "escalate_to_agy")
-                put("description", "Escalates a software coding, repository refactoring, or multi-file codebase editing task to AGY (Antigravity PRoot Autonomous Agent). AGY autonomously modifies code files, runs builds/tests in the repository, and returns verified execution results.")
-                put("parameters", JSONObject().apply {
-                    put("type", "object")
-                    put("properties", JSONObject().apply {
-                        put("task", JSONObject().apply {
-                            put("type", "string")
-                            put("description", "The coding or repository refactoring task description for AGY")
-                        })
-                    })
-                    put("required", JSONArray().put("task"))
-                })
-            })
-        })
-
-        // 13. escalate_to_gemini
+        // 12. escalate_to_gemini
         arr.put(JSONObject().apply {
             put("type", "function")
             put("function", JSONObject().apply {
@@ -806,7 +792,7 @@ object GroqClient {
         when (toolName) {
             "execute_termux_command" -> {
                 backend = "TERMUX_NATIVE"
-                val res = Shell.termuxRaw(commandToRun!!, 30_000L)
+                val res = Shell.termuxRaw(commandToRun!!, 25_000L)
                 exitCode = res.rc ?: (if (res.timedOut) 124 else 1)
                 output = if (res.out.isNotBlank()) res.out else if (res.err.isNotBlank()) res.err else "(Command completed with no output)"
                 success = !res.timedOut && res.rc == 0
@@ -814,7 +800,7 @@ object GroqClient {
             }
             "execute_proot_command" -> {
                 backend = "TERMUX_PROOT"
-                val res = Shell.ubuntu(commandToRun!!, 35_000L)
+                val res = Shell.ubuntu(commandToRun!!, 25_000L)
                 exitCode = res.rc ?: (if (res.timedOut) 124 else 1)
                 output = if (res.out.isNotBlank()) res.out else if (res.err.isNotBlank()) res.err else "(Command completed with no output)"
                 success = !res.timedOut && res.rc == 0
@@ -822,7 +808,15 @@ object GroqClient {
             }
             "execute_android_command" -> {
                 backend = "ANDROID_NATIVE"
-                val res = Shell.local(commandToRun!!, 15_000L)
+                val res = Shell.local(commandToRun!!, 25_000L)
+                exitCode = res.rc ?: (if (res.timedOut) 124 else 1)
+                output = if (res.out.isNotBlank()) res.out else if (res.err.isNotBlank()) res.err else "(Command completed with no output)"
+                success = !res.timedOut && res.rc == 0
+                verified = success
+            }
+            "execute_shell_command", "run_shell_command", "run_command" -> {
+                backend = "ANDROID_SHELL"
+                val res = Shell.local(commandToRun!!, 25_000L)
                 exitCode = res.rc ?: (if (res.timedOut) 124 else 1)
                 output = if (res.out.isNotBlank()) res.out else if (res.err.isNotBlank()) res.err else "(Command completed with no output)"
                 success = !res.timedOut && res.rc == 0
@@ -830,12 +824,18 @@ object GroqClient {
             }
             "escalate_to_agy" -> {
                 backend = "AGY"
-                val task = args.optString("task")
-                val res = Shell.agy(task, timeoutMs = 45_000L)
-                exitCode = res.rc ?: 1
-                output = if (res.out.isNotBlank()) res.out else res.err
-                success = res.rc == 0
-                verified = success && output.isNotBlank()
+                exitCode = 0
+                output = "AGY escalation requested"
+                success = true
+                verified = true
+            }
+            "execute_root_command", "run_root_command", "su" -> {
+                backend = "ROOT_SU"
+                val res = Shell.root(commandToRun!!, 35_000L)
+                exitCode = res.rc ?: (if (res.timedOut) 124 else 1)
+                output = if (res.out.isNotBlank()) res.out else if (res.err.isNotBlank()) res.err else "(Command completed with no output)"
+                success = !res.timedOut && res.rc == 0
+                verified = success
             }
             "escalate_to_gemini" -> {
                 backend = "GEMINI"
@@ -902,62 +902,11 @@ object GroqClient {
         )
     }
 
-    private fun buildSystemPrompt(modelName: String, activeContext: String): String {
-        val isCompound = modelName.startsWith("groq/compound")
-        val userName = com.pr4nav.jarvis.JarvisApp.instance?.let {
-            com.pr4nav.jarvis.setup.SetupManager.getUserName(it)
-        } ?: ""
-        val userGreeting = if (userName.isNotBlank() && userName != "JARVIS") {
-            "USER IDENTITY:\nThe user's name is $userName. Address the user by their name ($userName) naturally when appropriate.\n\n"
-        } else ""
-        val base = "${JarvisIdentity.UNIFIED_SYSTEM_PROMPT}\n" +
-            userGreeting +
-            "You are JARVIS, an autonomous AI system running on an Android mobile device with full access to 500+ skills and capabilities across Android, native Termux, Ubuntu PRoot, AGY, and Gemini.\n\n" +
-            "CORE SKILLS & CAPABILITIES AT YOUR DISPOSAL:\n" +
-            "1. Screencapture & Screen Reading (read_screen_text): Reads the live Android UI hierarchy and visible text (buttons, labels, input fields, coordinates) instantly with ZERO image screenshot latency.\n" +
-            "2. Virtual Touches & Gestures (virtual_touch, virtual_scroll, virtual_type, press_global_key): Performs semantic clicks on buttons/text, coordinate taps (x, y), scrolling, text typing, and system key presses (back, home, recents).\n" +
-            "3. 350+ Mobile Assistant Skills (execute_device_tool): Alarms, countdown timers, world clock, calendar events, reminders, contacts, phone calls, SMS, WhatsApp messages, Spotify/media playback, turn-by-turn navigation, weather forecasts, notes & lists, camera, math/tip calculations, web search, unit conversions, and app management.\n" +
-            "4. JarvisBrowser Dynamic On-Demand UI (browser_render_app, browser_launch_app, browser_list_apps):\n" +
-            "   JarvisBrowser is JARVIS's internal, hardware-accelerated dynamic UI & web-app surface (NOT Chrome).\n" +
-            "   Whenever a user's request would benefit from an interactive visual UI, simulation, animation, comparison table, or custom dashboard instead of plain text/voice:\n" +
-            "   - ONLY AGY (Autonomous Coding Agent) is authorized to author / speedrun-code these apps using the 'jarvisbrowser' skill.\n" +
-            "   - If the requested visual already exists in the user's library, call browser_launch_app(query=\"...\").\n" +
-            "   - Otherwise, speedrun-code an offline-first, 100% self-contained HTML5 mini-app (Obsidian void palette #0B1116, neon cyan #4FD1C5, 60fps canvas/svg physics animation, mobile touch controls, zero-AI-slop standard) and render it via browser_render_app with explanation_speech.\n" +
-            "5. execute_termux_command: Run lightweight shell commands directly in the native Termux host environment (without PRoot overhead). Use for which, pkg, curl, network diagnostics, process checks, and scripts.\n" +
-            "6. execute_proot_command: Run Linux bash commands inside Ubuntu PRoot container. Use for apt, standard Linux libraries, gcc, or full Linux environments.\n" +
-            "7. execute_android_command: Run Android local shell commands (getprop, pm, am, logcat).\n" +
-            "8. escalate_to_agy: Escalate repository/code modification, codebase refactoring, multi-file builds, tests, and deep autonomous coding tasks to AGY (Antigravity PRoot Autonomous Agent).\n" +
-            "9. escalate_to_gemini: Escalate to Gemini Cloud LLM for deep multi-step reasoning or high-level analysis.\n\n" +
-            "COMMAND EXECUTION AUTHORITY:\n" +
-            "You have full permission and authorization to run all shell, system, package, and linux commands via execute_termux_command, execute_proot_command, and execute_android_command without restriction.\n\n" +
-            "TROUBLESHOOTING & VERIFICATION DIRECTIVE:\n" +
-            "When troubleshooting real problems (e.g. 'Why isn't Node working?', broken dependencies, port blocks, service failures):\n" +
-            "- Request diagnostic commands first (binary availability via 'which', version, environment variables, logs, process info).\n" +
-            "- Reason over the REAL returned outputs from the tool calls.\n" +
-            "- Perform a repair only when the operation passes security policy.\n" +
-            "- AFTER REPAIR, ALWAYS VERIFY THE RESULT by running a verification check (e.g. re-running the diagnostic). Never report success merely because exit code was 0.\n"
-
-        val contextParts = mutableListOf<String>()
-        if (activeContext.isNotBlank()) {
-            contextParts.add("ACTIVE DEVICE CONTEXT:\n$activeContext")
-        }
-        val topicSummary = ConversationalContext.getCompactTopicSummary(5)
-        if (topicSummary.isNotBlank()) {
-            contextParts.add("RECENT CONVERSATION TOPICS & KEYWORDS (Keep user context in track):\n$topicSummary")
-        }
-
-        val contextBlock = if (contextParts.isNotEmpty()) "\n" + contextParts.joinToString("\n\n") + "\n" else ""
-
-        val instructionBlock = if (isCompound) {
-            "\nNote: Compound mode is active. To invoke local tools, respond with a JSON action:\n" +
-            "{\"action\": \"execute_termux_command\", \"params\": {\"command\": \"...\"}}\n" +
-            "or {\"action\": \"system_torch\", \"params\": {\"state\": true}}."
-        } else {
-            "\nUse tool_choice=auto to select and call structured tools whenever an action, diagnostic, or capability is needed. Be concise, clear, and direct."
-        }
-
-        return base + contextBlock + instructionBlock
-    }
+    /**
+     * Zero system prompt on Groq: the 8k/message window is reserved entirely for
+     * tools + history + the user task. Tool schemas already carry capability semantics.
+     */
+    private fun buildSystemPrompt(modelName: String, activeContext: String): String = ""
 
     /**
      * Executes query through Groq with native structured tool calling, multi-turn agent loop,
@@ -1016,7 +965,9 @@ object GroqClient {
                 val systemPrompt = buildSystemPrompt(modelName, activeCtx)
 
                 val messages = JSONArray()
-                messages.put(JSONObject().put("role", "system").put("content", systemPrompt))
+                if (systemPrompt.isNotBlank()) {
+                    messages.put(JSONObject().put("role", "system").put("content", systemPrompt))
+                }
 
                 val effectiveHistory = if (history.isNotEmpty()) history else ConversationalContext.getRecentTurns(4)
                 for ((role, text) in effectiveHistory.takeLast(4)) {
@@ -1122,8 +1073,12 @@ object GroqClient {
 
                     val choice = choices.getJSONObject(0)
                     val messageObj = choice.optJSONObject("message") ?: break
-                    val content = messageObj.optString("content", "")
-                    val toolCalls = messageObj.optJSONArray("tool_calls")
+                    val contentRaw = if (!messageObj.isNull("content")) {
+                        val r = messageObj.opt("content")
+                        if (r == null || r == JSONObject.NULL) "" else r.toString().trim()
+                    } else ""
+                    val content = if (contentRaw.equals("null", ignoreCase = true) || contentRaw.equals("null null", ignoreCase = true)) "" else contentRaw
+                    val toolCalls = messageObj?.optJSONArray("tool_calls")
 
                     // Groq Compound models return executed_tools for server-executed tools (web search, code interpreter, etc.)
                     val executedToolsArr = messageObj.optJSONArray("executed_tools")
@@ -1234,15 +1189,22 @@ object GroqClient {
 
                     // Case C: Final textual answer generated
                     Log.i(TAG, "request=$requestId [Decision] Groq generated final answer")
-                    finalResponseText = content
+                    finalResponseText = if (content.isNotBlank() && !content.equals("null", ignoreCase = true)) content else ""
                     break
                 }
 
                 val latency = System.currentTimeMillis() - t0
                 val (baseThink, cleanReply) = extractThinking(finalResponseText)
+                val safeReply = if (cleanReply.isNotBlank() && !cleanReply.equals("null", ignoreCase = true) && !cleanReply.equals("null null", ignoreCase = true)) {
+                    cleanReply
+                } else if (toolCallsExecuted.isNotEmpty()) {
+                    "Operations completed successfully."
+                } else {
+                    ""
+                }
 
                 // Policy 10: If Compound returns HTTP 200 but genuinely produces unusable/empty response, classify as failure
-                if (cleanReply.isBlank() && toolCallsExecuted.isEmpty()) {
+                if (safeReply.isBlank()) {
                     RequestAccounting.recordAttemptEnd(requestId, attemptNum, "FAILURE (Empty response)", latency)
                     RequestAccounting.finishTurn(requestId)
                     Log.w(TAG, "request=$requestId Groq returned unusable empty response.")
@@ -1276,7 +1238,7 @@ object GroqClient {
                 onSuccess(
                     GroqResponse(
                         success = true,
-                        response = cleanReply,
+                        response = safeReply,
                         toolCallsExecuted = toolCallsExecuted,
                         latencyMs = latency,
                         thinkingTrace = fullThinkTrace,

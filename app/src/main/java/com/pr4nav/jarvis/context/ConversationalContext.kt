@@ -31,16 +31,16 @@ object ConversationalContext {
     fun recordTurn(userQuery: String, assistantResponse: String) {
         if (userQuery.isNotBlank() && assistantResponse.isNotBlank()) {
             turnHistory.add(ConversationTurn(userQuery.trim(), assistantResponse.trim()))
-            // Keep at most 10 recent turns
-            while (turnHistory.size > 10) {
+            // Keep up to 400 recent turns for 128k–1M context windows
+            while (turnHistory.size > 400) {
                 turnHistory.removeAt(0)
             }
         }
     }
 
-    fun getRecentTurns(limit: Int = 4): List<Pair<String, String>> {
+    fun getRecentTurns(limit: Int = 50): List<Pair<String, String>> {
         val recent = synchronized(turnHistory) {
-            val valid = turnHistory.filter { System.currentTimeMillis() - it.timestamp < 10 * 60 * 1000L }
+            val valid = turnHistory.filter { System.currentTimeMillis() - it.timestamp < 6 * 60 * 60 * 1000L }
             valid.takeLast(limit)
         }
         val list = mutableListOf<Pair<String, String>>()

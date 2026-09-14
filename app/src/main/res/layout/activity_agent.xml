@@ -66,6 +66,20 @@
                     android:textColor="#10B981"
                     android:textSize="10sp"
                     android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/badge_high_reasoning"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_active_pill"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="2dp"
+                    android:text="HIGH REASONING"
+                    android:textColor="#A78BFA"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <TextView
@@ -75,6 +89,43 @@
                 android:text="Autonomous Automation &amp; Action Platform"
                 android:textColor="#94A3B8"
                 android:textSize="11sp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/pill_current_model"
+                    android:layout_width="wrap_content"
+                    android:layout_height="30dp"
+                    android:background="@drawable/bg_model_pill"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="12dp"
+                    android:text="MODEL · GLM 5.3 FREE ▾"
+                    android:textColor="#7DD3FC"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/pill_current_route"
+                    android:layout_width="wrap_content"
+                    android:layout_height="30dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_model_pill"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="12dp"
+                    android:text="ROUTE · K→G→Gm ▾"
+                    android:textColor="#F0ABFC"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Quick Menu / All Pages Button -->
@@ -107,7 +158,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="📅 01 Sep 2026, 01:36:15 AM"
+            android:text="01 Sep 2026, 01:36:15 AM"
             android:textColor="#38BDF8"
             android:textSize="12sp"
             android:textStyle="bold"
@@ -158,7 +209,20 @@
                 android:background="@drawable/bg_quick_nav_tab"
                 android:gravity="center"
                 android:paddingHorizontal="14dp"
-                android:text="📁 Files"
+                android:text="Files"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tab_artifacts"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_quick_nav_tab"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="Artifacts"
                 android:textColor="#E2E8F0"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -171,7 +235,7 @@
                 android:background="@drawable/bg_quick_nav_tab"
                 android:gravity="center"
                 android:paddingHorizontal="14dp"
-                android:text="⚡ Connected Services"
+                android:text="Services"
                 android:textColor="#E2E8F0"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -184,7 +248,7 @@
                 android:background="@drawable/bg_quick_nav_tab"
                 android:gravity="center"
                 android:paddingHorizontal="14dp"
-                android:text="🛠️ Playground"
+                android:text="Playground"
                 android:textColor="#E2E8F0"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -197,7 +261,7 @@
                 android:background="@drawable/bg_quick_nav_tab"
                 android:gravity="center"
                 android:paddingHorizontal="14dp"
-                android:text="🎯 Commander"
+                android:text="Commander"
                 android:textColor="#E2E8F0"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -210,7 +274,7 @@
                 android:background="@drawable/bg_quick_nav_tab"
                 android:gravity="center"
                 android:paddingHorizontal="14dp"
-                android:text="💻 Terminal"
+                android:text="Terminal"
                 android:textColor="#E2E8F0"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -223,20 +287,20 @@
                 android:background="@drawable/bg_quick_nav_tab"
                 android:gravity="center"
                 android:paddingHorizontal="14dp"
-                android:text="📊 Diagnostics"
+                android:text="Diagnostics"
                 android:textColor="#E2E8F0"
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/tab_agy"
+                android:id="@+id/tab_gaming_mode"
                 android:layout_width="wrap_content"
                 android:layout_height="32dp"
                 android:layout_marginStart="6dp"
                 android:background="@drawable/bg_quick_nav_tab"
                 android:gravity="center"
                 android:paddingHorizontal="14dp"
-                android:text="🚀 Antigravity"
+                android:text="Gaming"
                 android:textColor="#E2E8F0"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -350,14 +414,14 @@
                 </LinearLayout>
 
                 <Button
-                    android:id="@+id/btn_race_agy"
+                    android:id="@+id/btn_force_stop"
                     android:layout_width="wrap_content"
                     android:layout_height="32dp"
                     android:layout_marginStart="8dp"
                     android:background="@drawable/bg_btn_action_pill"
                     android:paddingHorizontal="10dp"
-                    android:text="⚡ Race AGY"
-                    android:textColor="#38BDF8"
+                    android:text="Force Stop"
+                    android:textColor="#EF4444"
                     android:textSize="11sp" />
 
                 <Button
@@ -367,7 +431,7 @@
                     android:layout_marginStart="6dp"
                     android:background="@drawable/bg_btn_action_pill"
                     android:paddingHorizontal="10dp"
-                    android:text="✕ Cancel"
+                    android:text="Cancel"
                     android:textColor="#EF4444"
                     android:textSize="11sp" />
             </LinearLayout>
@@ -403,7 +467,7 @@
                     android:background="@drawable/bg_prompt_chip"
                     android:gravity="center_vertical"
                     android:paddingHorizontal="14dp"
-                    android:text="⚡ Call Akhil"
+                    android:text="Call Akhil"
                     android:textColor="#F1F5F9"
                     android:textSize="12sp" />
 
@@ -415,7 +479,7 @@
                     android:background="@drawable/bg_prompt_chip"
                     android:gravity="center_vertical"
                     android:paddingHorizontal="14dp"
-                    android:text="🎵 Play chill music"
+                    android:text="Play chill music"
                     android:textColor="#F1F5F9"
                     android:textSize="12sp" />
 
@@ -427,7 +491,7 @@
                     android:background="@drawable/bg_prompt_chip"
                     android:gravity="center_vertical"
                     android:paddingHorizontal="14dp"
-                    android:text="🗺️ Take me home"
+                    android:text="Take me home"
                     android:textColor="#F1F5F9"
                     android:textSize="12sp" />
 
@@ -439,7 +503,7 @@
                     android:background="@drawable/bg_prompt_chip"
                     android:gravity="center_vertical"
                     android:paddingHorizontal="14dp"
-                    android:text="📸 Take screenshot"
+                    android:text="Take screenshot"
                     android:textColor="#F1F5F9"
                     android:textSize="12sp" />
 
@@ -451,7 +515,7 @@
                     android:background="@drawable/bg_prompt_chip"
                     android:gravity="center_vertical"
                     android:paddingHorizontal="14dp"
-                    android:text="📁 Find recent downloads"
+                    android:text="Find recent downloads"
                     android:textColor="#F1F5F9"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -475,7 +539,7 @@
                 android:layout_height="38dp"
                 android:background="@drawable/bg_btn_mic_orange"
                 android:contentDescription="Voice Speak"
-                android:src="@android:drawable/ic_btn_speak_now"
+                android:src="@drawable/ic_mic"
                 app:tint="#FF7A00" />
 
             <EditText
@@ -498,7 +562,7 @@
                 android:layout_height="38dp"
                 android:background="@drawable/bg_btn_send_orange"
                 android:contentDescription="Send Command"
-                android:src="@android:drawable/ic_menu_send"
+                android:src="@drawable/ic_send"
                 app:tint="#FFFFFF" />
         </LinearLayout>
     </LinearLayout>

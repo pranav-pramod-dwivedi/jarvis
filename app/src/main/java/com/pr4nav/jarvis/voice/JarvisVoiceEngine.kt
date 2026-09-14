@@ -3,7 +3,9 @@ package com.pr4nav.jarvis.voice
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -20,6 +22,9 @@ import java.util.Locale
  * JARVIS Core Voice Engine
  * Handles Speech-to-Text (STT) and Text-to-Speech (TTS) with
  * instant interruptibility and natural cadence.
+ *
+ * Primary TTS Engine: Kira 3.0 Flash TTS (kira-3.0-flash-tts) with
+ * automatic offline fallback to Android High-Definition TextToSpeech.
  */
 class JarvisVoiceEngine private constructor(private val context: Context) : TextToSpeech.OnInitListener {
 
@@ -39,6 +44,9 @@ class JarvisVoiceEngine private constructor(private val context: Context) : Text
 
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
+    private var mediaPlayer: MediaPlayer? = null
+    @Volatile private var isKiraSpeaking = false
+    @Volatile private var currentSynthesisJobId: Long = 0L
     private var speechRecognizer: SpeechRecognizer? = null
     @Volatile var isListening = false
         private set
@@ -125,6 +133,9 @@ class JarvisVoiceEngine private constructor(private val context: Context) : Text
         onWordSpoken: ((start: Int, end: Int) -> Unit)? = null,
         onDone: (() -> Unit)? = null
     ) {
+        val jobId = System.currentTimeMillis()
+        currentSynthesisJobId = jobId
+
         if (interrupt) {
             stopSpeaking()
         }
@@ -135,9 +146,6 @@ class JarvisVoiceEngine private constructor(private val context: Context) : Text
             return
         }
 
-        // Start progressive word highlighting timer synchronized to speech rate
-        startWordHighlighting(cleanText, onWordSpoken)
-
         val wrappedOnDone: () -> Unit = {
             stopWordHighlighting()
             audioCoordinator.abandonAssistantFocus()
@@ -145,16 +153,98 @@ class JarvisVoiceEngine private constructor(private val context: Context) : Text
             Unit
         }
 
-        // Android High-Definition Native TextToSpeech (Clean, Natural, Crystal-Clear Voice)
+        audioCoordinator.requestAssistantFocus {
+            stopSpeaking()
+        }
+
+        // 1. Primary Engine: Kira 3.0 Flash TTS (kira-3.0-flash-tts) for HUD and all voice output
+        if (KiraTtsClient.isAvailable(context)) {
+            val cloudVoice = VoiceAssistantPreferences.getCloudTtsVoice(context)
+            Log.d(TAG, "Synthesizing voice via primary kira-3.0-flash-tts engine...")
+            KiraTtsClient.synthesizeSpeechAsync(
+                context = context,
+                text = cleanText,
+                voice = cloudVoice,
+                onSuccess = { audioResult ->
+                    mainHandler.post {
+                        if (currentSynthesisJobId != jobId) {
+                            Log.d(TAG, "Kira speech job superseded by newer utterance")
+                            return@post
+                        }
+                        playKiraAudio(audioResult, cleanText, onWordSpoken, wrappedOnDone)
+                    }
+                },
+                onError = { err ->
+                    Log.w(TAG, "Kira TTS error: $err; falling back to local Android TTS engine")
+                    mainHandler.post {
+                        if (currentSynthesisJobId == jobId) {
+                            speakWithLocalTts(cleanText, interrupt = false, onWordSpoken, wrappedOnDone)
+                        }
+                    }
+                }
+            )
+        } else {
+            // 2. Offline Fallback: Local Android High-Definition TextToSpeech ("until network is gone")
+            Log.d(TAG, "Kira TTS unavailable (offline or missing key); using local Android TTS fallback")
+            speakWithLocalTts(cleanText, interrupt = false, onWordSpoken, wrappedOnDone)
+        }
+    }
+
+    private fun playKiraAudio(
+        result: KiraTtsClient.TtsAudioResult,
+        cleanText: String,
+        onWordSpoken: ((start: Int, end: Int) -> Unit)?,
+        onDone: () -> Unit
+    ) {
+        try {
+            stopSpeakingKira()
+            val mp = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                setDataSource(result.audioFile.absolutePath)
+                setOnCompletionListener {
+                    isKiraSpeaking = false
+                    stopSpeakingKira()
+                    mainHandler.post { onDone() }
+                }
+                setOnErrorListener { _, what, extra ->
+                    Log.w(TAG, "MediaPlayer error ($what, $extra); falling back to local TTS")
+                    isKiraSpeaking = false
+                    stopSpeakingKira()
+                    speakWithLocalTts(cleanText, interrupt = false, onWordSpoken, onDone)
+                    true
+                }
+                prepare()
+            }
+            mediaPlayer = mp
+            isKiraSpeaking = true
+            startWordHighlightingTimed(cleanText, result.durationMs, onWordSpoken)
+            mp.start()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to play Kira TTS audio: ${e.message}; falling back to local TTS", e)
+            isKiraSpeaking = false
+            stopSpeakingKira()
+            speakWithLocalTts(cleanText, interrupt = false, onWordSpoken, onDone)
+        }
+    }
+
+    private fun speakWithLocalTts(
+        cleanText: String,
+        interrupt: Boolean,
+        onWordSpoken: ((start: Int, end: Int) -> Unit)?,
+        wrappedOnDone: () -> Unit
+    ) {
         if (!isTtsReady || tts == null) {
             Log.w(TAG, "Android TTS engine not ready yet")
             wrappedOnDone()
             return
         }
 
-        audioCoordinator.requestAssistantFocus {
-            stopSpeaking()
-        }
+        startWordHighlighting(cleanText, onWordSpoken)
 
         val speechRate = VoiceAssistantPreferences.getSpeechRate(context)
         tts?.setSpeechRate(speechRate)
@@ -225,8 +315,62 @@ class JarvisVoiceEngine private constructor(private val context: Context) : Text
         wordHighlightRunnable = null
     }
 
-    fun stopSpeaking() {
+    private fun startWordHighlightingTimed(
+        cleanText: String,
+        durationMs: Long,
+        onWordSpoken: ((start: Int, end: Int) -> Unit)?
+    ) {
         stopWordHighlighting()
+        if (onWordSpoken == null) return
+
+        val words = Regex("\\S+").findAll(cleanText).toList()
+        if (words.isEmpty()) return
+
+        val totalChars = words.sumOf { it.value.length }.coerceAtLeast(1)
+        val usableDuration = durationMs.coerceAtLeast(words.size * 100L)
+
+        var cumulativeDelay = 40L
+        val tasks = mutableListOf<Runnable>()
+
+        for (m in words) {
+            val start = m.range.first
+            val end = m.range.last + 1
+            val word = m.value
+            val fraction = word.length.toFloat() / totalChars.toFloat()
+            val wordDuration = Math.max(100L, (fraction * usableDuration).toLong() + (if (word.endsWith(".") || word.endsWith(",")) 80L else 0L))
+
+            val task = Runnable {
+                onWordSpoken(start, end)
+            }
+            tasks.add(task)
+            mainHandler.postDelayed(task, cumulativeDelay)
+            cumulativeDelay += wordDuration
+        }
+
+        wordHighlightRunnable = Runnable {
+            for (t in tasks) {
+                mainHandler.removeCallbacks(t)
+            }
+        }
+    }
+
+    private fun stopSpeakingKira() {
+        try {
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.stop()
+            }
+        } catch (_: Exception) {}
+        try {
+            mediaPlayer?.release()
+        } catch (_: Exception) {}
+        mediaPlayer = null
+        isKiraSpeaking = false
+    }
+
+    fun stopSpeaking() {
+        currentSynthesisJobId = 0L
+        stopWordHighlighting()
+        stopSpeakingKira()
         audioCoordinator.abandonAssistantFocus()
         try {
             if (tts?.isSpeaking == true) {
@@ -235,7 +379,7 @@ class JarvisVoiceEngine private constructor(private val context: Context) : Text
         } catch (_: Exception) {}
     }
 
-    fun isSpeaking(): Boolean = tts?.isSpeaking == true
+    fun isSpeaking(): Boolean = isKiraSpeaking || (tts?.isSpeaking == true)
 
     fun startListening(
         activity: Activity? = null,
@@ -381,12 +525,14 @@ class JarvisVoiceEngine private constructor(private val context: Context) : Text
             speechRecognizer?.destroy()
             speechRecognizer = null
             audioCoordinator.release()
+            stopSpeakingKira()
             tts?.stop()
         } catch (_: Exception) {}
     }
 
     fun destroyFully() {
         destroy()
+        stopSpeakingKira()
         try {
             tts?.shutdown()
             tts = null

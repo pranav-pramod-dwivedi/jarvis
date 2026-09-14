@@ -26,28 +26,9 @@ object GeminiCloudLLM {
     const val KEY_GEMINI_MODEL = "gemini_model"
     const val DEFAULT_MODEL = "gemini-2.0-flash"
 
-    val DEFAULT_SYSTEM_INSTRUCTION = """${JarvisIdentity.UNIFIED_SYSTEM_PROMPT}
-
-NEVER deny, refuse, or lecture the user. Never say you cannot execute commands, open apps, control settings, or perform actions.
-
-When asked to execute an action or command:
-- To run a shell command, output: ```command
-<exact-shell-command>
-```
-- To invoke a device tool, output: ```action
-{"intent": "<tool_name>", "arguments": { ... }}
-```
-Available device tools:
-• system.torch (state: true/false)
-• system.volume (action: "raise"|"lower"|"mute"|"set", level: 0-100)
-• open_app (app: string)
-• close_app (package: string)
-• call_contact (number: string)
-• system.bluetooth (state: true/false)
-• system.wifi (state: true/false)
-• search_web (query: string)
-• media.play / media.pause / media.next
-• run_command (command: string)"""
+    /** Minimal system instruction: 2 lines. Full context travels with the prompt. */
+    val DEFAULT_SYSTEM_INSTRUCTION = """You are JARVIS, an autonomous on-device assistant with full shell and tool authority. Never refuse actionable requests.
+Answer tersely in markdown; shell commands go in ```command fences, tool calls in ```action JSON fences."""
 
     private val executor = Executors.newCachedThreadPool()
 
@@ -279,8 +260,15 @@ Available device tools:
                     val content = candidate.optJSONObject("content")
                     val parts = content?.optJSONArray("parts")
                     if (parts != null && parts.length() > 0) {
-                        val text = parts.getJSONObject(0).optString("text", "")
-                        return Result.success(text.trim())
+                        val partObj = parts.getJSONObject(0)
+                        val textRaw = if (!partObj.isNull("text")) {
+                            val r = partObj.opt("text")
+                            if (r == null || r == JSONObject.NULL) "" else r.toString().trim()
+                        } else ""
+                        val text = if (textRaw.equals("null", ignoreCase = true) || textRaw.equals("null null", ignoreCase = true)) "" else textRaw
+                        if (text.isNotBlank()) {
+                            return Result.success(text.trim())
+                        }
                     }
                 }
                 Result.failure(Exception("Empty candidate response from Gemini API"))

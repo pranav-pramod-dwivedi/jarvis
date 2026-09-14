@@ -86,6 +86,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -193,7 +194,7 @@ object DynamicCrtTvEffects {
 class MainActivity : ComponentActivity() {
 
     private var voiceEngine: JarvisVoiceEngine? = null
-    private var initialIntentPrompt: String? = null
+    private var initialIntentPrompt by mutableStateOf<String?>(null)
     private var targetSessionIdExtra by mutableStateOf<String?>(null)
 
     // Real-time Voice Service Observers for Hands-Free & Overlay HUD continuity
@@ -236,7 +237,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
@@ -341,52 +341,6 @@ class MainActivity : ComponentActivity() {
         val p = extractPromptFromIntent(intent)
         if (!p.isNullOrBlank()) {
             initialIntentPrompt = p
-        }
-        if (!p.isNullOrBlank() || !sessId.isNullOrBlank()) {
-            setContent {
-                JarvisMainApp(
-                    voiceEngine = voiceEngine,
-                    initialPrompt = initialIntentPrompt,
-                    targetSessionId = targetSessionIdExtra,
-                    onOpenDeveloperHub = { showDeveloperHubMenu() },
-                    onOpenSessionHistory = { onSelectSession, onNewSession ->
-                        SessionHistoryDialog(
-                            this,
-                            filterType = SessionType.AGENT_CHAT,
-                            onSessionSelected = { session -> onSelectSession(session) },
-                            onNewSessionRequested = { onNewSession() }
-                        ).show()
-                    },
-                    onToggleCompanionMode = { showCompanionModeDialog() },
-                    onConfigureQwenUrl = { showConfigureQwenUrlDialog() },
-                    onShowRegenerateDialog = { prompt, onSelectedMode ->
-                        showRegenerateDialog(prompt, onSelectedMode)
-                    },
-                    onRegisterVoiceCallbacks = { onSpeech, onResponse, onThinking, onWake ->
-                        onSpeechRecognizedCallback = onSpeech
-                        onResponseSynthesizedCallback = onResponse
-                        onThinkingTraceCallback = onThinking
-                        onWakeWordTriggeredCallback = onWake
-                    }
-                )
-
-                if (isToolsDialogVisible) {
-                    JarvisToolsDialog(
-                        onDismiss = { isToolsDialogVisible = false },
-                        onOpenStandby = {
-                            isToolsDialogVisible = false
-                            isStandbyDialogVisible = true
-                        },
-                        onConfigureQwenUrl = {
-                            isToolsDialogVisible = false
-                            showConfigureQwenUrlDialog()
-                        }
-                    )
-                }
-                if (isStandbyDialogVisible) {
-                    JarvisStandbyVoiceDialog(onDismiss = { isStandbyDialogVisible = false })
-                }
-            }
         }
     }
 
@@ -729,48 +683,13 @@ fun JarvisMainApp(
         Toast.makeText(context, "Task cancelled", Toast.LENGTH_SHORT).show()
     }
 
-    fun raceWithAgy() {
-        if (lastSubmittedPrompt.isBlank()) {
-            Toast.makeText(context, "No active prompt to race", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val prompt = lastSubmittedPrompt
-        isWorking = true
-        liveThinkingTitle = "Racing with AGY in PRoot Linux…"
-        liveStreamingText = "Executing parallel run via AGY in PRoot Linux…"
-        liveThinkingSteps = listOf("Engine: AGY PRoot Linux", "Timeout: 60s")
-        viewState = ViewState.CONVERSATION
-
-        scope.launch(Dispatchers.IO) {
-            try {
-                val agyRes = Shell.agy(prompt, timeoutMs = 60_000)
-                withContext(Dispatchers.Main) {
-                    isWorking = false
-                    val cleanOut = com.pr4nav.jarvis.response.UserResponseSanitizer.sanitize(agyRes.out, prompt)
-                    val jarvisMsg = SessionMessage(
-                        sender = "agent",
-                        text = if (cleanOut.isNotBlank()) cleanOut else if (agyRes.err.isNotBlank()) agyRes.err else "(no output)",
-                        steps = listOf(
-                            "Parallel Engine: AGY PRoot Linux",
-                            "Execution time: ${agyRes.ms}ms",
-                            "Exit code: ${agyRes.rc}"
-                        ),
-                        isSuccess = agyRes.rc == 0
-                    )
-                    JarvisSessionManager.appendMessage(context, currentSession, jarvisMsg)
-                    sessionMessages = sessionMessages + jarvisMsg
-
-                    if (cleanOut.isNotBlank()) {
-                        voiceEngine?.speak(cleanOut, interrupt = false)
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    isWorking = false
-                    Toast.makeText(context, "AGY race error: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
+    fun forceStopAllProcesses() {
+        com.pr4nav.jarvis.system.GamingModeManager.forceStopAll(context)
+        isWorking = false
+        liveThinkingTitle = "Gaming Mode Engaged"
+        liveStreamingText = "All background processes stopped. 0% CPU & battery active."
+        liveThinkingSteps = listOf("Gaming Mode: ACTIVE", "Voice Service: STOPPED", "HUD: HIDDEN", "Subprocesses: TERMINATED")
+        Toast.makeText(context, "🛑 GAMING MODE: All processes stopped (0% CPU & Battery)", Toast.LENGTH_LONG).show()
     }
 
     fun dispatchCommand(prompt: String, isFromVoice: Boolean = false) {
@@ -991,42 +910,56 @@ fun JarvisMainApp(
                 context = context,
                 rawQuery = trimmed,
                 onStatus = { status ->
-                    scope.launch(Dispatchers.Main) {
-                        liveThinkingTitle = status
-                        intermediateSteps.add(status)
-                        liveThinkingSteps = intermediateSteps.toList()
+                    if (status.isNotBlank() && !status.contains("null", ignoreCase = true)) {
+                        scope.launch(Dispatchers.Main) {
+                            liveThinkingTitle = status
+                            intermediateSteps.add(status)
+                            liveThinkingSteps = intermediateSteps.toList()
+                        }
                     }
                 },
                 onChunk = { chunk ->
-                    scope.launch(Dispatchers.Main) {
-                        accumulatedChunks.append(chunk)
-                        liveStreamingText = accumulatedChunks.toString()
+                    if (chunk.isNotBlank() && !chunk.equals("null", ignoreCase = true) && !chunk.equals("null null", ignoreCase = true)) {
+                        scope.launch(Dispatchers.Main) {
+                            accumulatedChunks.append(chunk)
+                            liveStreamingText = accumulatedChunks.toString()
+                        }
                     }
                 },
                 onResult = { res ->
                     scope.launch(Dispatchers.Main) {
-                        val replyText = if (res.jarvisResponse.text.isNotBlank()) {
+                        val rawReply = if (res.jarvisResponse.text.isNotBlank() && !res.jarvisResponse.text.equals("null", ignoreCase = true)) {
                             res.jarvisResponse.text
-                        } else if (accumulatedChunks.isNotBlank()) {
+                        } else if (res.speechResponse.isNotBlank() && !res.speechResponse.equals("null", ignoreCase = true)) {
+                            res.speechResponse
+                        } else if (accumulatedChunks.isNotBlank() && !accumulatedChunks.toString().trim().equals("null", ignoreCase = true)) {
                             accumulatedChunks.toString()
                         } else {
                             "Action executed successfully."
                         }
+                        val (_, cleanReply) = com.pr4nav.jarvis.response.UserResponseSanitizer.stripThinking(rawReply)
+                        val replyText = if (cleanReply.isNotBlank() && !cleanReply.equals("null", ignoreCase = true)) cleanReply else rawReply
 
                         val steps = mutableListOf<String>()
-                        if (res.thinkingTrace.isNotBlank()) {
-                            val traceLines = res.thinkingTrace
+                        // 1. Preserve reasoning / thinking trace in steps so it's expandable and viewable in the message bubble!
+                        if (res.thinkingTrace.isNotBlank() && !res.thinkingTrace.equals("null", ignoreCase = true)) {
+                            val cleanTrace = res.thinkingTrace
                                 .replace("<think>", "")
                                 .replace("</think>", "")
                                 .trim()
-                                .lines()
-                                .map { it.trim() }
-                                .filter { it.isNotEmpty() }
-                            steps.addAll(traceLines)
-                        } else {
-                            steps.add("Engine: ${res.modelName}")
-                            steps.add("Execution: ${res.source.badge}")
-                            if (res.latencyMs > 0) steps.add("Latency: ${res.latencyMs}ms")
+                            if (cleanTrace.isNotBlank() && !cleanTrace.equals("null", ignoreCase = true)) {
+                                steps.add("🧠 Reasoning:\n$cleanTrace")
+                            }
+                        }
+                        // 2. Add intermediate tool and status steps
+                        if (intermediateSteps.isNotEmpty()) {
+                            val filtered = intermediateSteps.filter { !it.contains("null", ignoreCase = true) }
+                            steps.addAll(filtered.take(4))
+                        }
+                        steps.add("Engine: ${res.modelName}")
+                        if (res.latencyMs > 0) steps.add("Latency: ${res.latencyMs}ms")
+                        if (res.source == com.pr4nav.jarvis.router.ExecutionSource.KIRA_AGENT) {
+                            steps.add("Kira Full Power Active ✓")
                         }
 
                         val jarvisMsg = SessionMessage(
@@ -1042,7 +975,7 @@ fun JarvisMainApp(
                         liveStreamingText = ""
                         liveThinkingSteps = emptyList()
 
-                        if (res.jarvisResponse.speechText.isNotBlank()) {
+                        if (res.jarvisResponse.speechText.isNotBlank() && !res.jarvisResponse.speechText.equals("null", ignoreCase = true)) {
                             voiceEngine?.speak(res.jarvisResponse.speechText, interrupt = false)
                         }
                     }
@@ -1131,7 +1064,10 @@ fun JarvisMainApp(
                         titleFontFamily = spaceGroteskFamily,
                         bodyFontFamily = dmSansFamily,
                         onClose = { viewState = ViewState.EXPLORE },
-                        onSendVoiceInput = { transcript -> dispatchCommand(transcript, isFromVoice = true) }
+                        onSendVoiceInput = { transcript ->
+                            dispatchCommand(transcript, isFromVoice = true)
+                            viewState = ViewState.CONVERSATION // show response
+                        }
                     )
                 }
 
@@ -1165,7 +1101,7 @@ fun JarvisMainApp(
                             }
                         },
                         onCancelTask = { cancelActiveExecution() },
-                        onRaceAgy = { raceWithAgy() },
+                        onRaceAgy = { forceStopAllProcesses() },
                         onOpenDeveloperHub = { isToolsDialogOpen = true }
                     )
                 }
@@ -1553,6 +1489,31 @@ fun TermuxSessionDrawer(
     }
 
     var selectedFilter by remember { mutableStateOf<SessionType?>(null) }
+    var pendingDeleteId by remember { mutableStateOf<String?>(null) }
+
+    // Delete confirmation dialog
+    if (pendingDeleteId != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeleteId = null },
+            title = { Text("Delete session?", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = { Text("This conversation will be permanently deleted.", color = Color.White.copy(alpha = 0.7f)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDeleteId?.let { onDeleteSession(it) }
+                    pendingDeleteId = null
+                }) {
+                    Text("Delete", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteId = null }) {
+                    Text("Cancel", color = Color.White.copy(alpha = 0.7f))
+                }
+            },
+            containerColor = Color(0xFF1A0A06),
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -1606,7 +1567,7 @@ fun TermuxSessionDrawer(
                         TerminalSvg(modifier = Modifier.size(18.dp), tint = Color(0xFFFF7200))
                         Column {
                             Text(
-                                text = "TERMINAL SESSIONS",
+                                text = "CHAT HISTORY",
                                 color = Color.White,
                                 fontSize = 14.sp,
                                 fontFamily = titleFontFamily,
@@ -1614,7 +1575,7 @@ fun TermuxSessionDrawer(
                                 letterSpacing = 0.5.sp
                             )
                             Text(
-                                text = "JARVIS Workspace",
+                                text = "Sessions & conversations",
                                 color = Color(0xFFFF7200).copy(alpha = 0.8f),
                                 fontSize = 11.sp,
                                 fontFamily = bodyFontFamily
@@ -1763,7 +1724,8 @@ fun TermuxSessionDrawer(
                                                 fontSize = 12.5.sp,
                                                 fontFamily = bodyFontFamily,
                                                 fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-                                                maxLines = 1
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                             Row(
                                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1791,7 +1753,7 @@ fun TermuxSessionDrawer(
                                     }
 
                                     IconButton(
-                                        onClick = { onDeleteSession(sess.id) },
+                                        onClick = { pendingDeleteId = sess.id },
                                         modifier = Modifier.size(24.dp)
                                     ) {
                                         TrashSvg(
@@ -1991,7 +1953,7 @@ fun ExploreView(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = if (isTermuxReady) "Linux Ready" else "Linux Standby",
+                            text = if (isTermuxReady) "Full power" else "Ready",
                             color = Color.White.copy(alpha = 0.85f),
                             fontSize = 11.5.sp,
                             fontFamily = bodyFontFamily,
@@ -2005,33 +1967,7 @@ fun ExploreView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Companion mode toggle badge - GREYED OUT per user request
-                Surface(
-                    onClick = {
-                        Toast.makeText(context, "Companion mode is greyed out / paused for now", Toast.LENGTH_SHORT).show()
-                    },
-                    shape = RoundedCornerShape(14.dp),
-                    color = Color.White.copy(alpha = 0.04f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        SparkleSvg(
-                            modifier = Modifier.size(11.dp),
-                            tint = Color.White.copy(alpha = 0.35f)
-                        )
-                        Text(
-                            text = "COMPANION (PAUSED)",
-                            color = Color.White.copy(alpha = 0.35f),
-                            fontSize = 10.sp,
-                            fontFamily = bodyFontFamily,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
+                // Companion mode button (hidden until feature is re-enabled)
 
                 IconButton(onClick = onOpenDeveloperHub, modifier = Modifier.size(36.dp)) {
                     ToolsSvg(
@@ -2154,6 +2090,7 @@ fun ExploreView(
                             if (textInput.isNotBlank()) {
                                 onExecutePrompt(textInput)
                                 textInput = ""
+                                onOpenConversation()
                             }
                         }),
                         decorationBox = { innerTextField ->
@@ -2230,6 +2167,7 @@ fun ExploreView(
                                 if (textInput.isNotBlank()) {
                                     onExecutePrompt(textInput)
                                     textInput = ""
+                                    onOpenConversation() // navigate so user sees the streaming response
                                 } else {
                                     onStartVoice()
                                 }
@@ -2801,10 +2739,10 @@ fun ConversationView(
             }
             item {
                 QuickNavChip(
-                    label = "Antigravity",
-                    icon = { AntigravitySvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f)) }
+                    label = "Gaming Mode",
+                    icon = { Text("🎮", fontSize = 11.sp) }
                 ) {
-                    context.startActivity(Intent(context, AgyActivity::class.java))
+                    com.pr4nav.jarvis.system.GamingModeManager.forceStopAll(context)
                 }
             }
             item {
@@ -2854,7 +2792,7 @@ fun ConversationView(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Session: ${currentSession.title}\nWorking Dir: ${SessionState.dir}\nDeterministic tool routing & autonomous execution active.",
+                            text = "Ask me anything. I can control your device, run code, manage files, search the web, make calls, and more.",
                             color = Color.White.copy(alpha = 0.6f),
                             fontSize = 13.sp,
                             fontFamily = bodyFontFamily,
@@ -2933,7 +2871,7 @@ fun ConversationView(
                 PromptActionChip("Recent Downloads") { onSendMessage("Find recent downloads") }
             }
             item {
-                PromptActionChip("Call Akhil") { onSendMessage("Call Akhil") }
+            PromptActionChip("Make a Call") { onSendMessage("Make a phone call") }
             }
             item {
                 PromptActionChip("Play Music") { onSendMessage("Play chill music") }
@@ -3094,17 +3032,16 @@ fun StreamingExecutionCard(
                     Surface(
                         onClick = onRaceAgy,
                         shape = RoundedCornerShape(8.dp),
-                        color = Color.White.copy(alpha = 0.1f)
+                        color = Color(0x33EF4444)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            LightningSvg(modifier = Modifier.size(10.dp), tint = Color(0xFF38BDF8))
                             Text(
-                                text = "Race AGY",
-                                color = Color(0xFF38BDF8),
+                                text = "🛑 Force Stop",
+                                color = Color(0xFFEF4444),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -3981,6 +3918,7 @@ fun JarvisBubble(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     // Action Bar: Copy, Regenerate, Listen, Stop Speaking
+                    var isSpeaking by remember { mutableStateOf(false) }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
@@ -3994,12 +3932,24 @@ fun JarvisBubble(
                             RegenerateSvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.75f))
                         }
                         Spacer(modifier = Modifier.width(6.dp))
-                        IconButton(onClick = onSpeak, modifier = Modifier.size(24.dp)) {
-                            SpeakerSvg(modifier = Modifier.size(14.dp), tint = Color.White.copy(alpha = 0.75f))
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        IconButton(onClick = onStopSpeech, modifier = Modifier.size(24.dp)) {
-                            StopSpeechSvg(modifier = Modifier.size(13.dp), tint = Color(0xFFEF4444).copy(alpha = 0.85f))
+                        // Speak/Stop toggle — one button, two states
+                        IconButton(
+                            onClick = {
+                                if (isSpeaking) {
+                                    onStopSpeech()
+                                    isSpeaking = false
+                                } else {
+                                    onSpeak()
+                                    isSpeaking = true
+                                }
+                            },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            if (isSpeaking) {
+                                StopSpeechSvg(modifier = Modifier.size(13.dp), tint = Color(0xFFEF4444).copy(alpha = 0.85f))
+                            } else {
+                                SpeakerSvg(modifier = Modifier.size(14.dp), tint = Color.White.copy(alpha = 0.75f))
+                            }
                         }
                     }
                 }
@@ -4087,22 +4037,7 @@ fun ChatBar(
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.1f),
-                    modifier = Modifier.size(30.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "@",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.85f)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(10.dp))
+                // @ context button - reserved for future @files, @terminal mentions
 
                 Box(
                     modifier = Modifier.weight(1f),
@@ -4122,7 +4057,7 @@ fun ChatBar(
                     BasicTextField(
                         value = inputText,
                         onValueChange = onTextChange,
-                        singleLine = true,
+                        maxLines = 5,
                         textStyle = TextStyle(
                             color = Color.White,
                             fontSize = 14.5.sp,
@@ -4674,12 +4609,16 @@ fun JarvisToolsDialog(
             context.startActivity(Intent(context, ConnectedServicesActivity::class.java))
             onDismiss()
         },
+        JarvisToolItem("Configure Kira AI Platform", "Primary chat & code engine (glm-5.3-free, mimo-v2.5, qwen3.8)", "✨") {
+            context.startActivity(Intent(context, ConnectedServicesActivity::class.java))
+            onDismiss()
+        },
         JarvisToolItem("Configure Groq API Key & Quotas", "Set Groq key, select model, and monitor 245 RPD / 65k TPM limits", "⚡") {
             onDismiss()
             onConfigureQwenUrl()
         },
-        JarvisToolItem("Antigravity PRoot Console", "Full Linux container environment with agy CLI tools", "🚀") {
-            context.startActivity(Intent(context, AgyActivity::class.java))
+        JarvisToolItem("Gaming Mode / Force Stop All", "Stop all background processes, listeners & HUD for 0% battery while gaming", "🛑") {
+            com.pr4nav.jarvis.system.GamingModeManager.forceStopAll(context)
             onDismiss()
         },
         JarvisToolItem("Voice Assistant Settings", "Language, speech rate, and hands-free preferences", "🔊") {
@@ -4688,6 +4627,10 @@ fun JarvisToolsDialog(
         },
         JarvisToolItem("Permissions Manager", "Review storage, mic, notification & overlay rights", "🔒") {
             context.startActivity(Intent(context, PermissionsActivity::class.java))
+            onDismiss()
+        },
+        JarvisToolItem("Termux & External Apps Fix", "Configure 'allow-external-apps=true' for Termux commands", "💻") {
+            context.startActivity(Intent(context, com.pr4nav.jarvis.setup.TermuxPermissionFixActivity::class.java))
             onDismiss()
         }
     )

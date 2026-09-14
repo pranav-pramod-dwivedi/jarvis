@@ -157,7 +157,16 @@ object JarvisWorkspace {
         val canonical = try {
             java.io.File(normalized).canonicalPath
         } catch (_: Exception) {
-            normalized
+            return WorkspaceValidationResult.Violation(
+                requested = path,
+                allowedRoot = WORKSPACE_DIR,
+                suggested = WORKSPACE_DIR,
+                reason = "Path cannot be safely canonicalized: $path"
+            )
+        }
+
+        if (com.pr4nav.jarvis.CmdGuard.isYoloEnabled()) {
+            return WorkspaceValidationResult.Allowed(canonical)
         }
 
         // If path explicitly targets forbidden system roots for project creation

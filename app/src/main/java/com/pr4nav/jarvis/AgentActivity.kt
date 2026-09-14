@@ -7,6 +7,13 @@ import android.view.Gravity
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.pr4nav.jarvis.chat.AgentBubbles
+import com.pr4nav.jarvis.chat.AgentStreamEvent
+import com.pr4nav.jarvis.chat.AgentTurnRenderer
+import com.pr4nav.jarvis.chat.ChatUi
+import com.pr4nav.jarvis.chat.Markdown
+import com.pr4nav.jarvis.chat.MessageChunker
 import com.pr4nav.jarvis.voice.JarvisVoiceEngine
 import org.json.JSONObject
 import kotlin.concurrent.thread
@@ -35,11 +42,15 @@ class AgentActivity : AppCompatActivity() {
     private lateinit var txtSessionTitle: TextView
     private lateinit var btnSessionHistory: Button
     private lateinit var btnNewSession: Button
+    private lateinit var pillCurrentModel: TextView
+    private lateinit var pillCurrentRoute: TextView
+    private lateinit var badgeHighReasoning: TextView
     private lateinit var currentSession: com.pr4nav.jarvis.session.JarvisSession
     private var voiceEngine: JarvisVoiceEngine? = null
     private var lastSubmittedPrompt: String = ""
     @Volatile private var isCurrentTaskCancelled = false
     private var activeExecutionThread: Thread? = null
+    private var activeRenderer: AgentTurnRenderer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,46 +69,22 @@ class AgentActivity : AppCompatActivity() {
         txtSessionTitle = findViewById(R.id.txt_current_session_title)
         btnSessionHistory = findViewById(R.id.btn_sessions_history)
         btnNewSession = findViewById(R.id.btn_new_session)
+        pillCurrentModel = findViewById(R.id.pill_current_model)
+        pillCurrentRoute = findViewById(R.id.pill_current_route)
+        badgeHighReasoning = findViewById(R.id.badge_high_reasoning)
+
+        pillCurrentModel.setOnClickListener { showModelPickerDialog() }
+        pillCurrentRoute.setOnClickListener { showRoutePickerDialog() }
 
         findViewById<View>(R.id.btn_cancel_task)?.setOnClickListener {
             cancelCurrentTask()
         }
 
-        findViewById<View>(R.id.btn_race_agy)?.setOnClickListener {
-            val promptToRace = lastSubmittedPrompt
-            if (promptToRace.isNotBlank()) {
-                showThinking("⚡ Racing with AGY Agent…", "Executing prompt in parallel via AGY inside PRoot Linux")
-                Thread {
-                    try {
-                        val agyRes = Shell.agy(promptToRace, timeoutMs = 60_000)
-                        runOnUiThread {
-                            hideThinking()
-                            val cleanOut = com.pr4nav.jarvis.response.UserResponseSanitizer.sanitize(agyRes.out, promptToRace)
-                            val steps = listOf(
-                                "Parallel Engine: AGY Autonomous Agent (PRoot Linux)",
-                                "Execution time: ${agyRes.ms}ms",
-                                "Exit code: ${agyRes.rc}"
-                            )
-                            addExecutionStepCard(
-                                title = "🤖 [AGY Parallel Result · ${agyRes.ms}ms]",
-                                steps = steps,
-                                isSuccess = agyRes.rc == 0,
-                                finalSummary = if (cleanOut.isNotBlank()) cleanOut else if (agyRes.err.isNotBlank()) agyRes.err else "(no output)"
-                            )
-                            if (cleanOut.isNotBlank()) {
-                                voiceEngine?.speak(cleanOut, interrupt = false)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        runOnUiThread {
-                            hideThinking()
-                            Toast.makeText(this@AgentActivity, "AGY race error: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }.start()
-            } else {
-                Toast.makeText(this, "No active prompt to race", Toast.LENGTH_SHORT).show()
-            }
+        findViewById<View>(R.id.btn_force_stop)?.setOnClickListener {
+            com.pr4nav.jarvis.system.GamingModeManager.forceStopAll(this)
+            cancelCurrentTask()
+            hideThinking()
+            Toast.makeText(this, "All background processes force stopped. 0% CPU & battery active.", Toast.LENGTH_SHORT).show()
         }
 
         voiceEngine = JarvisVoiceEngine.getInstance(this)
@@ -118,6 +105,9 @@ class AgentActivity : AppCompatActivity() {
         // Setup fast task selection Prompt Cards
         setupPromptCards()
 
+        // SVG iconography for input bar + tabs + chips (no emojis on this surface)
+        styleStaticIcons()
+
         btnSend.setOnClickListener { submit(input.text.toString().trim()) }
         input.setOnEditorActionListener { _, _, _ ->
             submit(input.text.toString().trim())
@@ -136,8 +126,44 @@ class AgentActivity : AppCompatActivity() {
         handleWakeWordIntent(intent)
     }
 
-    private fun setupSessionControls() {
-        // Load active session or create initial session
+    private fun styleStaticIcons() {
+        // Input bar SVG icons.
+        try {
+            findViewById<ImageButton>(R.id.agent_send)?.setImageResource(R.drawable.ic_send)
+            findViewById<ImageButton>(R.id.btn_voice_mic)?.setImageResource(R.drawable.ic_mic)
+        } catch (_: Exception) { }
+        // Tab + chip icons via start drawables.
+        setStartIcon(R.id.tab_files, R.drawable.ic_folder)
+        setStartIcon(R.id.tab_services, R.drawable.ic_bolt)
+        setStartIcon(R.id.tab_playground, R.drawable.ic_tool)
+        setStartIcon(R.id.tab_commander, R.drawable.ic_brain)
+        setStartIcon(R.id.tab_terminal, R.drawable.ic_terminal)
+        setStartIcon(R.id.tab_diagnostics, R.drawable.ic_window)
+        setStartIcon(R.id.tab_gaming_mode, R.drawable.ic_bolt)
+        setStartIcon(R.id.tab_artifacts, R.drawable.ic_layers)
+        setStartIcon(R.id.prompt_card_1, R.drawable.ic_phone)
+        setStartIcon(R.id.prompt_card_2, R.drawable.ic_speaker)
+        setStartIcon(R.id.prompt_card_3, R.drawable.ic_search)
+        setStartIcon(R.id.prompt_card_4, R.drawable.ic_window)
+        setStartIcon(R.id.prompt_card_5, R.drawable.ic_folder)
+        setStartIcon(R.id.txt_current_session_title, R.drawable.ic_calendar)
+    }
+
+    private fun setStartIcon(viewId: Int, iconRes: Int) {
+        try {
+            val tv = findViewById<TextView>(viewId) ?: return
+            val d = ContextCompat.getDrawable(this, iconRes)?.mutate()
+            d?.setBounds(0, 0, ChatUi.dp(this, 14), ChatUi.dp(this, 14))
+            d?.let {
+                val wrapped = androidx.core.graphics.drawable.DrawableCompat.wrap(it)
+                androidx.core.graphics.drawable.DrawableCompat.setTint(wrapped, Color.parseColor("#FF9E44"))
+                tv.setCompoundDrawables(wrapped, null, null, null)
+                tv.compoundDrawablePadding = ChatUi.dp(this, 6)
+            }
+        } catch (_: Exception) { }
+    }
+
+    private fun setupSessionControls() {        // Load active session or create initial session
         val session = com.pr4nav.jarvis.session.JarvisSessionManager.getActiveSession(
             this,
             com.pr4nav.jarvis.session.SessionType.AGENT_CHAT
@@ -175,36 +201,72 @@ class AgentActivity : AppCompatActivity() {
 
     private fun loadSession(session: com.pr4nav.jarvis.session.JarvisSession) {
         currentSession = session
-        txtSessionTitle.text = "📅 ${session.title}"
+        txtSessionTitle.text = session.title
         SessionState.dir = session.workingDir
 
-        // Render previous messages from session history
+        // Render previous messages from session history with the new components.
         messagesContainer.removeAllViews()
 
         if (session.messages.isEmpty()) {
-            addExecutionStepCard(
-                title = "JARVIS Neural Agent Ready",
-                steps = listOf(
-                    "Session initialized: ${session.title}",
-                    "Deterministic tool routing: Active",
-                    "Autonomous coding & execution: Active",
-                    "Working directory: ${session.workingDir}"
-                ),
-                isSuccess = true,
-                finalSummary = "Ready for complex autonomous tasks and natural conversation.",
-                saveToHistory = false
+            messagesContainer.addView(
+                AgentBubbles.agentCard(
+                    this,
+                    "Neural agent ready. Deterministic tool routing and autonomous execution are active.\n\nWorking directory: `${session.workingDir}`",
+                    caption = session.title,
+                    actions = null
+                )
             )
         } else {
             for (m in session.messages) {
                 if (m.sender == "user") {
-                    renderUserBubble(m.text)
+                    messagesContainer.addView(AgentBubbles.userBubble(this, m.text))
                 } else {
-                    renderStepCard(m.steps, m.isSuccess, m.text)
+                    renderHistoryAgent(m)
                 }
             }
         }
         scrollToBottom()
         updateCtx()
+    }
+
+    private fun renderHistoryAgent(m: com.pr4nav.jarvis.session.SessionMessage) {
+        var thinking = m.thinking
+        val toolRows = mutableListOf<String>()
+        for (s in m.steps) {
+            val t = s.trim()
+            when {
+                t.startsWith("Reasoning:") -> {
+                    if (thinking.isBlank()) thinking = t.removePrefix("Reasoning:").trim()
+                }
+                t.startsWith("Model:") || t.startsWith("• Model:") ||
+                    t.startsWith("Latency:") || t.startsWith("• Latency:") ||
+                    t.contains("Full Power Engine") || t.contains("Needle 2 Reflex ·") ||
+                    t.contains("Kira Full Power") -> { /* caption-level meta, skip */ }
+                t.isNotBlank() -> toolRows.add(Markdown.stripToPlain(t).take(220))
+            }
+        }
+        // Legacy sessions stored reasoning inside steps with an emoji prefix.
+        if (thinking.isBlank()) {
+            val legacy = m.steps.firstOrNull { it.contains("Reasoning:") }
+            if (legacy != null) thinking = legacy.substringAfter("Reasoning:").trim()
+        }
+        if (thinking.isNotBlank()) {
+            messagesContainer.addView(AgentBubbles.staticThinking(this, thinking))
+        }
+        toolRows.forEach { messagesContainer.addView(AgentBubbles.toolHistoryRow(this, it)) }
+        val chunks = MessageChunker.chunk(m.text.ifBlank { "Done." })
+        val acts = historyActions(m.text)
+        chunks.forEach { messagesContainer.addView(AgentBubbles.agentCard(this, it, null, acts)) }
+    }
+
+    private fun historyActions(fullText: String): AgentBubbles.Actions {
+        return AgentBubbles.Actions(
+            fullText = fullText,
+            prompt = lastSubmittedPrompt,
+            onListen = { t -> voiceEngine?.speak(t, interrupt = true) },
+            onRegenerate = { p -> showRegenerateDialog(p) },
+            onStopSpeak = { voiceEngine?.stopSpeaking() }
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -222,7 +284,7 @@ class AgentActivity : AppCompatActivity() {
 
         if (intent?.getBooleanExtra("from_wake_word", false) == true) {
             val wakeWord = intent.getStringExtra("wake_word") ?: "Jarvis"
-            showThinking("🎙 $wakeWord is listening…", "Hands-free session active. Speak your command.")
+            showThinking("$wakeWord is listening…", "Hands-free session active. Speak your command.")
         }
     }
 
@@ -246,7 +308,9 @@ class AgentActivity : AppCompatActivity() {
         override fun onResponseSynthesized(speechText: String, fullSummary: String) {
             runOnUiThread {
                 if (!isFinishing && !isDestroyed && fullSummary.isNotBlank()) {
-                    renderStepCard(emptyList(), true, fullSummary)
+                    messagesContainer.addView(
+                        AgentBubbles.agentCard(this@AgentActivity, fullSummary, null, null)
+                    )
                     scrollToBottom()
                 }
             }
@@ -287,6 +351,35 @@ class AgentActivity : AppCompatActivity() {
         val termuxState = if (Shell.termuxReachable()) "UP" else "DOWN"
         val coreState = com.pr4nav.jarvis.voice.JarvisVoiceService.currentState.name
         agentCtx.text = "Mode: ${mode.displayName} · Core: $coreState · termux: $termuxState"
+        updateModelPill()
+    }
+
+    private fun updateModelPill() {
+        val raw = com.pr4nav.jarvis.llm.KiraClient.getModel(this)
+        val isAuto = raw == com.pr4nav.jarvis.llm.KiraClient.MODEL_AUTO
+        val effective = if (isAuto) com.pr4nav.jarvis.llm.KiraClient.lastAutoModel() else raw
+        val label = com.pr4nav.jarvis.llm.KiraClient.modelLabel(effective)
+        val solo = com.pr4nav.jarvis.llm.KiraClient.isSoloModel(this)
+        pillCurrentModel.text = if (isAuto) {
+            "AUTO · $label ▾"
+        } else {
+            "MODEL · $label${if (solo) " · SOLO" else ""} ▾"
+        }
+        badgeHighReasoning.visibility =
+            if (com.pr4nav.jarvis.llm.KiraClient.isHighReasoning(effective)) View.VISIBLE else View.GONE
+        val route = com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.getRoute(this)
+        pillCurrentRoute.text =
+            "ROUTE · ${com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.routeShort(route)} ▾"
+    }
+
+    /** Route pill opens the full routing harness screen. */
+    fun showRoutePickerDialog() {
+        startActivity(Intent(this, RouteHarnessActivity::class.java))
+    }
+
+    /** Model switcher on the chat page (delegates to the shared picker). */
+    fun showModelPickerDialog() {
+        com.pr4nav.jarvis.llm.KiraModelPicker.show(this) { updateModelPill() }
     }
 
     private fun showModeSelectorDialog() {
@@ -301,8 +394,50 @@ class AgentActivity : AppCompatActivity() {
                 updateCtx()
                 Toast.makeText(this, "Switched to ${chosen.displayName}", Toast.LENGTH_SHORT).show()
             }
-            .setNeutralButton("Groq Key") { _, _ ->
+            .setPositiveButton("Kira AI") { _, _ ->
+                showConfigureKiraDialog()
+            }
+            .setNeutralButton("Groq LPU") { _, _ ->
                 showConfigureGroqDialog()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun showConfigureKiraDialog() {
+        val currentKey = com.pr4nav.jarvis.llm.KiraClient.getApiKey(this)
+        val currentModel = com.pr4nav.jarvis.llm.KiraClient.getModel(this)
+
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 40, 50, 20)
+        }
+
+        val info = android.widget.TextView(this).apply {
+            text = "Kira AI Platform (Primary Chat & Code)\nCascade: ${com.pr4nav.jarvis.llm.KiraClient.FREE_MODEL_CASCADE.joinToString(" > ")}\nModel: $currentModel"
+            textSize = 12f
+            setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+        }
+        layout.addView(info)
+
+        val edit = EditText(this).apply {
+            setText(currentKey)
+            hint = "Kira API Key (Bearer ...)"
+            setPadding(30, 25, 30, 25)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        layout.addView(edit)
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Configure Kira AI Key & Models")
+            .setView(layout)
+            .setPositiveButton("Save") { _, _ ->
+                val newKey = edit.text.toString().trim()
+                com.pr4nav.jarvis.llm.KiraClient.setApiKey(this, newKey)
+                Toast.makeText(this, if (newKey.isNotEmpty()) "Kira API Key Saved!" else "Kira Key Cleared (Using Free Cascade)", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Model") { _, _ ->
+                showModelPickerDialog()
             }
             .setNegativeButton("Close", null)
             .show()
@@ -319,7 +454,7 @@ class AgentActivity : AppCompatActivity() {
         }
 
         val info = android.widget.TextView(this).apply {
-            text = "⚡ Groq LPU (Max 8,192 tokens/msg)\nQuotas: ${metrics.rpdUsed}/245 RPD · ${metrics.currentTpm}/65k TPM\nModel: $currentModel"
+            text = "Groq LPU (Max 8,192 tokens/msg)\nQuotas: ${metrics.rpdUsed}/245 RPD · ${metrics.currentTpm}/65k TPM\nModel: $currentModel"
             textSize = 12f
             setTextColor(android.graphics.Color.parseColor("#94A3B8"))
         }
@@ -334,7 +469,7 @@ class AgentActivity : AppCompatActivity() {
         layout.addView(edit)
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("⚡ Configure Groq API Key & Quotas")
+            .setTitle("Configure Groq API Key & Quotas")
             .setView(layout)
             .setPositiveButton("Save") { _, _ ->
                 val newKey = edit.text.toString().trim()
@@ -343,13 +478,13 @@ class AgentActivity : AppCompatActivity() {
             }
             .setNeutralButton("Model") { _, _ ->
                 val models = arrayOf(
-                    "⚡ openai/gpt-oss-120b (Default · Flagship OSS 120B)",
-                    "🧠 groq/compound (Complex Multi-Tool Compound Agent)",
-                    "⚡ groq/compound-mini (Ultra-Fast Compound Agent)",
+                    "openai/gpt-oss-120b (Default · Flagship OSS 120B)",
+                    "groq/compound (Complex Multi-Tool Compound Agent)",
+                    "groq/compound-mini (Ultra-Fast Compound Agent)",
                     "llama-3.3-70b-versatile (Flagship 70B)",
                     "llama-3.1-8b-instant (Fast 8B)",
                     "mixtral-8x7b-32768 (32k Context)",
-                    "📥 Fetch Available Models from Groq API..."
+                    "Fetch Available Models from Groq API..."
                 )
                 androidx.appcompat.app.AlertDialog.Builder(this)
                     .setTitle("Select Groq Model")
@@ -419,6 +554,9 @@ class AgentActivity : AppCompatActivity() {
         findViewById<View>(R.id.tab_files)?.setOnClickListener {
             startActivity(Intent(this, BrowserActivity::class.java))
         }
+        findViewById<View>(R.id.tab_artifacts)?.setOnClickListener {
+            startActivity(Intent(this, ArtifactsActivity::class.java))
+        }
         findViewById<View>(R.id.tab_services)?.setOnClickListener {
             startActivity(Intent(this, ConnectedServicesActivity::class.java))
         }
@@ -434,8 +572,8 @@ class AgentActivity : AppCompatActivity() {
         findViewById<View>(R.id.tab_diagnostics)?.setOnClickListener {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
-        findViewById<View>(R.id.tab_agy)?.setOnClickListener {
-            startActivity(Intent(this, AgyActivity::class.java))
+        findViewById<View>(R.id.tab_gaming_mode)?.setOnClickListener {
+            com.pr4nav.jarvis.system.GamingModeManager.forceStopAll(this)
         }
     }
 
@@ -449,17 +587,19 @@ class AgentActivity : AppCompatActivity() {
 
     private fun showAllPagesDialog() {
         val pages = arrayOf(
-            "🧠 AI Model Hub & Weights",
-            "✨ Floating Companion HUD Overlay",
-            "🎙️ Voice & Assistant Settings",
-            "📁 File Manager & Storage Browser",
-            "⚡ Connected Services & Local AI",
-            "🛠️ Canonical Tool Playground",
-            "🎯 Commander / Quick Action Console",
-            "💻 Termux Linux Terminal",
-            "📊 System Diagnostics & Benchmarks",
-            "🚀 Antigravity (AGY) Console",
-            "🔒 App Permissions Manager"
+            "AI Model Hub & Weights",
+            "Routing Harness (engines · models · latency)",
+            "Floating Companion HUD Overlay",
+            "Voice & Assistant Settings",
+            "Artifacts & Mini-Apps",
+            "File Manager & Storage Browser",
+            "Connected Services & Local AI",
+            "Canonical Tool Playground",
+            "Commander / Quick Action Console",
+            "Termux Linux Terminal",
+            "System Diagnostics & Benchmarks",
+            "Gaming Mode / Force Stop",
+            "App Permissions Manager"
         )
 
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -467,16 +607,18 @@ class AgentActivity : AppCompatActivity() {
             .setItems(pages) { _, which ->
                 when (which) {
                     0 -> startActivity(Intent(this, com.pr4nav.jarvis.voice.ModelHubActivity::class.java))
-                    1 -> com.pr4nav.jarvis.companion.JarvisOverlayService.showHud(this)
-                    2 -> startActivity(Intent(this, com.pr4nav.jarvis.voice.VoiceSettingsActivity::class.java))
-                    3 -> startActivity(Intent(this, BrowserActivity::class.java))
-                    4 -> startActivity(Intent(this, ConnectedServicesActivity::class.java))
-                    5 -> startActivity(Intent(this, ToolPlaygroundActivity::class.java))
-                    6 -> startActivity(Intent(this, CommanderActivity::class.java))
-                    7 -> startActivity(Intent(this, TerminalActivity::class.java))
-                    8 -> startActivity(Intent(this, DiagnosticsActivity::class.java))
-                    9 -> startActivity(Intent(this, AgyActivity::class.java))
-                    10 -> startActivity(Intent(this, PermissionsActivity::class.java))
+                    1 -> startActivity(Intent(this, RouteHarnessActivity::class.java))
+                    2 -> com.pr4nav.jarvis.companion.JarvisOverlayService.showHud(this)
+                    3 -> startActivity(Intent(this, com.pr4nav.jarvis.voice.VoiceSettingsActivity::class.java))
+                    4 -> startActivity(Intent(this, ArtifactsActivity::class.java))
+                    5 -> startActivity(Intent(this, BrowserActivity::class.java))
+                    6 -> startActivity(Intent(this, ConnectedServicesActivity::class.java))
+                    7 -> startActivity(Intent(this, ToolPlaygroundActivity::class.java))
+                    8 -> startActivity(Intent(this, CommanderActivity::class.java))
+                    9 -> startActivity(Intent(this, TerminalActivity::class.java))
+                    10 -> startActivity(Intent(this, DiagnosticsActivity::class.java))
+                    11 -> com.pr4nav.jarvis.system.GamingModeManager.forceStopAll(this)
+                    12 -> startActivity(Intent(this, PermissionsActivity::class.java))
                 }
             }
             .setNegativeButton("Close", null)
@@ -527,189 +669,16 @@ class AgentActivity : AppCompatActivity() {
     }
 
     private fun renderUserBubble(text: String) {
-        val bubble = TextView(this).apply {
-            this.text = text
-            setTextColor(Color.WHITE)
-            textSize = 14f
-            setBackgroundResource(R.drawable.bg_chat_user)
-            setPadding(36, 24, 36, 24)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.END
-                topMargin = 20
-                marginStart = 120
-            }
-            layoutParams = lp
-        }
-        messagesContainer.addView(bubble)
-    }
-
-    private fun renderStepCard(steps: List<String>, isSuccess: Boolean, finalSummary: String) {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.bg_chat_agent)
-            setPadding(36, 32, 36, 32)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.START
-                topMargin = 20
-                marginEnd = 40
-            }
-            layoutParams = lp
-        }
-
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val dot = View(this).apply {
-            val size = (10 * resources.displayMetrics.density).toInt()
-            layoutParams = LinearLayout.LayoutParams(size, size).apply { marginEnd = 16 }
-            setBackgroundResource(if (isSuccess) R.drawable.bg_dot else R.drawable.bg_round_glow)
-        }
-        val tvTitle = TextView(this).apply {
-            this.text = if (isSuccess) "Agent Execution ✓" else "Action Completed with Notice"
-            setTextColor(if (isSuccess) Color.parseColor("#10B981") else Color.parseColor("#FF7A00"))
-            textSize = 13f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-        }
-        header.addView(dot)
-        header.addView(tvTitle)
-        card.addView(header)
-
-        for (step in steps) {
-            val stepRow = TextView(this).apply {
-                this.text = "• $step"
-                setTextColor(Color.parseColor("#94A3B8"))
-                textSize = 12f
-                val lp = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = 8 }
-                layoutParams = lp
-            }
-            card.addView(stepRow)
-        }
-
-        val outcome = TextView(this).apply {
-            this.text = finalSummary
-            setTextColor(Color.parseColor("#F8FAFC"))
-            textSize = 13f
-            setBackgroundResource(if (isSuccess) R.drawable.bg_step_success else R.drawable.bg_step_progress)
-            setPadding(24, 20, 24, 20)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 16 }
-            layoutParams = lp
-        }
-        card.addView(outcome)
-
-        renderMessageActions(card, finalSummary, null)
-        messagesContainer.addView(card)
-    }
-
-    private fun renderMessageActions(
-        parent: LinearLayout,
-        summaryText: String,
-        originalPrompt: String? = null
-    ) {
-        val actionsRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 12 }
-            layoutParams = lp
-        }
-
-        // 1. Copy Button
-        val btnCopy = TextView(this).apply {
-            text = "📋 Copy"
-            setTextColor(Color.parseColor("#94A3B8"))
-            textSize = 11.5f
-            setBackgroundResource(R.drawable.bg_btn_action_pill)
-            setPadding(20, 10, 20, 10)
-            setOnClickListener {
-                val cb = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                cb.setPrimaryClip(android.content.ClipData.newPlainText("JARVIS Response", summaryText))
-                Toast.makeText(this@AgentActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-            }
-        }
-        actionsRow.addView(btnCopy)
-
-        // 2. Regenerate Button
-        val btnRegenerate = TextView(this).apply {
-            text = "🔄 Regenerate"
-            setTextColor(Color.parseColor("#94A3B8"))
-            textSize = 11.5f
-            setBackgroundResource(R.drawable.bg_btn_action_pill)
-            setPadding(20, 10, 20, 10)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { marginStart = 10 }
-            layoutParams = lp
-
-            setOnClickListener {
-                showRegenerateDialog(originalPrompt ?: lastSubmittedPrompt.ifBlank { summaryText })
-            }
-        }
-        actionsRow.addView(btnRegenerate)
-
-        // 3. Listen Again Button
-        val btnListen = TextView(this).apply {
-            text = "🔊 Listen"
-            setTextColor(Color.parseColor("#94A3B8"))
-            textSize = 11.5f
-            setBackgroundResource(R.drawable.bg_btn_action_pill)
-            setPadding(20, 10, 20, 10)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { marginStart = 10 }
-            layoutParams = lp
-
-            setOnClickListener {
-                voiceEngine?.speak(summaryText, interrupt = true)
-            }
-        }
-        actionsRow.addView(btnListen)
-
-        // 4. Stop Speaking Button (Instant TTS Stop only - does NOT cancel task)
-        val btnStopSpeech = TextView(this).apply {
-            text = "■ Stop Speaking"
-            setTextColor(Color.parseColor("#EF4444"))
-            textSize = 11.5f
-            setBackgroundResource(R.drawable.bg_btn_action_pill)
-            setPadding(20, 10, 20, 10)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { marginStart = 10 }
-            layoutParams = lp
-
-            setOnClickListener {
-                voiceEngine?.stopSpeaking()
-                Toast.makeText(this@AgentActivity, "Speech interrupted", Toast.LENGTH_SHORT).show()
-            }
-        }
-        actionsRow.addView(btnStopSpeech)
-
-        parent.addView(actionsRow)
+        messagesContainer.addView(AgentBubbles.userBubble(this, text))
+        scrollToBottom()
     }
 
     private fun showRegenerateDialog(prompt: String) {
         val options = arrayOf(
-            "○ Auto (Tri-Tier Cascade)",
-            "○ Groq LLaMA 3.3 70B",
-            "○ Cloud (Gemini 2.0 Flash)",
-            "○ AGY Coding Agent"
+            "· Auto (Tri-Tier Cascade)",
+            "· Groq LLaMA 3.3 70B",
+            "· Cloud (Gemini 2.0 Flash)",
+            "· AGY Coding Agent"
         )
 
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -746,6 +715,10 @@ class AgentActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * System/info card (built-in commands, cancellations, errors): markdown body
+     * with icon actions, persisted to the session. No emojis.
+     */
     private fun addExecutionStepCard(
         title: String,
         steps: List<String>,
@@ -753,73 +726,25 @@ class AgentActivity : AppCompatActivity() {
         finalSummary: String,
         saveToHistory: Boolean = true
     ) {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.bg_chat_agent)
-            setPadding(36, 32, 36, 32)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.START
-                topMargin = 20
-                marginEnd = 40
+        val md = buildString {
+            append("**").append(title).append("**")
+            val cleanSteps = steps.map { it.trim() }.filter { it.isNotBlank() }
+            if (cleanSteps.isNotEmpty()) {
+                append("\n\n")
+                cleanSteps.forEach { append("- ").append(it).append("\n") }
             }
-            layoutParams = lp
-        }
-
-        // Title Row
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val dot = View(this).apply {
-            val size = (10 * resources.displayMetrics.density).toInt()
-            layoutParams = LinearLayout.LayoutParams(size, size).apply { marginEnd = 16 }
-            setBackgroundResource(if (isSuccess) R.drawable.bg_dot else R.drawable.bg_round_glow)
-        }
-        val tvTitle = TextView(this).apply {
-            this.text = title
-            setTextColor(if (isSuccess) Color.parseColor("#10B981") else Color.parseColor("#FF7A00"))
-            textSize = 13f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-        }
-        header.addView(dot)
-        header.addView(tvTitle)
-        card.addView(header)
-
-        // Steps progression
-        for (step in steps) {
-            val stepRow = TextView(this).apply {
-                this.text = "• $step"
-                setTextColor(Color.parseColor("#94A3B8"))
-                textSize = 12f
-                val lp = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = 8 }
-                layoutParams = lp
+            if (finalSummary.isNotBlank()) {
+                append("\n").append(finalSummary.trim())
             }
-            card.addView(stepRow)
-        }
-
-        // Final Outcome Banner
-        val outcome = TextView(this).apply {
-            this.text = finalSummary
-            setTextColor(Color.parseColor("#F8FAFC"))
-            textSize = 13f
-            setBackgroundResource(if (isSuccess) R.drawable.bg_step_success else R.drawable.bg_step_progress)
-            setPadding(24, 20, 24, 20)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 16 }
-            layoutParams = lp
-        }
-        card.addView(outcome)
-
-        messagesContainer.addView(card)
-        renderMessageActions(card, finalSummary, lastSubmittedPrompt)
+        }.trim()
+        val acts = AgentBubbles.Actions(
+            fullText = finalSummary.ifBlank { md },
+            prompt = lastSubmittedPrompt,
+            onListen = { t -> voiceEngine?.speak(t, interrupt = true) },
+            onRegenerate = { pr -> showRegenerateDialog(pr) },
+            onStopSpeak = { voiceEngine?.stopSpeaking() }
+        )
+        messagesContainer.addView(AgentBubbles.agentCard(this, md, null, acts))
         scrollToBottom()
 
         // Persist to active session
@@ -829,7 +754,7 @@ class AgentActivity : AppCompatActivity() {
                 currentSession,
                 com.pr4nav.jarvis.session.SessionMessage(
                     sender = "agent",
-                    text = finalSummary,
+                    text = md,
                     steps = steps,
                     isSuccess = isSuccess
                 )
@@ -837,7 +762,12 @@ class AgentActivity : AppCompatActivity() {
         }
 
         // Speak outcome via TTS
-        voiceEngine?.speak(finalSummary, interrupt = false)
+        if (finalSummary.isNotBlank()) {
+            voiceEngine?.speak(
+                com.pr4nav.jarvis.response.UserResponseSanitizer.sanitizeForSpeech(finalSummary),
+                interrupt = false
+            )
+        }
     }
 
     @Volatile private var activeTaskId: String? = null
@@ -845,6 +775,8 @@ class AgentActivity : AppCompatActivity() {
     private fun cancelCurrentTask() {
         isCurrentTaskCancelled = true
         activeTaskId = null
+        activeRenderer?.cancel()
+        activeRenderer = null
         activeExecutionThread?.interrupt()
         activeExecutionThread = null
         voiceEngine?.stopSpeaking()
@@ -859,105 +791,25 @@ class AgentActivity : AppCompatActivity() {
         }
     }
 
-    private fun createStreamingCard(initialTitle: String): (String, String, List<String>?, Boolean?) -> Unit {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.bg_chat_agent)
-            setPadding(36, 32, 36, 32)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.START
-                topMargin = 20
-                marginEnd = 40
+    /** Opens a saved artifact: HTML imports into a fresh browser tab, else the file manager. */
+    private fun openArtifactFile(filePath: String, title: String) {
+        try {
+            val f = java.io.File(filePath)
+            if (f.exists() && f.extension.lowercase() == "html") {
+                val app = com.pr4nav.jarvis.browser.JarvisBrowserAppManager.createApp(
+                    ctx = this,
+                    appId = "artifact-open-${System.currentTimeMillis()}",
+                    title = title,
+                    description = "Opened from Artifacts",
+                    html = f.readText(),
+                    isTemporary = true
+                )
+                com.pr4nav.jarvis.browser.JarvisBrowserActivity.launch(this, app.id)
+            } else {
+                startActivity(Intent(this, BrowserActivity::class.java))
             }
-            layoutParams = lp
-        }
-
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val dot = View(this).apply {
-            val size = (10 * resources.displayMetrics.density).toInt()
-            layoutParams = LinearLayout.LayoutParams(size, size).apply { marginEnd = 16 }
-            setBackgroundResource(R.drawable.bg_round_glow)
-        }
-        val tvTitle = TextView(this).apply {
-            this.text = initialTitle
-            setTextColor(Color.parseColor("#38BDF8"))
-            textSize = 13f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-        }
-        header.addView(dot)
-        header.addView(tvTitle)
-        card.addView(header)
-
-        val stepsBox = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-        }
-        card.addView(stepsBox)
-
-        val outcome = TextView(this).apply {
-            this.text = "Thinking…"
-            setTextColor(Color.parseColor("#F8FAFC"))
-            textSize = 13.5f
-            setBackgroundResource(R.drawable.bg_step_progress)
-            setPadding(24, 20, 24, 20)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 16 }
-            layoutParams = lp
-        }
-        card.addView(outcome)
-
-        messagesContainer.addView(card)
-        scrollToBottom()
-
-        val textBuffer = StringBuilder()
-
-        return { title: String, chunk: String, steps: List<String>?, isDone: Boolean? ->
-            runOnUiThread {
-                if (title.isNotEmpty()) {
-                    tvTitle.text = title
-                }
-                if (chunk.isNotEmpty()) {
-                    if (outcome.text == "Thinking…" || outcome.text == "Writing response…") {
-                        textBuffer.clear()
-                    }
-                    textBuffer.append(chunk)
-                    outcome.text = textBuffer.toString()
-                }
-                if (steps != null) {
-                    stepsBox.removeAllViews()
-                    for (step in steps) {
-                        val stepRow = TextView(this).apply {
-                            this.text = "• $step"
-                            setTextColor(Color.parseColor("#94A3B8"))
-                            textSize = 12f
-                            val lp = LinearLayout.LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT
-                            ).apply { topMargin = 6 }
-                            layoutParams = lp
-                        }
-                        stepsBox.addView(stepRow)
-                    }
-                }
-                if (isDone == true) {
-                    dot.setBackgroundResource(R.drawable.bg_dot)
-                    tvTitle.setTextColor(Color.parseColor("#10B981"))
-                    outcome.setBackgroundResource(R.drawable.bg_step_success)
-                    renderMessageActions(card, outcome.text.toString(), lastSubmittedPrompt)
-                }
-                scrollToBottom()
-            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Open failed: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -999,7 +851,7 @@ class AgentActivity : AppCompatActivity() {
             lower == "help" -> runOnUiThread {
                 if (taskId != null && activeTaskId != taskId) return@runOnUiThread
                 addExecutionStepCard(
-                    title = "⚙️ JARVIS Developer & Command Reference",
+                    title = "JARVIS Developer & Command Reference",
                     steps = listOf(
                         "Natural Voice & Chat: \"hi\", \"what is quantum computing\", \"take me home\"",
                         "Device Control: \"turn on flashlight\", \"set volume 80%\", \"take screenshot\"",
@@ -1014,7 +866,7 @@ class AgentActivity : AppCompatActivity() {
             lower == "pwd" -> runOnUiThread {
                 if (taskId != null && activeTaskId != taskId) return@runOnUiThread
                 addExecutionStepCard(
-                    title = "📁 Current Working Directory",
+                    title = "Current Working Directory",
                     steps = listOf("Resolved from SessionState"),
                     isSuccess = true,
                     finalSummary = "cwd: ${SessionState.dir}"
@@ -1024,11 +876,11 @@ class AgentActivity : AppCompatActivity() {
             lower.startsWith("ls") -> {
                 val p = Fs.resolve(arg.ifBlank { "." })
                 val list = Fs.list(p)
-                val items = list.take(10).map { (if (it.isDir) "📁 " else "📄 ") + it.name }
+                val items = list.take(10).map { (if (it.isDir) "[dir] " else "") + it.name }
                 runOnUiThread {
                     if (taskId != null && activeTaskId != taskId) return@runOnUiThread
                     addExecutionStepCard(
-                        title = "📁 Directory Listing: $p",
+                        title = "Directory Listing: $p",
                         steps = items,
                         isSuccess = true,
                         finalSummary = "Found ${list.size} items in $p"
@@ -1037,29 +889,53 @@ class AgentActivity : AppCompatActivity() {
             }
 
             lower.startsWith("run ") -> {
+                var shellCard: com.pr4nav.jarvis.chat.ToolCallCard? = null
                 runOnUiThread {
-                    if (taskId == null || activeTaskId == taskId) showThinking("Executing Termux Shell…", arg)
+                    if (taskId == null || activeTaskId == taskId) {
+                        shellCard = com.pr4nav.jarvis.chat.ToolCallCard(this, "execute_shell_command", arg)
+                        messagesContainer.addView(shellCard)
+                        scrollToBottom()
+                    }
                 }
                 val guardErr = CmdGuard.check(arg)
                 if (guardErr != null) {
                     runOnUiThread {
                         if (taskId == null || activeTaskId == taskId) {
                             hideThinking()
-                            addExecutionStepCard("⚠️ Command Blocked", listOf(guardErr), false, "Security guard prevented execution.")
+                            addExecutionStepCard("Command Blocked", listOf(guardErr), false, "Security guard prevented execution.")
                         }
                     }
                     return
                 }
+                val shellT0 = System.currentTimeMillis()
                 val r = Shell.termux(arg, 60_000)
                 runOnUiThread {
                     if (taskId != null && activeTaskId != taskId) return@runOnUiThread
                     hideThinking()
-                    addExecutionStepCard(
-                        title = "💻 Termux Shell: $arg",
-                        steps = listOf("Exit code: ${r.rc}", "Execution time: ${r.ms}ms", "Via: ${r.via}"),
-                        isSuccess = r.rc == 0,
-                        finalSummary = if (r.out.isNotBlank()) r.out.take(1000) else if (r.err.isNotBlank()) r.err.take(500) else "(no output)"
-                    )
+                    val out = if (r.out.isNotBlank()) r.out else r.err
+                    val rc = r.rc ?: -1
+                    shellCard?.finish(out, rc, System.currentTimeMillis() - shellT0)
+                    if (shellCard == null) {
+                        addExecutionStepCard(
+                            title = "Termux Shell",
+                            steps = listOf("Exit code: ${r.rc}", "Execution time: ${r.ms}ms", "Via: ${r.via}"),
+                            isSuccess = r.rc == 0,
+                            finalSummary = if (out.isNotBlank()) out.take(1000) else "(no output)"
+                        )
+                    } else if (::currentSession.isInitialized) {
+                        com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+                            this,
+                            currentSession,
+                            com.pr4nav.jarvis.session.SessionMessage(
+                                sender = "agent",
+                                text = "Ran `$arg` — exit ${r.rc} in ${r.ms}ms.",
+                                steps = listOf("Run · $arg · exit ${r.rc} · ${r.ms}ms"),
+                                isSuccess = r.rc == 0,
+                                toolCall = "execute_shell_command"
+                            )
+                        )
+                    }
+                    scrollToBottom()
                 }
             }
 
@@ -1069,7 +945,7 @@ class AgentActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (taskId != null && activeTaskId != taskId) return@runOnUiThread
                     addExecutionStepCard(
-                        title = "🛠️ Registered Canonical Tools",
+                        title = "Registered Canonical Tools",
                         steps = cat.lines().take(12),
                         isSuccess = true,
                         finalSummary = "All canonical tools ready for autonomous execution."
@@ -1078,11 +954,80 @@ class AgentActivity : AppCompatActivity() {
             }
 
             else -> {
-                // Live Streaming Model Card with Dynamic Statuses (Thinking, Executing, Writing)
-                var streamCardUpdater: ((String, String, List<String>?, Boolean?) -> Unit)? = null
+                // Event-driven turn: thinking block, tool cards, chunked message bubbles.
+                val rendererRef = arrayOfNulls<AgentTurnRenderer>(1)
+                val pendingEvents = mutableListOf<AgentStreamEvent>()
+                val deliverEvent: (AgentStreamEvent) -> Unit = { ev ->
+                    val r = synchronized(pendingEvents) {
+                        val rr = rendererRef[0]
+                        if (rr == null) {
+                            pendingEvents.add(ev)
+                        }
+                        rr
+                    }
+                    r?.onEvent(ev)
+                }
+                val turnListener = object : AgentTurnRenderer.Listener {
+                    override fun onTurnFinished(
+                        finalText: String,
+                        thinking: String,
+                        toolSummaries: List<String>,
+                        toolNames: String,
+                        success: Boolean,
+                        model: String,
+                        latencyMs: Long
+                    ) {
+                        if (::currentSession.isInitialized) {
+                            try {
+                                com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
+                                    this@AgentActivity,
+                                    currentSession,
+                                    com.pr4nav.jarvis.session.SessionMessage(
+                                        sender = "agent",
+                                        text = finalText,
+                                        steps = toolSummaries,
+                                        isSuccess = success,
+                                        toolCall = toolNames.ifBlank { null },
+                                        thinking = thinking
+                                    )
+                                )
+                                if (model.isNotBlank()) currentSession.modelUsed = model
+                            } catch (_: Exception) { }
+                        }
+                    }
+
+                    override fun onOpenArtifactFile(filePath: String, title: String, type: String) {
+                        openArtifactFile(filePath, title)
+                    }
+
+                    override fun onOpenBrowserApp(appId: String) {
+                        try {
+                            com.pr4nav.jarvis.browser.JarvisBrowserActivity.launch(this@AgentActivity, appId)
+                        } catch (e: Exception) {
+                            Toast.makeText(this@AgentActivity, "Open failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+
+                    override fun bubbleActions(fullText: String): AgentBubbles.Actions {
+                        return AgentBubbles.Actions(
+                            fullText = fullText,
+                            prompt = lastSubmittedPrompt,
+                            onListen = { t -> voiceEngine?.speak(t, interrupt = true) },
+                            onRegenerate = { pr -> showRegenerateDialog(pr) },
+                            onStopSpeak = { voiceEngine?.stopSpeaking() }
+                        )
+                    }
+                }
                 runOnUiThread {
                     if (taskId == null || activeTaskId == taskId) {
-                        streamCardUpdater = createStreamingCard("🧠 Thinking…")
+                        val r = AgentTurnRenderer(this, messagesContainer, scroller, q, turnListener)
+                        synchronized(pendingEvents) {
+                            rendererRef[0] = r
+                            activeRenderer = r
+                            val backlog = pendingEvents.toList()
+                            pendingEvents.clear()
+                            backlog.forEach { r.onEvent(it) }
+                        }
                     }
                 }
 
@@ -1091,56 +1036,51 @@ class AgentActivity : AppCompatActivity() {
                     rawQuery = q,
                     onStatus = { status ->
                         if (taskId == null || (activeTaskId == taskId && !isCurrentTaskCancelled)) {
-                            streamCardUpdater?.invoke(status, "", null, false)
+                            if (status.isNotBlank() && !status.contains("null", ignoreCase = true)) {
+                                deliverEvent(AgentStreamEvent.Status(status))
+                            }
                         }
                     },
-                    onChunk = { chunk ->
-                        if (taskId == null || (activeTaskId == taskId && !isCurrentTaskCancelled)) {
-                            streamCardUpdater?.invoke("", chunk, null, false)
-                        }
-                    },
+                    onChunk = null,
                     onResult = { res ->
                         runOnUiThread {
                             if (taskId != null && (activeTaskId != taskId || isCurrentTaskCancelled)) {
                                 return@runOnUiThread
                             }
-
-                            val steps = mutableListOf<String>()
-                            if (res.thinkingTrace.isNotBlank()) {
-                                val traceLines = res.thinkingTrace
-                                    .replace("<think>", "")
-                                    .replace("</think>", "")
-                                    .trim()
-                                    .lines()
-                                    .map { it.trim() }
-                                    .filter { it.isNotEmpty() }
-                                steps.addAll(traceLines)
-                            } else {
-                                steps.add("• Model: ${res.modelName}")
-                                steps.add("• Latency: ${res.latencyMs}ms")
-                            }
-
-                            streamCardUpdater?.invoke(res.source.badge, res.jarvisResponse.text, steps, true)
-
-                            // Persist to active session
-                            if (::currentSession.isInitialized) {
-                                com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(
-                                    this,
-                                    currentSession,
-                                    com.pr4nav.jarvis.session.SessionMessage(
-                                        sender = "agent",
-                                        text = "${res.source.badge}\n${res.jarvisResponse.text}",
-                                        steps = steps,
-                                        isSuccess = res.handled
+                            hideThinking()
+                            val renderer = rendererRef[0]
+                            if (renderer != null && !renderer.isFinished()) {
+                                // Safety net: a path that emitted no Final event.
+                                val rawReply = if (res.jarvisResponse.text.isNotBlank() && !res.jarvisResponse.text.equals("null", ignoreCase = true)) {
+                                    res.jarvisResponse.text
+                                } else if (res.speechResponse.isNotBlank() && !res.speechResponse.equals("null", ignoreCase = true)) {
+                                    res.speechResponse
+                                } else {
+                                    "Action completed successfully."
+                                }
+                                val (_, cleanReply) = com.pr4nav.jarvis.response.UserResponseSanitizer.stripThinking(rawReply)
+                                val finalReply = if (cleanReply.isNotBlank() && !cleanReply.equals("null", ignoreCase = true)) cleanReply else rawReply
+                                renderer.onEvent(
+                                    AgentStreamEvent.Final(
+                                        text = finalReply,
+                                        model = res.modelName,
+                                        latencyMs = res.latencyMs,
+                                        handled = res.handled,
+                                        thinkingTrace = res.thinkingTrace
                                     )
                                 )
                             }
 
-                            // Speak response via Kokoro-82M TTS only if not cancelled
+                            // Speak response via TTS only if not cancelled
                             if (taskId == null || (activeTaskId == taskId && !isCurrentTaskCancelled)) {
                                 voiceEngine?.speak(res.jarvisResponse.speechText, interrupt = false)
                             }
                             updateCtx()
+                        }
+                    },
+                    onEvent = { ev ->
+                        if (taskId == null || (activeTaskId == taskId && !isCurrentTaskCancelled)) {
+                            deliverEvent(ev)
                         }
                     }
                 )

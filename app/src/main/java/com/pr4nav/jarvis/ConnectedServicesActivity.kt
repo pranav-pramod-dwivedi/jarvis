@@ -236,6 +236,161 @@ class ConnectedServicesActivity : AppCompatActivity() {
             )
         }
 
+        // Kira AI Platform Setup (Primary Default)
+        val labelKiraStatus = findViewById<TextView>(R.id.kira_status)
+        val labelKiraCascade = findViewById<TextView>(R.id.kira_cascade_status)
+        val inputKiraKey = findViewById<EditText>(R.id.input_kira_api_key)
+        val btnSaveKira = findViewById<Button>(R.id.btn_save_kira)
+        val btnSelectKiraModel = findViewById<Button>(R.id.btn_select_kira_model)
+        val btnTestKira = findViewById<Button>(R.id.btn_test_kira)
+
+        fun refreshKiraStatus() {
+            val key = com.pr4nav.jarvis.llm.KiraClient.getApiKey(this)
+            val model = com.pr4nav.jarvis.llm.KiraClient.getModel(this)
+
+            btnSelectKiraModel.text = "MODEL: ${model.replace("-free", "").uppercase(java.util.Locale.ROOT)}"
+            if (key.isNotBlank()) {
+                inputKiraKey.setText(key)
+                labelKiraStatus.text = "Status: Kira Key Configured ($model) ✓"
+                labelKiraStatus.setTextColor(android.graphics.Color.parseColor("#10B981"))
+            } else {
+                labelKiraStatus.text = "Status: Free Cascade Active ($model) ✓"
+                labelKiraStatus.setTextColor(android.graphics.Color.parseColor("#10B981"))
+            }
+            labelKiraCascade.text = "Cascade Priority: ${com.pr4nav.jarvis.llm.KiraClient.FREE_MODEL_CASCADE.joinToString(" ➔ ")}"
+        }
+        refreshKiraStatus()
+
+        btnSaveKira.setOnClickListener {
+            val key = inputKiraKey.text.toString().trim()
+            com.pr4nav.jarvis.llm.KiraClient.setApiKey(this, key)
+            refreshKiraStatus()
+            Toast.makeText(this, if (key.isNotEmpty()) "Kira API Key Saved!" else "Kira Key Cleared (Using Free Cascade)", Toast.LENGTH_SHORT).show()
+        }
+
+        btnSelectKiraModel.setOnClickListener {
+            val freeModels = arrayOf(
+                "glm-5.3-free (Primary Free Flagship · 1M Context)",
+                "mimo-v2.5-free (Fast Free Cascade Tier 2)",
+                "qwen3.8-flash-free (Ultra-Fast Free Cascade Tier 3)",
+                "gpt-5.6-sol (Full Power Flagship · Codex Recommended)",
+                "gpt-oss-120b (Deep Autonomous Reasoning)",
+                "kira-3.5-pro (Deep Reasoning & Coding)",
+                "kira-3.5-flash (High-Throughput)",
+                "kira-mini-1.0 (Free Conversational)",
+                "Fetch Models from Kira AI API..."
+            )
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Select Kira AI Model")
+                .setItems(freeModels) { _, which ->
+                    when (which) {
+                        0 -> {
+                            com.pr4nav.jarvis.llm.KiraClient.setModel(this, com.pr4nav.jarvis.llm.KiraClient.MODEL_GLM_5_3_FREE)
+                            refreshKiraStatus()
+                            Toast.makeText(this, "Model: glm-5.3-free (Default)", Toast.LENGTH_SHORT).show()
+                        }
+                        1 -> {
+                            com.pr4nav.jarvis.llm.KiraClient.setModel(this, com.pr4nav.jarvis.llm.KiraClient.MODEL_MIMO_2_5_FREE)
+                            refreshKiraStatus()
+                            Toast.makeText(this, "Model: mimo-v2.5-free", Toast.LENGTH_SHORT).show()
+                        }
+                        2 -> {
+                            com.pr4nav.jarvis.llm.KiraClient.setModel(this, com.pr4nav.jarvis.llm.KiraClient.MODEL_QWEN_3_8_FLASH_FREE)
+                            refreshKiraStatus()
+                            Toast.makeText(this, "Model: qwen3.8-flash-free", Toast.LENGTH_SHORT).show()
+                        }
+                        3 -> {
+                            com.pr4nav.jarvis.llm.KiraClient.setModel(this, com.pr4nav.jarvis.llm.KiraClient.MODEL_GPT_5_6_SOL)
+                            refreshKiraStatus()
+                            Toast.makeText(this, "Model: gpt-5.6-sol (Full Power Flagship)", Toast.LENGTH_SHORT).show()
+                        }
+                        4 -> {
+                            com.pr4nav.jarvis.llm.KiraClient.setModel(this, com.pr4nav.jarvis.llm.KiraClient.MODEL_GPT_OSS_120B)
+                            refreshKiraStatus()
+                            Toast.makeText(this, "Model: gpt-oss-120b (Deep Reasoning)", Toast.LENGTH_SHORT).show()
+                        }
+                        5 -> {
+                            com.pr4nav.jarvis.llm.KiraClient.setModel(this, com.pr4nav.jarvis.llm.KiraClient.MODEL_KIRA_3_5_PRO)
+                            refreshKiraStatus()
+                            Toast.makeText(this, "Model: kira-3.5-pro", Toast.LENGTH_SHORT).show()
+                        }
+                        6 -> {
+                            com.pr4nav.jarvis.llm.KiraClient.setModel(this, com.pr4nav.jarvis.llm.KiraClient.MODEL_KIRA_3_5_FLASH)
+                            refreshKiraStatus()
+                            Toast.makeText(this, "Model: kira-3.5-flash", Toast.LENGTH_SHORT).show()
+                        }
+                        7 -> {
+                            com.pr4nav.jarvis.llm.KiraClient.setModel(this, com.pr4nav.jarvis.llm.KiraClient.MODEL_KIRA_MINI)
+                            refreshKiraStatus()
+                            Toast.makeText(this, "Model: kira-mini-1.0", Toast.LENGTH_SHORT).show()
+                        }
+                        8 -> {
+                            Toast.makeText(this, "Fetching models from Kira AI...", Toast.LENGTH_SHORT).show()
+                            val act = this
+                            com.pr4nav.jarvis.llm.KiraClient.fetchAvailableModels(
+                                context = act,
+                                onSuccess = { fetched: List<String> ->
+                                    runOnUiThread {
+                                        if (fetched.isEmpty()) {
+                                            Toast.makeText(act, "No models returned by Kira", Toast.LENGTH_SHORT).show()
+                                            return@runOnUiThread
+                                        }
+                                        androidx.appcompat.app.AlertDialog.Builder(act)
+                                            .setTitle("Available Kira Models (${fetched.size})")
+                                            .setItems(fetched.toTypedArray()) { _, fWhich: Int ->
+                                                val chosen = fetched[fWhich]
+                                                com.pr4nav.jarvis.llm.KiraClient.setModel(act, chosen)
+                                                refreshKiraStatus()
+                                                Toast.makeText(act, "Model: $chosen", Toast.LENGTH_SHORT).show()
+                                            }
+                                            .setNegativeButton("Cancel", null)
+                                            .show()
+                                    }
+                                },
+                                onError = { err: String ->
+                                    runOnUiThread {
+                                        Toast.makeText(act, "Fetch error: $err", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        btnTestKira.setOnClickListener {
+            Toast.makeText(this, "Querying Kira AI Free Cascade...", Toast.LENGTH_SHORT).show()
+            com.pr4nav.jarvis.llm.KiraClient.query(
+                context = this,
+                prompt = "Explain in one crisp sentence why you are the primary intelligence engine of JARVIS.",
+                onStatus = { s -> runOnUiThread { Toast.makeText(this, s, Toast.LENGTH_SHORT).show() } },
+                onSuccess = { res ->
+                    runOnUiThread {
+                        refreshKiraStatus()
+                        val toolsInfo = if (res.toolCallsExecuted.isNotEmpty()) {
+                            "Tools: ${res.toolCallsExecuted.map { it.command }.joinToString(", ")}\n\n"
+                        } else ""
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle("✨ Kira AI (${res.modelUsed} · ${res.latencyMs}ms)")
+                            .setMessage("$toolsInfo${res.response}")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                },
+                onError = { err ->
+                    runOnUiThread {
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle("⚠️ Kira Cascade Notice")
+                            .setMessage(err)
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                }
+            )
+        }
+
         // Test buttons
         findViewById<Button>(R.id.btn_test_compound).setOnClickListener {
             JarvisIntentRouter.routeAndExecute(this, "Play that YouTube video while navigating home") { res ->

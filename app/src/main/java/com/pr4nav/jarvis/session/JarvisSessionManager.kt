@@ -23,7 +23,8 @@ data class SessionMessage(
     val steps: List<String> = emptyList(),
     val isSuccess: Boolean = true,
     val toolCall: String? = null,
-    val codeDiff: String? = null
+    val codeDiff: String? = null,
+    val thinking: String = ""
 )
 
 data class JarvisSession(
@@ -147,8 +148,10 @@ object JarvisSessionManager {
     fun loadSession(context: Context, sessionId: String): JarvisSession? {
         val file = File(getStorageDir(context), "$sessionId.json")
         if (!file.exists()) return null
+        val atomicFile = android.util.AtomicFile(file)
         return try {
-            val jsonStr = file.readText()
+            val bytes = atomicFile.readFully()
+            val jsonStr = String(bytes, Charsets.UTF_8)
             parseSession(JSONObject(jsonStr))
         } catch (e: Exception) {
             Log.e(TAG, "Error loading session $sessionId: ${e.message}", e)
@@ -159,11 +162,19 @@ object JarvisSessionManager {
     @Synchronized
     fun saveSession(context: Context, session: JarvisSession) {
         val file = File(getStorageDir(context), "${session.id}.json")
+        val atomicFile = android.util.AtomicFile(file)
+        var fos: java.io.FileOutputStream? = null
         try {
             val json = serializeSession(session)
-            file.writeText(json.toString(2))
+            val bytes = json.toString(2).toByteArray(Charsets.UTF_8)
+            fos = atomicFile.startWrite()
+            fos.write(bytes)
+            atomicFile.finishWrite(fos)
         } catch (e: Exception) {
             Log.e(TAG, "Error saving session ${session.id}: ${e.message}", e)
+            if (fos != null) {
+                atomicFile.failWrite(fos)
+            }
         }
     }
 
@@ -172,6 +183,11 @@ object JarvisSessionManager {
         session.messages.add(message)
         session.lastUsedMs = System.currentTimeMillis()
         saveSession(context, session)
+        Thread {
+            try {
+                JarvisSessionContextArchive.updateArchive(context)
+            } catch (_: Exception) {}
+        }.start()
     }
 
     @Synchronized
@@ -223,6 +239,7 @@ object JarvisSessionManager {
 
             if (m.toolCall != null) mObj.put("toolCall", m.toolCall)
             if (m.codeDiff != null) mObj.put("codeDiff", m.codeDiff)
+            if (m.thinking.isNotBlank()) mObj.put("thinking", m.thinking)
             msgArr.put(mObj)
         }
         obj.put("messages", msgArr)
@@ -262,7 +279,8 @@ object JarvisSessionManager {
                         steps = steps,
                         isSuccess = mObj.optBoolean("isSuccess", true),
                         toolCall = mObj.optString("toolCall").takeIf { it.isNotBlank() },
-                        codeDiff = mObj.optString("codeDiff").takeIf { it.isNotBlank() }
+                        codeDiff = mObj.optString("codeDiff").takeIf { it.isNotBlank() },
+                        thinking = mObj.optString("thinking", "")
                     )
                 )
             }

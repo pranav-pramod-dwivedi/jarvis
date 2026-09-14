@@ -20,6 +20,7 @@ object VoiceAssistantPreferences {
     const val KEY_START_ON_BOOT = "start_on_boot"
     const val KEY_WAKE_CONFIDENCE = "wake_confidence_threshold" // default 0.35f (Balanced)
     const val KEY_USE_KOKORO_TTS = "use_kokoro_tts" // default false (Android Native HD TTS is clean & crystal clear)
+    const val KEY_CLOUD_TTS_VOICE = "cloud_tts_voice" // Kira cloud TTS voice id, e.g. "achernar"
 
     fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -83,6 +84,13 @@ object VoiceAssistantPreferences {
 
     fun setKokoroTtsEnabled(context: Context, enabled: Boolean) =
         getPrefs(context).edit().putBoolean(KEY_USE_KOKORO_TTS, enabled).apply()
+
+    fun getCloudTtsVoice(context: Context): String =
+        getPrefs(context).getString(KEY_CLOUD_TTS_VOICE, "achernar")?.trim()?.takeIf { it.isNotBlank() }
+            ?: "achernar"
+
+    fun setCloudTtsVoice(context: Context, voice: String) =
+        getPrefs(context).edit().putString(KEY_CLOUD_TTS_VOICE, voice.trim().takeIf { it.isNotBlank() } ?: "achernar").apply()
 
     /**
      * Checks if the app is exempt from battery optimizations.

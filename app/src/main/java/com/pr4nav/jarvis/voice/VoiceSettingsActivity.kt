@@ -22,6 +22,8 @@ class VoiceSettingsActivity : AppCompatActivity() {
     private lateinit var txtBatteryOptStatus: TextView
     private lateinit var btnRequestBatteryExemption: Button
     private lateinit var btnTestVoice: Button
+    private lateinit var txtCloudVoiceName: TextView
+    private lateinit var btnChangeVoice: Button
 
     private var voiceEngine: JarvisVoiceEngine? = null
 
@@ -40,6 +42,8 @@ class VoiceSettingsActivity : AppCompatActivity() {
         txtBatteryOptStatus = findViewById(R.id.txt_battery_opt_status)
         btnRequestBatteryExemption = findViewById(R.id.btn_request_battery_exemption)
         btnTestVoice = findViewById(R.id.btn_test_voice)
+        txtCloudVoiceName = findViewById(R.id.txt_cloud_voice_name)
+        btnChangeVoice = findViewById(R.id.btn_change_voice)
 
         setupPreferences()
         setupListeners()
@@ -48,6 +52,7 @@ class VoiceSettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshBatteryStatus()
+        refreshCloudVoice()
         switchHandsFree.isChecked = VoiceAssistantPreferences.isHandsFreeEnabled(this)
     }
 
@@ -113,6 +118,51 @@ class VoiceSettingsActivity : AppCompatActivity() {
         btnTestVoice.setOnClickListener {
             voiceEngine?.speak("Hello! JARVIS Voice Assistant is active and ready to perform actions.", interrupt = true)
         }
+
+        btnChangeVoice.setOnClickListener { showVoicePickerDialog() }
+    }
+
+    private fun refreshCloudVoice() {
+        txtCloudVoiceName.text = VoiceAssistantPreferences.getCloudTtsVoice(this)
+    }
+
+    fun showVoicePickerDialog() {
+        val current = VoiceAssistantPreferences.getCloudTtsVoice(this)
+        val presets = listOf("achernar", "onyx", "alloy")
+        val items = presets.map { v ->
+            if (v == current) "$v  ·  current" else v
+        }.toMutableList()
+        items.add("Custom voice id…")
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Cloud TTS voice")
+            .setItems(items.toTypedArray()) { _, which ->
+                if (which < presets.size) {
+                    VoiceAssistantPreferences.setCloudTtsVoice(this, presets[which])
+                    refreshCloudVoice()
+                    Toast.makeText(this, "Voice: ${presets[which]}", Toast.LENGTH_SHORT).show()
+                } else {
+                    val edit = android.widget.EditText(this).apply {
+                        setText(current)
+                        hint = "voice id (e.g. achernar)"
+                    }
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("Custom voice id")
+                        .setView(edit)
+                        .setPositiveButton("Save") { _, _ ->
+                            val v = edit.text.toString().trim()
+                            if (v.isNotBlank()) {
+                                VoiceAssistantPreferences.setCloudTtsVoice(this, v)
+                                refreshCloudVoice()
+                                Toast.makeText(this, "Voice: $v", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     private fun refreshBatteryStatus() {

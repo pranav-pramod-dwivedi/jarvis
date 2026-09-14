@@ -154,10 +154,6 @@
             android:launchMode="singleTop"
             android:exported="true" />
 
-        <activity android:name=".AgyActivity" android:exported="false" />
-        <activity android:name=".AgyWebActivity" android:exported="false" />
-        <activity android:name=".OpenCodeActivity" android:exported="false" />
-        <activity android:name=".OpenCodeWebActivity" android:exported="false" />
         <activity
             android:name=".browser.JarvisBrowserActivity"
             android:exported="true"
@@ -168,6 +164,8 @@
             android:windowSoftInputMode="adjustResize" />
         <activity android:name=".BrowserActivity" android:exported="false" />
         <activity android:name=".AgentActivity" android:exported="false" />
+        <activity android:name=".ArtifactsActivity" android:exported="false" />
+        <activity android:name=".RouteHarnessActivity" android:exported="false" />
         <activity android:name=".DiagnosticsActivity" android:exported="false" />
         <activity android:name=".ModelTestLabActivity" android:exported="false" />
         <activity
@@ -288,6 +286,21 @@
                 android:resource="@xml/device_admin_policies" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Sticky Human Pin & Anti-Ignore Actions -->
+        <receiver
+            android:name=".pin.PinActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.pr4nav.jarvis.pin.ACTION_PIN_DONE" />
+                <action android:name="com.pr4nav.jarvis.pin.ACTION_PIN_SNOOZE" />
+                <action android:name="com.pr4nav.jarvis.pin.ACTION_PIN_TALK" />
+                <action android:name="com.pr4nav.jarvis.pin.ACTION_ESCALATE_TICK" />
+                <action android:name="com.pr4nav.jarvis.pin.ACTION_CHECKIN_KICKOFF" />
+                <action android:name="com.pr4nav.jarvis.pin.ACTION_CHECKIN_MID" />
+                <action android:name="com.pr4nav.jarvis.pin.ACTION_CHECKIN_PRE_SLEEP" />
             </intent-filter>
         </receiver>
 
