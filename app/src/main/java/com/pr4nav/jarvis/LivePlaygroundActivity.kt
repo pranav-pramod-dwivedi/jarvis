@@ -420,81 +420,19 @@ class LivePlaygroundActivity : AppCompatActivity() {
     // ── tools ─────────────────────────────────────────────────────────────────
 
     private fun executeTool(id: String, name: String, argsJson: String) {
-        val args = try {
-            JSONObject(argsJson)
-        } catch (_: Exception) {
-            JSONObject()
-        }
-        val result = JSONObject()
-        try {
-            when (name) {
-                "run_shell" -> {
-                    val cmd = args.optString("command", "")
-                    if (cmd.isBlank()) {
-                        result.put("ok", false).put("note", "empty command")
-                    } else {
-                        val r = com.pr4nav.jarvis.Shell.termux(cmd, 30_000)
-                        val out = (if (r.out.isNotBlank()) r.out else r.err).take(2000)
-                        result.put("ok", (r.rc ?: -1) == 0)
-                            .put("exit_code", r.rc ?: -1)
-                            .put("output", out)
-                    }
-                }
-                "read_file" -> {
-                    val path = args.optString("path", "")
-                    try {
-                        result.put("ok", true).put("content", com.pr4nav.jarvis.Fs.read(path).take(4000))
-                    } catch (e: Exception) {
-                        result.put("ok", false).put("note", e.message ?: "read failed")
-                    }
-                }
-                "get_time" -> {
-                    result.put("ok", true).put(
-                        "time",
-                        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
-                    )
-                }
-                "take_screenshot" -> {
-                    val shot = captureScreenshot()
-                    if (shot != null) {
-                        runOnUiThread { imageRow(shot, "Screenshot for model") }
-                        result.put("ok", true).put(
-                            "note", "Screenshot captured and shown in chat."
-                        )
-                    } else {
-                        result.put("ok", false)
-                            .put("note", "Screenshot not permitted from this sandbox.")
-                    }
-                }
-                else -> result.put("ok", false).put("note", "unknown tool: $name")
+        val result = com.pr4nav.jarvis.llm.LiveToolExecutor.execute(name, argsJson, this)
+        if (name == "take_screenshot" && result.optBoolean("ok", false)) {
+            // Show the captured screen inline as well.
+            val shot = com.pr4nav.jarvis.llm.LiveToolExecutor.captureScreenshot(this)
+            if (shot != null) {
+                runOnUiThread { imageRow(shot, "Screenshot for model") }
             }
-        } catch (e: Exception) {
-            try {
-                result.put("ok", false).put("note", e.message ?: "failed")
-            } catch (_: Exception) { }
         }
         runOnUiThread {
             note("Tool $name → ${result.optBoolean("ok", false)}")
             scroll()
         }
         GeminiLiveClient.respondTool(id, name, result)
-    }
-
-    /** Best-effort screencap; needs shell/root, else returns null. */
-    private fun captureScreenshot(): ByteArray? {
-        return try {
-            val f = java.io.File(cacheDir, "live_shot_${System.currentTimeMillis()}.png")
-            val r = com.pr4nav.jarvis.Shell.local("screencap -p ${f.absolutePath}", 10_000)
-            if (r.rc == 0 && f.exists() && f.length() > 1000) {
-                val bytes = f.readBytes()
-                try {
-                    f.delete()
-                } catch (_: Exception) { }
-                bytes
-            } else null
-        } catch (_: Exception) {
-            null
-        }
     }
 
     // ── media helpers ─────────────────────────────────────────────────────────
