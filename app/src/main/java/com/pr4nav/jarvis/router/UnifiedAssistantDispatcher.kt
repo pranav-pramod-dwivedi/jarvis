@@ -557,9 +557,12 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
         val rt = route ?: effectiveRoute(context)
         val model = com.pr4nav.jarvis.llm.GeminiLiveClient.getSelectedModel(context)
         onStatus?.invoke("Asking Gemini Live…")
+        onEvent?.invoke(AgentStreamEvent.ThinkingDelta("Opening live dialog…"))
         kotlin.concurrent.thread(name = "jarvis-live-turn") {
             try {
-                val turn = com.pr4nav.jarvis.llm.GeminiLiveClient.oneShotTurn(context, prompt, timeoutSec = 60L)
+                val turn = com.pr4nav.jarvis.llm.GeminiLiveClient.oneShotTurn(
+                    context, prompt, timeoutSec = 60L, onEvent = onEvent
+                )
                 if (!turn.success) {
                     // Live is terminal: no forward cloud hops from a testing dialog.
                     val err = turn.error ?: "Live turn failed"
@@ -570,7 +573,8 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                 val latency = System.currentTimeMillis() - t0
                 val (_, cleanText) = com.pr4nav.jarvis.response.UserResponseSanitizer.stripThinking(turn.text)
                 val finalAnswer = if (cleanText.isNotBlank() && !cleanText.equals("null", ignoreCase = true)) cleanText else turn.text
-                val speech = com.pr4nav.jarvis.response.UserResponseSanitizer.sanitizeForSpeech(finalAnswer, prompt)
+                // Gemini already spoke this aloud: system TTS stays silent (no doubles).
+                val speech = if (turn.audioPlayed) "" else com.pr4nav.jarvis.response.UserResponseSanitizer.sanitizeForSpeech(finalAnswer, prompt)
                 com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, speech)
                 emitTurn(onEvent, turn.thinkingTrace, finalAnswer, "Gemini Live ($model)", latency, true)
                 onResult(

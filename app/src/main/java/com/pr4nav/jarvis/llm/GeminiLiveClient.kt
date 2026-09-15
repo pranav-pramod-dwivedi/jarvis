@@ -85,6 +85,17 @@ object GeminiLiveClient {
         fun onError(err: String)
     }
 
+    /**
+     * Splits a turn's text into spoken (transcription, live) vs written
+     * (modelTurn parts, final). Servers often send BOTH for the same words —
+     * final answer prefers written, never concatenated (no double text).
+     */
+    fun pickFinalAnswer(spoken: String, written: String): String {
+        val w = written.trim()
+        if (w.isNotBlank()) return w
+        return spoken.trim()
+    }
+
     data class ToolCall(val id: String, val name: String, val args: String)
 
     data class ParsedServerMessage(
@@ -106,7 +117,11 @@ object GeminiLiveClient {
     @Volatile private var connected = false
     @Volatile private var setupDone = false
     private var listener: Listener? = null
+    /** Written answer (modelTurn parts). Spoken transcription lives separately — never merged (no doubles). */
     private val textBuffer = StringBuilder()
+    private val spokenBuffer = StringBuilder()
+    /** Once transcription flows, modelTurn text is the same words — buffer it, don't re-emit live. */
+    private var spokenSeen = false
     private val lock = Any()
     /** Last sent payload kind + preview — surfaced when the server 1007s, so the culprit is visible. */
     @Volatile private var lastSentKind = "none"
@@ -455,6 +470,10 @@ object GeminiLiveClient {
         }
         this.listener = listener
         textBuffer.clear()
+        synchronized(lock) {
+            spokenBuffer.clear()
+            spokenSeen = false
+        }
         val sock = LiveSocket()
         socket = sock
         sock.listener = object : LiveSocket.Listener {
@@ -514,7 +533,11 @@ object GeminiLiveClient {
             listener?.onError("Not connected")
             return
         }
-        synchronized(lock) { textBuffer.clear() }
+        synchronized(lock) {
+            textBuffer.clear()
+            spokenBuffer.clear()
+            spokenSeen = false
+        }
         try {
             val payload = buildTextTurn(text, imageBase64Jpeg, videoFramesJpeg)
             trackSent(
@@ -592,7 +615,10 @@ object GeminiLiveClient {
             l.onUserTranscript(msg.inputTranscript)
         }
         if (msg.outputTranscript.isNotBlank()) {
-            synchronized(lock) { textBuffer.append(msg.outputTranscript) }
+            synchronized(lock) {
+                spokenBuffer.append(msg.outputTranscript)
+                spokenSeen = true
+            }
             l.onTextDelta(msg.outputTranscript)
         }
         if (msg.goAway) {
@@ -600,8 +626,11 @@ object GeminiLiveClient {
             return
         }
         if (msg.textDelta.isNotBlank()) {
-            synchronized(lock) { textBuffer.append(msg.textDelta) }
-            l.onTextDelta(msg.textDelta)
+            val emitLive = synchronized(lock) {
+                textBuffer.append(msg.textDelta)
+                !spokenSeen
+            }
+            if (emitLive) l.onTextDelta(msg.textDelta)
         }
         if (msg.thoughtDelta.isNotBlank()) {
             l.onThought(msg.thoughtDelta)
@@ -615,8 +644,9 @@ object GeminiLiveClient {
         }
         if (msg.turnComplete) {
             val full = synchronized(lock) {
-                val s = textBuffer.toString()
+                val s = pickFinalAnswer(spokenBuffer.toString(), textBuffer.toString())
                 textBuffer.clear()
+                spokenBuffer.clear()
                 s
             }
             l.onTurnDone(full)
@@ -629,18 +659,21 @@ object GeminiLiveClient {
         val success: Boolean,
         val text: String,
         val thinkingTrace: String = "",
+        val audioPlayed: Boolean = false,
         val error: String? = null
     )
 
     fun oneShotTurn(
         context: Context,
         prompt: String,
-        timeoutSec: Long = 60L
+        timeoutSec: Long = 60L,
+        onEvent: ((com.pr4nav.jarvis.chat.AgentStreamEvent) -> Unit)? = null
     ): TurnResult {
         val latch = CountDownLatch(1)
         val outText = StringBuilder()
         val thoughtText = StringBuilder()
         var err: String? = null
+        var voicePlayed = false
         val gotSetup = AtomicBoolean(false)
         val queue = ConcurrentLinkedQueue<String>()
         LiveAudioPlayer.stop() // never overlap a previous turn's voice
@@ -660,10 +693,16 @@ object GeminiLiveClient {
 
                 override fun onTextDelta(text: String) {
                     queue.add(text)
+                    onEvent?.invoke(
+                        com.pr4nav.jarvis.chat.AgentStreamEvent.TextDelta(text)
+                    )
                 }
 
                 override fun onThought(text: String) {
                     thoughtText.append(text)
+                    onEvent?.invoke(
+                        com.pr4nav.jarvis.chat.AgentStreamEvent.ThinkingDelta(text)
+                    )
                 }
 
                 override fun onTurnDone(fullText: String) {
@@ -672,6 +711,7 @@ object GeminiLiveClient {
                 }
 
                 override fun onAudioChunk(pcm16: ByteArray) {
+                    voicePlayed = true
                     LiveAudioPlayer.play(pcm16)
                 }
                 override fun onImage(mime: String, bytes: ByteArray) {}
@@ -713,8 +753,12 @@ object GeminiLiveClient {
         }
         val text = (outText.toString() + drained.toString()).trim()
         val thought = thoughtText.toString().trim()
-        if (!done && text.isBlank()) return TurnResult(false, "", thought, error = err ?: "turn timed out")
-        if (text.isBlank()) return TurnResult(false, "", thought, error = err ?: "empty reply")
-        return TurnResult(true, text, thought)
+        if (!done && text.isBlank()) {
+            return TurnResult(false, "", thought, voicePlayed, error = err ?: "turn timed out")
+        }
+        if (text.isBlank()) {
+            return TurnResult(false, "", thought, voicePlayed, error = err ?: "empty reply")
+        }
+        return TurnResult(true, text, thought, voicePlayed)
     }
 }

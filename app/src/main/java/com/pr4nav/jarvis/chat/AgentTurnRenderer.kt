@@ -286,7 +286,7 @@ class AgentTurnRenderer(
             val isLast = idx == chunks.size - 1
             val cap = if (isLast) caption else null
             if (idx > 0) {
-                delay += 320
+                delay += 90
                 activity.window?.decorView?.postDelayed({
                     if (cancelled) return@postDelayed
                     val typing = AgentBubbles.typingBubble(activity)
@@ -299,9 +299,9 @@ class AgentTurnRenderer(
                         container.addView(AgentBubbles.agentCard(activity, chunk, cap,
                             listener.bubbleActions(fullText)))
                         scroll()
-                    }, 420)
+                    }, 160)
                 }, delay)
-                delay += 480 + (chunk.length.coerceAtMost(800) / 4)
+                delay += 140 + (chunk.length.coerceAtMost(800) / 8)
             } else {
                 activity.window?.decorView?.postDelayed({
                     if (cancelled) return@postDelayed

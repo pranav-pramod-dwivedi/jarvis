@@ -957,9 +957,12 @@ class AgentActivity : AppCompatActivity() {
                                 )
                             }
 
-                            // Speak response via TTS only if not cancelled
+                            // Speak response via TTS only if not cancelled (empty = voice already played it)
                             if (taskId == null || (activeTaskId == taskId && !isCurrentTaskCancelled)) {
-                                voiceEngine?.speak(res.jarvisResponse.speechText, interrupt = false)
+                                val say = res.jarvisResponse.speechText
+                                if (say.isNotBlank() && !say.equals("null", ignoreCase = true)) {
+                                    voiceEngine?.speak(say, interrupt = false)
+                                }
                             }
                             updateCtx()
                         }

@@ -250,8 +250,19 @@ class GeminiLiveTest {
         assertTrue(g.goAway)
     }
 
-    @Test fun parseInterrupted() {
-        val m = GeminiLiveClient.parseServerMessage("""{"serverContent":{"interrupted":true}}""")
+    @Test fun pickFinalAnswerPrefersWritten() {
+        // Server sends both channels for the same words: never concatenate.
+        assertEquals(
+            "Here you go",
+            GeminiLiveClient.pickFinalAnswer("Here you go", "Here you go")
+        )
+        assertEquals("Written", GeminiLiveClient.pickFinalAnswer("Spoken", "Written"))
+        assertEquals("Spoken", GeminiLiveClient.pickFinalAnswer("Spoken", ""))
+        assertEquals("Spoken", GeminiLiveClient.pickFinalAnswer("Spoken", "   "))
+        assertEquals("", GeminiLiveClient.pickFinalAnswer("", ""))
+    }
+
+    @Test fun parseInterrupted() {        val m = GeminiLiveClient.parseServerMessage("""{"serverContent":{"interrupted":true}}""")
         assertTrue(m.interrupted)
     }
 
