@@ -106,6 +106,16 @@ object GeminiLiveClient {
     private var listener: Listener? = null
     private val textBuffer = StringBuilder()
     private val lock = Any()
+    /** Last sent payload kind + preview — surfaced when the server 1007s, so the culprit is visible. */
+    @Volatile private var lastSentKind = "none"
+    @Volatile private var lastSentPreview = ""
+
+    fun lastSentReport(): String = "$lastSentKind: ${lastSentPreview.take(220)}"
+
+    private fun trackSent(kind: String, payload: String) {
+        lastSentKind = kind
+        lastSentPreview = payload.take(400)
+    }
 
     fun isConnected(): Boolean = connected && setupDone
 
@@ -425,7 +435,7 @@ object GeminiLiveClient {
         model: String = MODEL_DIALOG,
         audioResponses: Boolean = true,
         withTools: Boolean = true,
-        voice: String = "Aoede",
+        voice: String = "Autonoe",
         listener: Listener
     ) {
         disconnect("reconnect")
@@ -443,12 +453,12 @@ object GeminiLiveClient {
         sock.listener = object : LiveSocket.Listener {
             override fun onOpen() {
                 try {
-                    sock.sendText(
-                        buildSetup(
-                            model, audioResponses, systemText,
-                            if (withTools) buildTools() else null, voice
-                        )
+                    val setupPayload = buildSetup(
+                        model, audioResponses, systemText,
+                        if (withTools) buildTools() else null, voice
                     )
+                    trackSent("setup", setupPayload)
+                    sock.sendText(setupPayload)
                     listener.onStatus("Connected — waiting for setup…")
                 } catch (e: Exception) {
                     listener.onError("Setup send failed: ${e.message}")
@@ -462,8 +472,12 @@ object GeminiLiveClient {
             override fun onClose(code: Int, reason: String) {
                 connected = false
                 setupDone = false
+                var fullReason = "Closed $code $reason".trim()
+                if (code == 1007) {
+                    fullReason += " — server rejected a message. Last sent [${lastSentReport()}]"
+                }
                 listener.onStatus("Disconnected ($code)")
-                listener.onClosed("Closed $code $reason")
+                listener.onClosed(fullReason)
             }
 
             override fun onError(e: Exception) {
@@ -474,7 +488,7 @@ object GeminiLiveClient {
             listener.onStatus("Connecting…")
             sock.connect(
                 LIVE_HOST, 443,
-                "$LIVE_PATH?key=$apiKey"
+                "$LIVE_PATH?key=${java.net.URLEncoder.encode(apiKey, "UTF-8")}"
             )
             connected = true
         } catch (e: Exception) {
@@ -495,7 +509,12 @@ object GeminiLiveClient {
         }
         synchronized(lock) { textBuffer.clear() }
         try {
-            s.sendText(buildTextTurn(text, imageBase64Jpeg, videoFramesJpeg))
+            val payload = buildTextTurn(text, imageBase64Jpeg, videoFramesJpeg)
+            trackSent(
+                "clientContent",
+                "text='${text.take(80)}' images=${imageBase64Jpeg != null} frames=${videoFramesJpeg.size}"
+            )
+            s.sendText(payload)
         } catch (e: Exception) {
             listener?.onError("Send failed: ${e.message}")
         }

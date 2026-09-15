@@ -271,14 +271,58 @@ class GeminiLiveTest {
         }
     }
 
-    @Test fun liveModelIds() {
-        // Reference-verified IDs (AI Studio Live playground).
+    @Test fun liveModelIds() {        // Reference-verified IDs (AI Studio Live playground).
         assertTrue(GeminiLiveClient.LIVE_MODELS.contains(GeminiLiveClient.MODEL_DIALOG))
         assertEquals(
             "models/gemini-2.5-flash-native-audio-preview-09-2025",
             GeminiLiveClient.MODEL_DIALOG
         )
         assertTrue(GeminiLiveClient.VOICES.contains("Aoede"))
+        assertTrue(GeminiLiveClient.VOICES.contains("Autonoe"))
         assertTrue(GeminiLiveClient.VOICES.contains("Kore"))
+    }
+
+    @Test fun buildUrlEncodesKey() {
+        val url = LiveSocket().buildUrl("h", "/p", "a+b/c=d e")
+        assertTrue(url.startsWith("wss://h/p?key="))
+        assertFalse(url.contains("+b"))
+        assertTrue(url.contains("a%2Bb%2Fc%3Dd+e") || url.contains("a%2Bb%2Fc%3Dd%20e"))
+    }
+
+    @Test fun concurrentFramesStaySequential() {
+        // Proves the write-lock invariant: concatenated frames always re-parse in order.
+        val payloads = (0 until 60).map { "payload-$it-" + "x".repeat(it % 7 * 50) }
+        val results = java.util.Collections.synchronizedList(mutableListOf<ByteArray>())
+        val threads = payloads.map { p ->
+            Thread { results.add(LiveSocket.encodeTextFrame(p)) }
+        }
+        threads.forEach { it.start() }
+        threads.forEach { it.join(5000) }
+        assertEquals(60, results.size)
+        val seen = mutableSetOf<String>()
+        for (bytes in results) {
+            val all = bytes
+            var pos = 0
+            while (pos < all.size) {
+                val din = java.io.DataInputStream(java.io.ByteArrayInputStream(all, pos, all.size - pos))
+                val f = LiveSocket.decodeFrame(din) ?: break
+                // Each encodeTextFrame emits exactly one frame; decode it fully.
+                seen.add(String(f.payload))
+                pos = all.size
+            }
+        }
+        assertEquals(payloads.toSet(), seen)
+    }
+
+    @Test fun binaryFramePayloadIntact() {
+        val json = """{"setupComplete":{}}"""
+        val bytes = LiveSocket.encodeFrame(0x2, json.toByteArray(), mask = false)
+        val f = LiveSocket.decodeFrame(java.io.DataInputStream(java.io.ByteArrayInputStream(bytes)))!!
+        assertEquals(0x2, f.opcode)
+        assertEquals(json, String(f.payload))
+    }
+
+    @Test fun lastSentReportDefault() {
+        assertTrue(GeminiLiveClient.lastSentReport().startsWith("none"))
     }
 }

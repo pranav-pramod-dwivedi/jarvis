@@ -27,7 +27,15 @@ class LiveSocket {
     private var out: OutputStream? = null
     private var readerThread: Thread? = null
     private val closed = AtomicBoolean(false)
+    /** ALL wire writes go through this lock — an interleaved ping/text corrupts frames (server 1007). */
+    private val writeLock = Any()
     var listener: Listener? = null
+
+    fun buildUrl(host: String, pathAndQuery: String, apiKey: String): String {
+        val enc = java.net.URLEncoder.encode(apiKey, "UTF-8")
+        val sep = if (pathAndQuery.contains("?")) "&" else "?"
+        return "wss://$host$pathAndQuery${sep}key=$enc"
+    }
 
     fun connect(host: String, port: Int, pathAndQuery: String, extraHeaders: Map<String, String> = emptyMap()) {
         close()
@@ -47,13 +55,14 @@ class LiveSocket {
         w.write("\r\n")
         w.flush()
 
-        val reader = sock.getInputStream().bufferedReader(Charsets.US_ASCII)
-        val status = reader.readLine() ?: throw java.io.IOException("Empty handshake response")
+        // Byte-wise header read: a BufferedReader may swallow post-header frame bytes.
+        val rawIn = sock.getInputStream()
+        val status = readAsciiLine(rawIn) ?: throw java.io.IOException("Empty handshake response")
         if (!status.contains("101")) throw java.io.IOException("Handshake failed: $status")
         var acceptOk = false
         val expected = acceptKey(key)
         while (true) {
-            val line = reader.readLine() ?: break
+            val line = readAsciiLine(rawIn) ?: break
             if (line.isEmpty()) break
             if (line.startsWith("Sec-WebSocket-Accept:", ignoreCase = true) &&
                 line.substringAfter(":").trim() == expected
@@ -74,19 +83,22 @@ class LiveSocket {
         }, "live-socket-reader").apply { isDaemon = true; start() }
     }
 
-    @Synchronized
     fun sendText(text: String) {
         val o = out ?: throw java.io.IOException("Not connected")
-        o.write(encodeTextFrame(text))
-        o.flush()
+        synchronized(writeLock) {
+            o.write(encodeTextFrame(text))
+            o.flush()
+        }
     }
 
     fun sendClose(code: Int = 1000) {
         try {
             val o = out ?: return
             val payload = byteArrayOf((code shr 8).toByte(), code.toByte())
-            o.write(encodeFrame(0x8, payload, mask = true))
-            o.flush()
+            synchronized(writeLock) {
+                o.write(encodeFrame(0x8, payload, mask = true))
+                o.flush()
+            }
         } catch (_: Exception) { }
         close()
     }
@@ -103,6 +115,22 @@ class LiveSocket {
         out = null
     }
 
+    private fun readAsciiLine(input: InputStream): String? {
+        val sb = StringBuilder()
+        while (true) {
+            val b = try {
+                input.read()
+            } catch (_: Exception) {
+                return null
+            }
+            if (b == -1) return if (sb.isEmpty()) null else sb.toString()
+            if (b == '\n'.code) break
+            if (b != '\r'.code) sb.append(b.toChar())
+            if (sb.length > 8192) break
+        }
+        return sb.toString()
+    }
+
     private fun readLoop(input: InputStream) {
         val din = DataInputStream(input)
         val frag = StringBuilder()
@@ -116,10 +144,15 @@ class LiveSocket {
                     return
                 }
                 0x9 -> {
-                    // ping → pong
+                    // ping → pong (under the write lock: never interleave a text frame)
                     try {
-                        out?.write(encodeFrame(0xA, frame.payload, mask = true))
-                        out?.flush()
+                        val o = out
+                        if (o != null) {
+                            synchronized(writeLock) {
+                                o.write(encodeFrame(0xA, frame.payload, mask = true))
+                                o.flush()
+                            }
+                        }
                     } catch (_: Exception) { }
                 }
                 0xA -> { /* pong */ }
@@ -136,7 +169,12 @@ class LiveSocket {
                         listener?.onText(frag.toString())
                     }
                 }
-                0x2 -> { /* binary: not used by JSON APIs */ }
+                0x2 -> {
+                    // Binary frames carrying JSON text (browser parity: blob.text()).
+                    try {
+                        listener?.onText(String(frame.payload, Charsets.UTF_8))
+                    } catch (_: Exception) { }
+                }
             }
         }
     }

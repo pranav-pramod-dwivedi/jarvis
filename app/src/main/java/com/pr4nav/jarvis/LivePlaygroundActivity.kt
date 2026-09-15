@@ -54,7 +54,8 @@ class LivePlaygroundActivity : AppCompatActivity() {
 
     private var audioResponses = true
     private var toolsOn = false
-    private var voiceIdx = 4 // Aoede in GeminiLiveClient.VOICES
+    private var voiceIdx = GeminiLiveClient.VOICES.indexOf("Autonoe").coerceAtLeast(0)
+    private var lastSendAt = 0L
 
     private var player: AudioTrack? = null
     private var recorder: AudioRecord? = null
@@ -287,6 +288,10 @@ class LivePlaygroundActivity : AppCompatActivity() {
             Toast.makeText(this, "Tap CONNECT first", Toast.LENGTH_SHORT).show()
             return
         }
+        // Debounce double-tap/Enter like the reference (rapid turns can 1007).
+        val now = System.currentTimeMillis()
+        if (now - lastSendAt < 400) return
+        lastSendAt = now
         val img = pendingImageB64
         val frames = pendingVideoFrames
         pendingImageB64 = null

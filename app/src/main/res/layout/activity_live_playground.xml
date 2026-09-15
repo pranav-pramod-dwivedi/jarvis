@@ -110,7 +110,7 @@
             android:layout_marginStart="6dp"
             android:background="@drawable/bg_btn_action_pill"
             android:paddingHorizontal="10dp"
-                    android:text="VOICE · AOEDE"
+                    android:text="VOICE · AUTONOE"
             android:textColor="#7DD3FC"
             android:textSize="11sp"
             android:textStyle="bold" />
