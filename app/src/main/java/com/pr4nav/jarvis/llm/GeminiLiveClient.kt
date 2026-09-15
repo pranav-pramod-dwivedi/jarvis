@@ -253,8 +253,9 @@ object GeminiLiveClient {
     }
 
     /**
-     * Full conversation turn: capped history + current message, one
-     * clientContent envelope. Gives Live turns real context.
+     * Full conversation turn: recent history inlined as quoted context plus the
+     * current message — ONE single-turn envelope (reference-identical shape).
+     * Multi-turn turns-arrays get server 1007s, so history travels as text.
      */
     fun buildConversationTurn(
         history: List<Pair<String, String>>,
@@ -262,17 +263,27 @@ object GeminiLiveClient {
         imageBase64Jpeg: String? = null,
         videoFramesJpeg: List<String> = emptyList()
     ): String {
-        val turns = JSONArray()
-        for ((role, body) in history.takeLast(12)) {
-            val clean = body.trim().take(800)
+        val ctx = StringBuilder()
+        val items = history.takeLast(12)
+        var budget = 2500
+        // Walk newest-first so the freshest context survives the budget.
+        val kept = mutableListOf<Pair<String, String>>()
+        for ((role, body) in items.reversed()) {
+            val clean = body.trim().replace(Regex("\\s+"), " ").take(400)
             if (clean.isBlank()) continue
-            turns.put(
-                JSONObject().apply {
-                    put("role", if (role.lowercase() == "assistant") "model" else "user")
-                    put("parts", JSONArray().apply { put(JSONObject().put("text", clean)) })
-                }
-            )
+            if (clean.length + 12 > budget) break
+            budget -= clean.length + 12
+            kept.add(role to clean)
         }
+        if (kept.isNotEmpty()) {
+            ctx.append("[Conversation so far]\n")
+            for ((role, body) in kept.reversed()) {
+                ctx.append(if (role.lowercase() == "assistant") "Assistant: " else "User: ")
+                ctx.append(body).append('\n')
+            }
+            ctx.append('\n')
+        }
+        ctx.append(text)
         val parts = JSONArray().apply {
             if (imageBase64Jpeg != null) {
                 put(
@@ -303,19 +314,23 @@ object GeminiLiveClient {
                     put(JSONObject().put("text", "[video frames follow, 1 per second]"))
                 }
             }
-            put(JSONObject().put("text", text))
+            put(JSONObject().put("text", ctx.toString()))
         }
-        turns.put(
-            JSONObject().apply {
-                put("role", "user")
-                put("parts", parts)
-            }
-        )
         return JSONObject().apply {
             put(
                 "clientContent",
                 JSONObject().apply {
-                    put("turns", turns)
+                    put(
+                        "turns",
+                        JSONArray().apply {
+                            put(
+                                JSONObject().apply {
+                                    put("role", "user")
+                                    put("parts", parts)
+                                }
+                            )
+                        }
+                    )
                     put("turnComplete", true)
                 }
             )
@@ -487,7 +502,15 @@ object GeminiLiveClient {
         systemText: String = "You are JARVIS, a concise realtime assistant. Keep replies to 1-3 sentences. Answer directly; never speak internal reasoning aloud.",
         listener: Listener
     ) {
+        val hadSocket = socket != null
         disconnect("reconnect")
+        if (hadSocket) {
+            // Grace period: let the old connection die server-side before the
+            // new handshake, or rapid follow-ups race it (server 1007s).
+            try {
+                Thread.sleep(250)
+            } catch (_: Exception) { }
+        }
         val apiKey = GeminiCloudLLM.getApiKey(context)
         if (apiKey.isBlank()) {
             listener.onError("Gemini API key missing — add it in Provider keys.")
