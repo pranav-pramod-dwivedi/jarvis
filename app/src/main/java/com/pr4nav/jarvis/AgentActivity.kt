@@ -656,7 +656,7 @@ class AgentActivity : AppCompatActivity() {
             "· Auto (Tri-Tier Cascade)",
             "· Groq LLaMA 3.3 70B",
             "· Cloud (Gemini 2.0 Flash)",
-            "· AGY Coding Agent"
+            "· Kira + Needle"
         )
 
         androidx.appcompat.app.AlertDialog.Builder(this)

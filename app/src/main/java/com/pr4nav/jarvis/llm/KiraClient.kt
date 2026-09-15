@@ -184,10 +184,11 @@ object KiraClient {
         getPrefs(context)?.edit()?.putString(KEY_KIRA_MODEL, model.trim())?.apply()
     }
 
-    /** Solo mode: run only the selected model, never cascade to fallbacks. */
+    /** Solo mode: run only the selected model, never cascade to fallbacks. Default ON:
+     * the picked model is the used model — no silent mini cameos. */
     fun isSoloModel(context: Context?): Boolean {
-        if (context == null) return false
-        return getPrefs(context)?.getBoolean(KEY_KIRA_SOLO_MODEL, false) ?: false
+        if (context == null) return true
+        return getPrefs(context)?.getBoolean(KEY_KIRA_SOLO_MODEL, true) ?: true
     }
 
     fun setSoloModel(context: Context, solo: Boolean) {

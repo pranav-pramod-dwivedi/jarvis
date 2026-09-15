@@ -1276,12 +1276,6 @@ Use whenever a visual UI, physics simulation, comparison table, calculator, game
             val fbAttempt = RequestAccounting.recordAttemptStart(requestId, "Gemini 2.0 Flash", reason, isFallback = true)
             Log.i(TAG, "request=$requestId attempt=$fbAttempt model=Gemini 2.0 Flash fallback=true status=START reason=\"$reason\"")
 
-            // If task is coding-oriented, try AGY directly
-            if (isComplexTask(prompt) && (prompt.contains("code") || prompt.contains("project") || prompt.contains("repo"))) {
-                executeViaAgy(prompt, reason, requestId, onSuccess, onError)
-                return@execute
-            }
-
             GeminiCloudLLM.generate(
                 context = context,
                 prompt = prompt,
@@ -1304,52 +1298,11 @@ Use whenever a visual UI, physics simulation, comparison table, calculator, game
                 onError = { err ->
                     val latency = System.currentTimeMillis() - t0
                     RequestAccounting.recordAttemptEnd(requestId, fbAttempt, "FAILURE ($err)", latency)
-                    // If Gemini also fails, try AGY as last resort
-                    executeViaAgy(prompt, "$reason -> Gemini failed ($err)", requestId, onSuccess, onError)
+                    RequestAccounting.finishTurn(requestId)
+                    onError("Groq failed ($reason) and Gemini fallback failed ($err)")
                 }
             )
         }
     }
 
-    private fun executeViaAgy(
-        prompt: String,
-        reason: String,
-        requestId: String,
-        onSuccess: (GroqResponse) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        executor.execute {
-            val t0 = System.currentTimeMillis()
-            val agyAttempt = RequestAccounting.recordAttemptStart(requestId, "AGY (PRoot)", reason, isFallback = true)
-            Log.i(TAG, "request=$requestId attempt=$agyAttempt model=AGY fallback=true status=START reason=\"$reason\"")
-            try {
-                val agyRes = Shell.agy(prompt, timeoutMs = 45_000)
-                val latency = System.currentTimeMillis() - t0
-                if (agyRes.rc == 0 && agyRes.out.isNotBlank()) {
-                    RequestAccounting.recordAttemptEnd(requestId, agyAttempt, "SUCCESS", latency)
-                    RequestAccounting.finishTurn(requestId)
-                    val trace = "<think>\n• Escalated to AGY Autonomous Agent\n• Reason: $reason\n• Latency: ${latency}ms\n</think>"
-                    onSuccess(
-                        GroqResponse(
-                            success = true,
-                            response = agyRes.out.trim(),
-                            latencyMs = latency,
-                            thinkingTrace = trace,
-                            modelUsed = "AGY (PRoot Autonomous Agent)",
-                            escalatedToAgy = true
-                        )
-                    )
-                } else {
-                    RequestAccounting.recordAttemptEnd(requestId, agyAttempt, "FAILURE (${agyRes.err})", latency)
-                    RequestAccounting.finishTurn(requestId)
-                    onError("AGY escalation failed ($reason): ${agyRes.err.ifBlank { "No output" }}")
-                }
-            } catch (e: Exception) {
-                val latency = System.currentTimeMillis() - t0
-                RequestAccounting.recordAttemptEnd(requestId, agyAttempt, "FAILURE (${e.message})", latency)
-                RequestAccounting.finishTurn(requestId)
-                onError("Failed escalating to AGY ($reason): ${e.message}")
-            }
-        }
-    }
 }

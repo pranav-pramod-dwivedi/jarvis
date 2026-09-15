@@ -1250,7 +1250,7 @@ fun JarvisMainApp(
                             }
                         },
                         onCancelTask = { cancelActiveExecution() },
-                        onRaceAgy = { forceStopAllProcesses() },
+                        onForceStop = { forceStopAllProcesses() },
                         onOpenDeveloperHub = { isToolsDialogOpen = true }
                     )
                 }
@@ -2720,7 +2720,7 @@ fun ConversationView(
     onStopSpeech: () -> Unit,
     onRegeneratePrompt: (String) -> Unit,
     onCancelTask: () -> Unit,
-    onRaceAgy: () -> Unit,
+    onForceStop: () -> Unit,
     onOpenDeveloperHub: () -> Unit
 ) {
     val context = LocalContext.current
@@ -3045,7 +3045,7 @@ fun ConversationView(
                                     titleFontFamily = titleFontFamily,
                                     bodyFontFamily = bodyFontFamily,
                                     onCancel = onCancelTask,
-                                    onRaceAgy = onRaceAgy
+                                    onForceStop = onForceStop
                                 )
                             }
                         }
@@ -3213,7 +3213,7 @@ fun StreamingExecutionCard(
     titleFontFamily: FontFamily,
     bodyFontFamily: FontFamily,
     onCancel: () -> Unit,
-    onRaceAgy: () -> Unit
+    onForceStop: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val alpha by infiniteTransition.animateFloat(
@@ -3339,14 +3339,14 @@ fun StreamingExecutionCard(
                     Spacer(modifier = Modifier.height(10.dp))
                 }
 
-                // Live Actions (Race AGY & Cancel)
+                // Live Actions (Force Stop & Cancel)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
-                        onClick = onRaceAgy,
+                        onClick = onForceStop,
                         shape = RoundedCornerShape(8.dp),
                         color = Color(0x33EF4444)
                     ) {

@@ -3,7 +3,6 @@ package com.pr4nav.jarvis.llm
 import android.content.Context
 import android.util.Log
 import com.pr4nav.jarvis.Shell
-import com.pr4nav.jarvis.agy.AgyClient
 import com.pr4nav.jarvis.tools.CanonicalToolRegistry
 import org.json.JSONArray
 import org.json.JSONObject
@@ -99,37 +98,8 @@ Tools: system.torch, system.volume, open_app, close_app, call_contact, system.bl
                 }
             }
 
-            // 2. Autonomous AGY CLI in PRoot Ubuntu (No API key needed)
-            Log.i(TAG, "Executing via AGY CLI...")
-            val agyRes = Shell.agy(prompt, timeoutMs = 45_000)
-            if (agyRes.rc == 0 && agyRes.out.isNotBlank()) {
-                val executedText = handleEmbeddedCommands(context, agyRes.out)
-                val cleaned = cleanForSpeech(executedText)
-                streamOutput(cleaned, onChunk)
-                onSuccess(cleaned)
-                return@execute
-            }
-
-            // 3. Fallback to AGY Daemon on port 5050
-            queryAgyFallback(prompt,
-                onSuccess = { agyResponse ->
-                    val executedText = handleEmbeddedCommands(context, agyResponse)
-                    val cleaned = cleanForSpeech(executedText)
-                    streamOutput(cleaned, onChunk)
-                    onSuccess(cleaned)
-                },
-                onError = { agyErr ->
-                    if (agyRes.out.isNotBlank()) {
-                        val executedText = handleEmbeddedCommands(context, agyRes.out)
-                        val cleaned = cleanForSpeech(executedText)
-                        streamOutput(cleaned, onChunk)
-                        onSuccess(cleaned)
-                    } else {
-                        val finalErr = if (agyRes.err.isNotBlank()) agyRes.err else agyErr
-                        onError("Cloud & AGY engines unavailable: $finalErr")
-                    }
-                }
-            )
+            // AGY fallback removed: no silent dead-ends. Surface the real failure.
+            onError("Gemini unavailable (no API key, network, or quota). Use the Kira/Groq engines or go offline.")
         }
     }
 
@@ -284,40 +254,6 @@ Tools: system.torch, system.volume, open_app, close_app, call_contact, system.bl
         } finally {
             conn?.disconnect()
         }
-    }
-
-    private fun queryAgyFallback(
-        prompt: String,
-        onSuccess: (String) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val agyClient = AgyClient()
-        agyClient.checkHealth(
-            onSuccess = { health ->
-                if (health.running) {
-                    agyClient.sendPromptStream(
-                        prompt = prompt,
-                        onToken = {},
-                        onStep = {},
-                        onComplete = { fullText ->
-                            if (fullText.isNotBlank()) {
-                                onSuccess(fullText)
-                            } else {
-                                onError("Empty response from AGY")
-                            }
-                        },
-                        onError = { err ->
-                            onError(err)
-                        }
-                    )
-                } else {
-                    onError("AGY daemon is not running")
-                }
-            },
-            onError = { err ->
-                onError(err)
-            }
-        )
     }
 
     /**

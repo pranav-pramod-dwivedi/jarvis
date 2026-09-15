@@ -61,27 +61,8 @@ object JarvisUiGenerator {
             return@withContext "✨ Launched interactive UI for \"$prompt\" in JarvisBrowser."
         }
 
-        // 2. Auto Fallback to AGY (PRoot Linux Autonomous Agent)
-        onStatus("⚡ Auto fallback to AGY Autonomous Agent (PRoot Linux)…")
-        Log.i(TAG, "Groq did not render app; falling back to AGY PRoot autonomous agent")
 
-        try {
-            val agyTask = "Use jarvisbrowser skill to generate an award-winning interactive UI for: '$prompt'. " +
-                    "Follow Awwwards-Winner design rules. Save the application into /storage/emulated/0/JARVIS/browser/apps/ and launch JarvisBrowser."
-
-            val agyRes = Shell.agy(agyTask, timeoutMs = 50_000L)
-            if (agyRes.rc == 0 && agyRes.out.isNotBlank()) {
-                val latest = JarvisBrowserAppManager.listApps(context).firstOrNull()
-                if (latest != null) {
-                    JarvisBrowserActivity.launch(context, latest.id, "Here is your generated UI for $prompt.")
-                    return@withContext "✨ AGY generated and launched '${latest.title}' in JarvisBrowser."
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "AGY fallback failed: ${e.message}")
-        }
-
-        // 3. Resilient Fallback: Synthesize an immediate award-winning interactive widget
+        // 2. Resilient Fallback: Synthesize an immediate award-winning interactive widget
         onStatus("✨ Rendering immediate interactive UI surface…")
         val appId = "ui-" + prompt.lowercase().replace(Regex("[^a-z0-9]"), "-").take(20).trim('-')
         val title = prompt.split(" ").take(4).joinToString(" ").replaceFirstChar { it.uppercase() }
