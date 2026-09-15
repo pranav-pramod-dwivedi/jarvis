@@ -3318,18 +3318,17 @@ fun StreamingExecutionCard(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Streaming Text Buffer with Animated Blinking Cursor
+                // Streaming Text Buffer with Animated Blinking Cursor (markdown-rendered live)
                 if (streamingText.isNotBlank()) {
                     Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = streamingText,
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontFamily = bodyFontFamily,
-                            fontWeight = FontWeight.Normal,
-                            lineHeight = 20.sp,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
+                        Box(modifier = Modifier.weight(1f, fill = false)) {
+                            com.pr4nav.jarvis.chat.ComposeMarkdown.Content(
+                                text = streamingText,
+                                bodyFontFamily = bodyFontFamily,
+                                baseSize = 14.sp,
+                                baseColor = Color.White
+                            )
+                        }
                         Box(
                             modifier = Modifier
                                 .size(width = 2.dp, height = 15.dp)
@@ -4243,15 +4242,12 @@ fun JarvisBubble(
                         }
                     }
 
-                    // Main message content with Space Grotesk/DM Sans typography
-                    Text(
+                    // Main message content: full agent markdown (**bold**, lists, code...).
+                    com.pr4nav.jarvis.chat.ComposeMarkdown.Content(
                         text = text,
-                        color = Color.White,
-                        fontSize = 14.5.sp,
-                        fontFamily = bodyFontFamily,
-                        fontWeight = FontWeight.Normal,
-                        lineHeight = 21.sp,
-                        letterSpacing = (-0.1).sp
+                        bodyFontFamily = bodyFontFamily,
+                        baseSize = 14.5.sp,
+                        baseColor = Color.White
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
