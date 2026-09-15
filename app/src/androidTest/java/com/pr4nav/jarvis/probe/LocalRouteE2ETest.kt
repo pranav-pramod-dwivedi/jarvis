@@ -27,6 +27,8 @@ class LocalRouteE2ETest {
             runTurn(ctx, "hi", "JARVIS")
             // Nonsense misses deterministic matching → exercises the LOCAL engine itself.
             runTurn(ctx, "blorple wibble zorp", "offline")
+            // Read-only device action → proves offline TOOL execution end to end.
+            runTurn(ctx, "what is the battery percentage", "batter")
         } finally {
             UnifiedAssistantDispatcher.setRoute(ctx, previous)
         }
