@@ -1269,7 +1269,7 @@ fun JarvisMainApp(
                 },
                 onConfigureQwenUrl = {
                     isModelMenuOpen = false
-                    onConfigureQwenUrl()
+                    context.startActivity(Intent(context, ProviderKeysActivity::class.java))
                 },
                 onDismiss = { isModelMenuOpen = false }
             )
@@ -4482,6 +4482,7 @@ fun ModelPickerSheet(
     onConfigureQwenUrl: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val modes = AgentExecutionMode.values().toList()
 
     ModalBottomSheet(
@@ -4559,7 +4560,7 @@ fun ModelPickerSheet(
                 ) {
                     SettingsSvg(modifier = Modifier.size(16.dp), tint = Color(0xFFFFB45A))
                     Text(
-                        text = "Configure Groq API Key & Quotas",
+                        text = "Configure provider keys",
                         color = Color(0xFFFFB45A),
                         fontSize = 12.5.sp,
                         fontFamily = bodyFontFamily,
@@ -4581,17 +4582,30 @@ fun KiraModelSheet(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var refreshTick by remember { mutableStateOf(0) }
+    var pickedProvider by remember { mutableStateOf<com.pr4nav.jarvis.llm.AIProvider?>(null) }
     var liveModels by remember { mutableStateOf<List<String>?>(null) }
     var fetchingLive by remember { mutableStateOf(false) }
 
-    val current = remember(refreshTick) { KiraClient.getModel(context) }
-    val soloOn = remember(refreshTick) { KiraClient.isSoloModel(context) }
-    val autoOn = remember(refreshTick) { KiraClient.isAutoRouter(context) }
-    val route = remember(refreshTick) { UnifiedAssistantDispatcher.getRoute(context) }
-
-    fun picked() {
-        refreshTick++
+    fun loadModels(p: com.pr4nav.jarvis.llm.AIProvider) {
+        pickedProvider = p
+        liveModels = null
+        if (fetchingLive) return
+        fetchingLive = true
+        p.fetchModels(
+            context,
+            onSuccess = { fetched: List<String> ->
+                scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    fetchingLive = false
+                    liveModels = fetched
+                }
+            },
+            onError = { err: String ->
+                scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    fetchingLive = false
+                    Toast.makeText(context, "Fetch error: $err", Toast.LENGTH_LONG).show()
+                }
+            }
+        )
     }
 
     ModalBottomSheet(
@@ -4608,7 +4622,7 @@ fun KiraModelSheet(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                text = "Kira Model · Route Harness",
+                text = "Select provider",
                 color = Color.White,
                 fontSize = 18.sp,
                 fontFamily = titleFontFamily,
@@ -4616,127 +4630,71 @@ fun KiraModelSheet(
                 modifier = Modifier.padding(vertical = 12.dp)
             )
 
-            // ── Kira models ──
-            SheetSectionLabel("KIRA MODEL", bodyFontFamily)
-            KiraClient.BUILTIN_MODELS.forEach { m ->
-                val selected = current == m.id
+            // Providers only — models load live on tap.
+            com.pr4nav.jarvis.llm.AIProvider.values().forEach { p ->
+                val hasKey = try { p.hasKey(context) } catch (_: Exception) { false }
                 SheetRadioRow(
-                    title = m.label + "  ·  " + m.contextWindow +
-                        if (m.tier == "REASONING" || m.tier == "FLAGSHIP") "  ·  high reasoning" else "",
-                    desc = m.description,
-                    selected = selected,
+                    title = p.title + if (hasKey) "" else "  ·  no key",
+                    desc = p.hint + " · current: " + try {
+                        p.currentModel(context)
+                    } catch (_: Exception) { "" },
+                    selected = pickedProvider == p,
                     titleFontFamily = titleFontFamily,
                     bodyFontFamily = bodyFontFamily,
-                    onClick = {
-                        if (m.id != current) {
-                            KiraClient.setModel(context, m.id)
-                            Toast.makeText(context, "${m.label} active", Toast.LENGTH_SHORT).show()
-                        }
-                        picked()
-                    }
+                    onClick = { loadModels(p) }
                 )
             }
 
-            if (liveModels == null) {
-                SheetActionButton(
-                    label = if (fetchingLive) "Fetching live models…" else "Fetch all live models",
-                    bodyFontFamily = bodyFontFamily,
-                    onClick = {
-                        if (fetchingLive) return@SheetActionButton
-                        fetchingLive = true
-                        KiraClient.fetchAvailableModels(
-                            context = context,
-                            onSuccess = { fetched: List<String> ->
-                                scope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                                    fetchingLive = false
-                                    liveModels = fetched
-                                }
-                            },
-                            onError = { err: String ->
-                                scope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                                    fetchingLive = false
-                                    Toast.makeText(context, "Fetch error: $err", Toast.LENGTH_LONG).show()
-                                }
+            if (fetchingLive) {
+                SheetSectionLabel("FETCHING MODELS…", bodyFontFamily)
+            }
+            liveModels?.let { models ->
+                val provider = pickedProvider
+                if (provider != null) {
+                    SheetSectionLabel("${provider.title.uppercase()} MODELS (${models.size})", bodyFontFamily)
+                    val currentId = try {
+                        provider.currentModelId(context)
+                    } catch (_: Exception) { "" }
+                    models.forEach { id ->
+                        SheetRadioRow(
+                            title = id + if (id == currentId) "  ·  current" else "",
+                            desc = id,
+                            selected = id == currentId,
+                            titleFontFamily = titleFontFamily,
+                            bodyFontFamily = bodyFontFamily,
+                            onClick = {
+                                provider.setModel(context, id)
+                                com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.setRoute(
+                                    context,
+                                    listOf(provider.engine)
+                                )
+                                Toast.makeText(context, "${provider.title}: $id", Toast.LENGTH_SHORT).show()
+                                onDismiss()
                             }
                         )
                     }
-                )
-            } else {
-                SheetSectionLabel("LIVE MODELS (${liveModels!!.size})", bodyFontFamily)
-                liveModels!!.forEach { id ->
-                    val known = KiraClient.BUILTIN_MODELS.firstOrNull { it.id == id }
-                    val selected = current == id
-                    SheetRadioRow(
-                        title = (known?.label ?: id) +
-                            if (KiraClient.isHighReasoning(id)) "  ·  high reasoning" else "",
-                        desc = known?.description ?: id,
-                        selected = selected,
-                        titleFontFamily = titleFontFamily,
-                        bodyFontFamily = bodyFontFamily,
-                        onClick = {
-                            KiraClient.setModel(context, id)
-                            Toast.makeText(context, "Model: $id", Toast.LENGTH_SHORT).show()
-                            picked()
-                        }
-                    )
                 }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            SheetSwitchRow(
-                title = if (soloOn) "Solo model · ON" else "Solo model · OFF",
-                desc = "Selected model only — no cascade fallback",
-                checked = soloOn,
-                bodyFontFamily = bodyFontFamily,
-                onChange = {
-                    KiraClient.setSoloModel(context, it)
-                    Toast.makeText(
-                        context,
-                        if (it) "Solo model: cascade disabled" else "Cascade enabled",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    picked()
-                }
-            )
-            SheetSwitchRow(
-                title = if (autoOn) "Auto-router · ON" else "Auto-router · OFF",
-                desc = "Casual → Mini 1.0 · code → GLM 5.3 · mid → Qwen 3.8",
-                checked = autoOn,
-                bodyFontFamily = bodyFontFamily,
-                onChange = {
-                    KiraClient.setAutoRouter(context, it)
-                    picked()
-                }
-            )
-
-            // ── Engine fallback route ──
-            SheetSectionLabel("ENGINE FALLBACK ROUTE", bodyFontFamily)
-            UnifiedAssistantDispatcher.ROUTE_PRESETS.forEach { (name, engines) ->
-                val selected = engines == route
-                SheetRadioRow(
-                    title = name + if (selected) "  ·  active" else "",
-                    desc = engines.joinToString(" → ") { it.id },
-                    selected = selected,
-                    titleFontFamily = titleFontFamily,
-                    bodyFontFamily = bodyFontFamily,
-                    onClick = {
-                        UnifiedAssistantDispatcher.setRoute(context, engines)
-                        Toast.makeText(
-                            context,
-                            "Route: ${UnifiedAssistantDispatcher.routeShort(engines)}",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        picked()
-                    }
-                )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
             SheetActionButton(
-                label = "Open full harness (latency stats)",
+                label = "Provider keys",
                 bodyFontFamily = bodyFontFamily,
                 onClick = {
-                    context.startActivity(Intent(context, RouteHarnessActivity::class.java))
+                    context.startActivity(
+                        android.content.Intent(context, ProviderKeysActivity::class.java)
+                    )
+                    onDismiss()
+                }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            SheetActionButton(
+                label = "Fallback & harness (Settings)",
+                bodyFontFamily = bodyFontFamily,
+                onClick = {
+                    context.startActivity(
+                        android.content.Intent(context, RouteHarnessActivity::class.java)
+                    )
                     onDismiss()
                 }
             )

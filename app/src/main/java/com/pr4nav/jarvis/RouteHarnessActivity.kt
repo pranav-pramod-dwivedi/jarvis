@@ -104,6 +104,9 @@ class RouteHarnessActivity : AppCompatActivity() {
                 runOnUiThread { showProbeReport(res) }
             }
         })
+        list.addView(actionButton("PROVIDER KEYS", danger = false) {
+            startActivity(android.content.Intent(this, ProviderKeysActivity::class.java))
+        })
     }
 
     private fun showProbeReport(res: KiraClient.ProbeResult) {

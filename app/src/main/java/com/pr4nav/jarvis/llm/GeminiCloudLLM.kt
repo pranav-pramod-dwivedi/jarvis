@@ -69,6 +69,59 @@ Tools: system.torch, system.volume, open_app, close_app, call_contact, system.bl
     }
 
     /**
+     * Lists live models via v1beta/models (names like "models/gemini-2.0-flash").
+     */
+    fun fetchAvailableModels(
+        context: Context,
+        onSuccess: (List<String>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        executor.execute {
+            try {
+                val apiKey = getApiKey(context)
+                if (apiKey.isBlank()) {
+                    onError("Gemini API key not configured. Add it in Provider keys.")
+                    return@execute
+                }
+                val conn = (java.net.URL(
+                    "https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey"
+                ).openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8_000
+                    readTimeout = 15_000
+                }
+                val code = conn.responseCode
+                if (code !in 200..299) {
+                    val err = try {
+                        conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $code"
+                    } catch (_: Exception) {
+                        "HTTP $code"
+                    }
+                    onError("HTTP $code: ${err.take(200)}")
+                    return@execute
+                }
+                val raw = conn.inputStream.bufferedReader().use { it.readText() }
+                val arr = org.json.JSONObject(raw).optJSONArray("models")
+                val models = mutableListOf<String>()
+                if (arr != null) {
+                    for (i in 0 until arr.length()) {
+                        val name = arr.optJSONObject(i)?.optString("name", "")?.trim().orEmpty()
+                            .removePrefix("models/")
+                        if (name.isNotBlank()) models.add(name)
+                    }
+                }
+                if (models.isEmpty()) {
+                    onError("No models listed by Gemini API")
+                    return@execute
+                }
+                onSuccess(models)
+            } catch (e: Exception) {
+                onError(e.message ?: "Network error")
+            }
+        }
+    }
+
+    /**
      * Executes prompt via Cloud LLM with full command-execution tool parsing.
      */
     fun generate(

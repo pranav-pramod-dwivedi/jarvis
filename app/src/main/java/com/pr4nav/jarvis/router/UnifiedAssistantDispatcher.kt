@@ -15,6 +15,7 @@ enum class AgentExecutionMode(val displayName: String, val badge: String, val de
     GROQ_PRIMARY("Groq Compound", "[Groq Primary]", "Groq LLaMA 3.3 70B Compound Agent with Kira Backup"),
     AUTO("Auto (Kira + Groq + Needle)", "[Auto Dual-Engine]", "Cascades Needle Reflex -> Kira Free Cascade -> Groq Compound"),
     NEEDLE_ONLY("Needle Only", "[Needle Only]", "Fast Deterministic On-Device Actions"),
+    OLLAMA_PRIMARY("Ollama Cloud", "[Ollama Primary]", "Ollama Cloud models with Kira backup"),
     // Backwards-compatible aliases
     CLOUD_NEEDLE("Kira + Needle", "[Kira + Needle]", "Kira AI Free Cascade + Needle Reflex"),
     GROQ_NEEDLE("Groq + Needle", "[Groq + Needle]", "Groq Compound Agent + Needle Reflex")
@@ -25,6 +26,7 @@ enum class ExecutionSource(val label: String, val badge: String) {
     KIRA_AGENT("Kira AI Agent", "[Kira Agent]"),
     GROQ_AGENT("Groq Compound Agent", "[Groq Agent]"),
     AGY_AGENT("AGY Autonomous Agent", "[AGY Agent]"),
+    OLLAMA_AGENT("Ollama Cloud", "[Ollama Cloud]"),
     CLOUD_LLM("Gemini 2.0 Flash (Cloud)", "[Gemini 2.0 Flash (Cloud)]"),
     FALLBACK("System Fallback", "[System Fallback]")
 }
@@ -34,6 +36,7 @@ enum class RouteEngine(val id: String, val short: String) {
     KIRA("kira", "K"),
     GROQ("groq", "G"),
     GEMINI("gemini", "Gm"),
+    OLLAMA("ollama", "O"),
     LOCAL("local", "L")
 }
 
@@ -177,7 +180,8 @@ object UnifiedAssistantDispatcher {
         "Kira → Gemini (skip Groq)" to listOf(RouteEngine.KIRA, RouteEngine.GEMINI),
         "Groq → Gemini (skip Kira)" to listOf(RouteEngine.GROQ, RouteEngine.GEMINI),
         "Groq → Kira → Gemini" to listOf(RouteEngine.GROQ, RouteEngine.KIRA, RouteEngine.GEMINI),
-        "Local only (offline, no keys needed)" to listOf(RouteEngine.LOCAL)
+        "Local only (offline, no keys needed)" to listOf(RouteEngine.LOCAL),
+        "Ollama only (solo engine)" to listOf(RouteEngine.OLLAMA)
     )
 
     /** Saved route plus the offline engine as an unconditional last resort.
@@ -194,7 +198,7 @@ object UnifiedAssistantDispatcher {
     }
 
     fun getRoute(context: Context?): List<RouteEngine> {
-        val fallback = listOf(RouteEngine.KIRA, RouteEngine.GROQ, RouteEngine.GEMINI)
+        val fallback = listOf(RouteEngine.KIRA)
         if (context == null) return fallback
         return try {
             val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -441,10 +445,10 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
         // fallback route decides the chain. Solo routes run a single engine.
         // =========================================================================
         val route = effectiveRoute(context)
-        var start: RouteEngine = if (mode == AgentExecutionMode.GROQ_PRIMARY || mode == AgentExecutionMode.GROQ_NEEDLE) {
-            RouteEngine.GROQ
-        } else {
-            RouteEngine.KIRA
+        var start: RouteEngine = when (mode) {
+            AgentExecutionMode.GROQ_PRIMARY, AgentExecutionMode.GROQ_NEEDLE -> RouteEngine.GROQ
+            AgentExecutionMode.OLLAMA_PRIMARY -> RouteEngine.OLLAMA
+            else -> RouteEngine.KIRA
         }
         if (!route.contains(start)) {
             start = route.firstOrNull() ?: run {
@@ -457,8 +461,79 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
             RouteEngine.GROQ -> executeGroqWithFallback(context, trimmed, t0, onStatus, onChunk, onEvent, onResult, route)
             RouteEngine.GEMINI -> executeCloudFallback(context, trimmed, t0, onStatus, onChunk, onEvent, onResult)
             RouteEngine.KIRA -> executeKiraWithFallback(context, trimmed, t0, onStatus, onChunk, onEvent, onResult, route)
+            RouteEngine.OLLAMA -> executeOllamaWithFallback(context, trimmed, t0, onStatus, onChunk, onEvent, onResult, route)
             RouteEngine.LOCAL -> executeLocal(context, trimmed, t0, onStatus, onChunk, onEvent, onResult, route)
         }
+    }
+
+    private fun executeOllamaWithFallback(
+        context: Context,
+        prompt: String,
+        t0: Long,
+        onStatus: ((String) -> Unit)?,
+        onChunk: ((String) -> Unit)?,
+        onEvent: ((AgentStreamEvent) -> Unit)? = null,
+        onResult: (UnifiedExecutionResult) -> Unit,
+        route: List<RouteEngine>? = null
+    ) {
+        val rt = route ?: effectiveRoute(context)
+        val model = com.pr4nav.jarvis.llm.OllamaClient.getModel(context)
+        onStatus?.invoke("Asking Ollama Cloud ($model)…")
+        com.pr4nav.jarvis.llm.OllamaClient.query(
+            context = context,
+            prompt = prompt,
+            onSuccess = { ollamaRes ->
+                val latency = System.currentTimeMillis() - t0
+                val (_, cleanText) = com.pr4nav.jarvis.response.UserResponseSanitizer.stripThinking(ollamaRes.response)
+                val candidate = if (cleanText.isNotBlank() && !cleanText.equals("null", ignoreCase = true)) cleanText else ollamaRes.response.trim()
+                val finalAnswer = if (candidate.isBlank() || candidate.equals("null", ignoreCase = true)) "Action completed successfully." else candidate
+                val speech = com.pr4nav.jarvis.response.UserResponseSanitizer.sanitizeForSpeech(finalAnswer, prompt)
+                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, speech)
+                emitTurn(onEvent, ollamaRes.thinkingTrace, finalAnswer,
+                    "Ollama ${ollamaRes.modelUsed}", latency, true)
+                onResult(
+                    UnifiedExecutionResult(
+                        handled = true,
+                        source = ExecutionSource.OLLAMA_AGENT,
+                        jarvisResponse = com.pr4nav.jarvis.response.JarvisResponse(
+                            text = finalAnswer,
+                            speechText = speech,
+                            status = com.pr4nav.jarvis.response.TerminationStatus.FINAL_ANSWER
+                        ),
+                        speechResponse = speech,
+                        fullSummary = "[Ollama ${ollamaRes.modelUsed} · ${latency}ms]\n\n$finalAnswer",
+                        thinkingTrace = ollamaRes.thinkingTrace,
+                        modelName = "Ollama ${ollamaRes.modelUsed}",
+                        latencyMs = latency
+                    )
+                )
+            },
+            onError = { ollamaErr ->
+                Log.w(TAG, "Ollama query failed: $ollamaErr")
+                when (nextAfter(rt, RouteEngine.OLLAMA)) {
+                    RouteEngine.KIRA -> {
+                        onStatus?.invoke("Ollama unavailable; falling back to Kira…")
+                        executeKiraWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                    }
+                    RouteEngine.GROQ -> {
+                        onStatus?.invoke("Ollama unavailable; falling back to Groq…")
+                        executeGroqWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                    }
+                    RouteEngine.GEMINI -> {
+                        onStatus?.invoke("Ollama unavailable; escalating to Cloud…")
+                        executeCloudFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult)
+                    }
+                    RouteEngine.LOCAL -> {
+                        onStatus?.invoke("Ollama unavailable; answering offline…")
+                        executeLocal(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                    }
+                    else -> {
+                        Log.w(TAG, "Route ends at Ollama; no further fallback.")
+                        emitRouteExhausted(onEvent, onResult, ollamaErr, t0)
+                    }
+                }
+            }
+        )
     }
 
     private fun executeLocal(
@@ -566,6 +641,10 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                         Log.w(TAG, "Route ends at Kira; no further fallback.")
                         emitRouteExhausted(onEvent, onResult, kiraErr, t0)
                     }
+                    RouteEngine.OLLAMA -> {
+                        onStatus?.invoke("Kira unavailable; falling back to Ollama…")
+                        executeOllamaWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                    }
                     RouteEngine.LOCAL -> {
                         onStatus?.invoke("Kira unavailable; answering offline…")
                         executeLocal(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
@@ -658,6 +737,10 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                     null -> {
                         Log.w(TAG, "Route ends at Groq; no further fallback.")
                         emitRouteExhausted(onEvent, onResult, groqErr, t0)
+                    }
+                    RouteEngine.OLLAMA -> {
+                        onStatus?.invoke("Groq unavailable; falling back to Ollama…")
+                        executeOllamaWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
                     }
                     RouteEngine.LOCAL -> {
                         onStatus?.invoke("Groq unavailable; answering offline…")

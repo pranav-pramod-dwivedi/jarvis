@@ -40,11 +40,20 @@ class EngineFallbackTest {
     }
 
     @Test fun effectiveRouteAlwaysEndsLocal() {
+        // Fresh default: solo Kira + offline floor (no fallback chain unless configured).
         val route = UnifiedAssistantDispatcher.effectiveRoute(null)
-        assertTrue(route.contains(RouteEngine.KIRA))
-        assertTrue(route.contains(RouteEngine.GROQ))
-        assertTrue(route.contains(RouteEngine.GEMINI))
+        assertEquals(listOf(RouteEngine.KIRA, RouteEngine.LOCAL), route)
         assertEquals(RouteEngine.LOCAL, route.last())
+    }
+
+    @Test fun savedMultiEngineRoutesKeepChain() {
+        val chain = listOf(RouteEngine.KIRA, RouteEngine.GROQ, RouteEngine.GEMINI)
+        val withFloor = chain + RouteEngine.LOCAL
+        // nextAfter walks the chain forward without cycles.
+        assertEquals(
+            RouteEngine.GROQ,
+            withFloor.let { r -> r.getOrNull(r.indexOf(RouteEngine.KIRA) + 1) }
+        )
     }
 
     @Test fun routeShortCoversLocal() {

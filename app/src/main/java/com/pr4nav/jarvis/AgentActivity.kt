@@ -391,8 +391,8 @@ class AgentActivity : AppCompatActivity() {
             .setPositiveButton("Kira AI") { _, _ ->
                 showConfigureKiraDialog()
             }
-            .setNeutralButton("Groq LPU") { _, _ ->
-                showConfigureGroqDialog()
+            .setNeutralButton("Provider keys") { _, _ ->
+                startActivity(Intent(this, ProviderKeysActivity::class.java))
             }
             .setNegativeButton("Close", null)
             .show()
@@ -434,113 +434,6 @@ class AgentActivity : AppCompatActivity() {
                 showModelPickerDialog()
             }
             .setNegativeButton("Close", null)
-            .show()
-    }
-
-    private fun showConfigureGroqDialog() {
-        val currentKey = com.pr4nav.jarvis.llm.GroqClient.getApiKey(this)
-        val currentModel = com.pr4nav.jarvis.llm.GroqClient.getModel(this)
-        val metrics = com.pr4nav.jarvis.llm.GroqClient.getUsageMetrics(this)
-
-        val layout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(50, 40, 50, 20)
-        }
-
-        val info = android.widget.TextView(this).apply {
-            text = "Groq LPU (Max 8,192 tokens/msg)\nQuotas: ${metrics.rpdUsed}/245 RPD · ${metrics.currentTpm}/65k TPM\nModel: $currentModel"
-            textSize = 12f
-            setTextColor(android.graphics.Color.parseColor("#94A3B8"))
-        }
-        layout.addView(info)
-
-        val edit = EditText(this).apply {
-            setText(currentKey)
-            hint = "Groq API Key (gsk_...)"
-            setPadding(30, 25, 30, 25)
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-        layout.addView(edit)
-
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Configure Groq API Key & Quotas")
-            .setView(layout)
-            .setPositiveButton("Save") { _, _ ->
-                val newKey = edit.text.toString().trim()
-                com.pr4nav.jarvis.llm.GroqClient.setApiKey(this, newKey)
-                Toast.makeText(this, if (newKey.isNotEmpty()) "Groq API Key Saved!" else "Groq API Key Cleared", Toast.LENGTH_SHORT).show()
-            }
-            .setNeutralButton("Model") { _, _ ->
-                val models = arrayOf(
-                    "openai/gpt-oss-120b (Default · Flagship OSS 120B)",
-                    "groq/compound (Complex Multi-Tool Compound Agent)",
-                    "groq/compound-mini (Ultra-Fast Compound Agent)",
-                    "llama-3.3-70b-versatile (Flagship 70B)",
-                    "llama-3.1-8b-instant (Fast 8B)",
-                    "mixtral-8x7b-32768 (32k Context)",
-                    "Fetch Available Models from Groq API..."
-                )
-                androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle("Select Groq Model")
-                    .setItems(models) { _, which ->
-                        when (which) {
-                            0 -> {
-                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "openai/gpt-oss-120b")
-                                Toast.makeText(this, "Model set to openai/gpt-oss-120b (Default)", Toast.LENGTH_SHORT).show()
-                            }
-                            1 -> {
-                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound")
-                                Toast.makeText(this, "Model set to groq/compound", Toast.LENGTH_SHORT).show()
-                            }
-                            2 -> {
-                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "groq/compound-mini")
-                                Toast.makeText(this, "Model set to groq/compound-mini", Toast.LENGTH_SHORT).show()
-                            }
-                            3 -> {
-                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "llama-3.3-70b-versatile")
-                                Toast.makeText(this, "Model set to llama-3.3-70b-versatile", Toast.LENGTH_SHORT).show()
-                            }
-                            4 -> {
-                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "llama-3.1-8b-instant")
-                                Toast.makeText(this, "Model set to llama-3.1-8b-instant", Toast.LENGTH_SHORT).show()
-                            }
-                            5 -> {
-                                com.pr4nav.jarvis.llm.GroqClient.setModel(this, "mixtral-8x7b-32768")
-                                Toast.makeText(this, "Model set to mixtral-8x7b-32768", Toast.LENGTH_SHORT).show()
-                            }
-                            6 -> {
-                                Toast.makeText(this, "Fetching models from Groq...", Toast.LENGTH_SHORT).show()
-                                com.pr4nav.jarvis.llm.GroqClient.fetchAvailableModels(
-                                    context = this,
-                                    onSuccess = { fetched ->
-                                        runOnUiThread {
-                                            if (fetched.isEmpty()) {
-                                                Toast.makeText(this, "No models returned by Groq", Toast.LENGTH_SHORT).show()
-                                                return@runOnUiThread
-                                            }
-                                            androidx.appcompat.app.AlertDialog.Builder(this)
-                                                .setTitle("Available Groq Models (${fetched.size})")
-                                                .setItems(fetched.toTypedArray()) { _, fWhich ->
-                                                    val chosen = fetched[fWhich]
-                                                    com.pr4nav.jarvis.llm.GroqClient.setModel(this, chosen)
-                                                    Toast.makeText(this, "Model set to $chosen", Toast.LENGTH_SHORT).show()
-                                                }
-                                                .setNegativeButton("Cancel", null)
-                                                .show()
-                                        }
-                                    },
-                                    onError = { err ->
-                                        runOnUiThread {
-                                            Toast.makeText(this, "Fetch error: $err", Toast.LENGTH_LONG).show()
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    .show()
-            }
-            .setNegativeButton("Cancel", null)
             .show()
     }
 
