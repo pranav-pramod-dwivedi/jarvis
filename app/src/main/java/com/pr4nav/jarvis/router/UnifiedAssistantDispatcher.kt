@@ -560,8 +560,21 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
         onEvent?.invoke(AgentStreamEvent.ThinkingDelta("Opening live dialog…"))
         kotlin.concurrent.thread(name = "jarvis-live-turn") {
             try {
+                val userName = try {
+                    com.pr4nav.jarvis.JarvisApp.instance?.let {
+                        com.pr4nav.jarvis.setup.SetupManager.getUserName(it)
+                    }
+                } catch (_: Exception) {
+                    null
+                }
                 val turn = com.pr4nav.jarvis.llm.GeminiLiveClient.oneShotTurn(
-                    context, prompt, timeoutSec = 60L, onEvent = onEvent
+                    context, prompt,
+                    timeoutSec = 90L,
+                    history = com.pr4nav.jarvis.context.ConversationalContext.getRecentTurns(12),
+                    contextLine = if (!userName.isNullOrBlank() && userName != "JARVIS") {
+                        "User's name is $userName."
+                    } else "",
+                    onEvent = onEvent
                 )
                 if (!turn.success) {
                     // Live is terminal: no forward cloud hops from a testing dialog.

@@ -249,6 +249,30 @@ object GeminiLiveClient {
         imageBase64Jpeg: String? = null,
         videoFramesJpeg: List<String> = emptyList()
     ): String {
+        return buildConversationTurn(emptyList(), text, imageBase64Jpeg, videoFramesJpeg)
+    }
+
+    /**
+     * Full conversation turn: capped history + current message, one
+     * clientContent envelope. Gives Live turns real context.
+     */
+    fun buildConversationTurn(
+        history: List<Pair<String, String>>,
+        text: String,
+        imageBase64Jpeg: String? = null,
+        videoFramesJpeg: List<String> = emptyList()
+    ): String {
+        val turns = JSONArray()
+        for ((role, body) in history.takeLast(12)) {
+            val clean = body.trim().take(800)
+            if (clean.isBlank()) continue
+            turns.put(
+                JSONObject().apply {
+                    put("role", if (role.lowercase() == "assistant") "model" else "user")
+                    put("parts", JSONArray().apply { put(JSONObject().put("text", clean)) })
+                }
+            )
+        }
         val parts = JSONArray().apply {
             if (imageBase64Jpeg != null) {
                 put(
@@ -281,16 +305,17 @@ object GeminiLiveClient {
             }
             put(JSONObject().put("text", text))
         }
+        turns.put(
+            JSONObject().apply {
+                put("role", "user")
+                put("parts", parts)
+            }
+        )
         return JSONObject().apply {
             put(
                 "clientContent",
                 JSONObject().apply {
-                    put("turns", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("role", "user")
-                            put("parts", parts)
-                        })
-                    })
+                    put("turns", turns)
                     put("turnComplete", true)
                 }
             )
@@ -526,7 +551,8 @@ object GeminiLiveClient {
     fun sendText(
         text: String,
         imageBase64Jpeg: String? = null,
-        videoFramesJpeg: List<String> = emptyList()
+        videoFramesJpeg: List<String> = emptyList(),
+        history: List<Pair<String, String>> = emptyList()
     ) {
         val s = socket
         if (s == null || !connected) {
@@ -539,10 +565,10 @@ object GeminiLiveClient {
             spokenSeen = false
         }
         try {
-            val payload = buildTextTurn(text, imageBase64Jpeg, videoFramesJpeg)
+            val payload = buildConversationTurn(history, text, imageBase64Jpeg, videoFramesJpeg)
             trackSent(
                 "clientContent",
-                "text='${text.take(80)}' images=${imageBase64Jpeg != null} frames=${videoFramesJpeg.size}"
+                "history=${history.size} text='${text.take(80)}' images=${imageBase64Jpeg != null} frames=${videoFramesJpeg.size}"
             )
             s.sendText(payload)
         } catch (e: Exception) {
@@ -607,7 +633,8 @@ object GeminiLiveClient {
             return
         }
         if (msg.interrupted) {
-            synchronized(lock) { textBuffer.clear() }
+            // Keep accumulated buffers: a spurious server interruption must not
+            // wipe the answer so far (no self-wipe mid-sentence).
             l.onInterrupted()
             return
         }
@@ -666,7 +693,10 @@ object GeminiLiveClient {
     fun oneShotTurn(
         context: Context,
         prompt: String,
-        timeoutSec: Long = 60L,
+        timeoutSec: Long = 90L,
+        history: List<Pair<String, String>> = emptyList(),
+        contextLine: String = "",
+        withTools: Boolean = true,
         onEvent: ((com.pr4nav.jarvis.chat.AgentStreamEvent) -> Unit)? = null
     ): TurnResult {
         val latch = CountDownLatch(1)
@@ -684,8 +714,10 @@ object GeminiLiveClient {
             context = context,
             model = MODEL_DIALOG,
             audioResponses = true,
-            withTools = false,
+            withTools = withTools,
             voice = "Kore",
+            systemText = "You are JARVIS, a concise realtime assistant. Keep replies to 1-3 sentences. Answer directly; never speak internal reasoning aloud." +
+                (if (contextLine.isNotBlank()) " " + contextLine.trim().take(300) else ""),
             listener = object : Listener {
                 override fun onStatus(text: String) {
                     if (text.startsWith("Live")) gotSetup.set(true)
@@ -717,7 +749,25 @@ object GeminiLiveClient {
                 override fun onImage(mime: String, bytes: ByteArray) {}
                 override fun onUserTranscript(text: String) {}
                 override fun onInterrupted() {}
-                override fun onToolCall(id: String, name: String, args: String) {}
+                override fun onToolCall(id: String, name: String, args: String) {
+                    // Execute on-device, answer the call, keep waiting for the turn.
+                    onEvent?.invoke(
+                        com.pr4nav.jarvis.chat.AgentStreamEvent.ToolStart(name, "", args.take(120))
+                    )
+                    val t0 = System.currentTimeMillis()
+                    val result = LiveToolExecutor.execute(name, args, context)
+                    val ok = result.optBoolean("ok", false)
+                    onEvent?.invoke(
+                        com.pr4nav.jarvis.chat.AgentStreamEvent.ToolEnd(
+                            tool = name, label = "", detail = args.take(120),
+                            output = result.toString().take(800),
+                            exitCode = if (ok) 0 else 1,
+                            durationMs = System.currentTimeMillis() - t0,
+                            verified = ok
+                        )
+                    )
+                    respondTool(id, name, result)
+                }
                 override fun onClosed(reason: String) {
                     if (latch.count > 0 && outText.isEmpty() && queue.isEmpty()) {
                         err = if (!gotSetup.get()) {
@@ -741,7 +791,7 @@ object GeminiLiveClient {
             Thread.sleep(100)
         }
         if (err == null && gotSetup.get()) {
-            sendText(prompt)
+            sendText(prompt, history = history)
         } else if (err == null) {
             err = "setup timed out"
         }

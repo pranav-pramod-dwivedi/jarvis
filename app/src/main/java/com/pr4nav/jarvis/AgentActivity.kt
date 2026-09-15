@@ -51,6 +51,8 @@ class AgentActivity : AppCompatActivity() {
     @Volatile private var isCurrentTaskCancelled = false
     private var activeExecutionThread: Thread? = null
     private var activeRenderer: AgentTurnRenderer? = null
+    private var lastSubmitText: String = ""
+    private var lastSubmitAt: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -689,6 +691,11 @@ class AgentActivity : AppCompatActivity() {
 
     private fun submit(q: String) {
         if (q.isEmpty()) return
+        // Drop accidental double-submits.
+        val nowMs = System.currentTimeMillis()
+        if (q == lastSubmitText && nowMs - lastSubmitAt < 1200) return
+        lastSubmitText = q
+        lastSubmitAt = nowMs
         // Interrupt: a new message silently kills the running turn (stale
         // callbacks already check activeTaskId and drop themselves).
         try {

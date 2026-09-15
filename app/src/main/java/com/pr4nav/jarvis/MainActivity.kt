@@ -572,6 +572,9 @@ fun JarvisMainApp(
     var lastSubmittedPrompt by remember { mutableStateOf("") }
     // Monotonic turn id: callbacks from an interrupted turn are dropped.
     var turnSeq by remember { mutableStateOf(0) }
+    // Double-tap guard: same text twice within the window = one turn.
+    var lastDispatchText by remember { mutableStateOf("") }
+    var lastDispatchAt by remember { mutableStateOf(0L) }
 
     // Active execution mode
     var currentMode by remember {
@@ -788,6 +791,12 @@ fun JarvisMainApp(
     fun dispatchCommand(prompt: String, isFromVoice: Boolean = false) {
         val trimmed = prompt.trim()
         if (trimmed.isBlank()) return
+
+        // Drop accidental double-submits (button + IME, fast re-taps).
+        val nowMs = System.currentTimeMillis()
+        if (trimmed == lastDispatchText && nowMs - lastDispatchAt < 1200) return
+        lastDispatchText = trimmed
+        lastDispatchAt = nowMs
 
         // Interrupt: a new message always kills the running turn. Stale
         // callbacks carry the old sequence id and are ignored on arrival.
