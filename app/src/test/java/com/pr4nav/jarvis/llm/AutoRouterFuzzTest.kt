@@ -154,19 +154,17 @@ class AutoRouterFuzzTest {
     }
 
     @Test fun tierBudgets() {
-        // Fast tier stays light; deep tier gets the full window.
-        assertEquals(30, KiraClient.historyLimitFor(KiraClient.MODEL_KIRA_MINI))
-        assertEquals(80, KiraClient.historyLimitFor(KiraClient.MODEL_QWEN_3_8_FLASH_FREE))
-        assertEquals(80, KiraClient.historyLimitFor(KiraClient.MODEL_MIMO_2_5_FREE))
-        assertEquals(220, KiraClient.historyLimitFor(KiraClient.MODEL_GLM_5_3_FREE))
-        assertEquals(220, KiraClient.historyLimitFor(KiraClient.MODEL_KIRA_3_5_PRO))
+        // User removed tier caps: full window for every model.
+        assertEquals(400, KiraClient.historyLimitFor(KiraClient.MODEL_KIRA_MINI))
+        assertEquals(400, KiraClient.historyLimitFor(KiraClient.MODEL_QWEN_3_8_FLASH_FREE))
+        assertEquals(400, KiraClient.historyLimitFor(KiraClient.MODEL_GLM_5_3_FREE))
 
         assertEquals(2048, KiraClient.maxTokensFor(KiraClient.MODEL_KIRA_MINI))
         assertEquals(4096, KiraClient.maxTokensFor(KiraClient.MODEL_QWEN_3_8_FLASH_FREE))
         assertEquals(16384, KiraClient.maxTokensFor(KiraClient.MODEL_GLM_5_3_FREE))
 
-        assertTrue(KiraClient.packetBudgetFor(KiraClient.MODEL_KIRA_MINI) <
-            KiraClient.packetBudgetFor(KiraClient.MODEL_GLM_5_3_FREE))
+        assertEquals(64_000, KiraClient.packetBudgetFor(KiraClient.MODEL_KIRA_MINI))
+        assertEquals(64_000, KiraClient.packetBudgetFor(KiraClient.MODEL_GLM_5_3_FREE))
     }
 
     @Test fun quotaDetection() {

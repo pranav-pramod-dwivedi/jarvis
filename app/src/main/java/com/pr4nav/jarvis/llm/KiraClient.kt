@@ -80,14 +80,8 @@ object KiraClient {
     // Fast models get small prompts + short completions; deep models get everything.
 
     /** Max history turns: all models get the full window. */
-    fun historyLimitFor(model: String): Int {
-        val m = model.lowercase()
-        return when {
-            m.contains("mini") -> 30
-            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 80
-            else -> 220
-        }
-    }
+    /** History depth: full window for every model (user removed tier caps). */
+    fun historyLimitFor(model: String): Int = 400
 
     /** Max completion tokens: all models get the full 16384 token budget. */
     fun maxTokensFor(model: String): Int {
@@ -100,14 +94,8 @@ object KiraClient {
     }
 
     /** Context-packet budget: all models get 128k chars (~32k tokens, safe for 1M window models). */
-    fun packetBudgetFor(model: String): Int {
-        val m = model.lowercase()
-        return when {
-            m.contains("mini") -> 6_000
-            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 14_000
-            else -> 64_000
-        }
-    }
+    /** Context-packet budget: full window for every model (user removed tier caps). */
+    fun packetBudgetFor(model: String): Int = 64_000
 
     private val executor = Executors.newCachedThreadPool()
 
@@ -1478,7 +1466,24 @@ The html MUST include: DOCTYPE, head (with viewport meta + complete CSS), body w
     }
 
     private fun buildSystemPrompt(context: Context, modelName: String = ""): String {
-        return "You are JARVIS — autonomous AI companion & action agent. Full device authority. Never ask permission; self-heal errors. Answer tightly and completely. Use tools freely. Close <think> before answering."
+        val base = "You are JARVIS — autonomous AI companion & action agent. Full device authority. Never ask permission; self-heal errors. Answer tightly and completely. Use tools freely. Close <think> before answering."
+        val m = modelName.lowercase()
+        val fastTier = m.contains("mini") || m.contains("flash") || m.contains("qwen") ||
+            m.contains("mimo") || m == MODEL_AUTO
+        val speed = if (fastTier) {
+            " Reason FAST with LOW effort: at most 3 short thinking lines, then answer."
+        } else ""
+        // Tool-running ability: act via tools, never narrate them. Free models
+        // that ignore tool_calls must emit JSON action blocks in the same shape.
+        val tools = "\nTOOLS — USE THEM, NEVER NARRATE THEM:\n" +
+                "Call OpenAI tool_calls, or emit a fenced JSON action block:\n" +
+                "```json\n" +
+                "{\"action\": \"execute_shell_command\", \"params\": {\"command\": \"ls /sdcard\"}}\n" +
+                "{\"action\": \"execute_device_tool\", \"params\": {\"tool_name\": \"open_app\", \"parameters\": {\"app\": \"YouTube\"}}}\n" +
+                "{\"action\": \"read_file\", \"params\": {\"path\": \"/sdcard/notes.txt\"}}\n" +
+                "```\n" +
+                "Prefer acting over asking. After acting, verify the result and report what happened."
+        return base + speed + tools
     }
 
     /**

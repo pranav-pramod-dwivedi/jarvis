@@ -234,12 +234,25 @@ object GeminiLiveClient {
             "Capture the current device screen and return it as an image. Use when the user asks what is on screen.",
             JSONObject(), emptyList()
         )
+        val deviceTool = decl(
+            "execute_device_tool",
+            "Run any phone capability: open_app, close_app, call_contact, send_message, system_torch, system_volume, system_wifi, play_media, navigate, set_alarm, and 300+ more. Prefer this over asking.",
+            JSONObject().apply {
+                put("tool_name", str("Capability name, e.g. open_app"))
+                put("parameters", JSONObject().apply {
+                    put("type", "object")
+                    put("description", "Named arguments for the capability")
+                })
+            },
+            listOf("tool_name")
+        )
         return JSONArray().apply {
             put(JSONObject().put("functionDeclarations", JSONArray().apply {
                 put(runShell)
                 put(readFile)
                 put(getTime)
                 put(takeScreenshot)
+                put(deviceTool)
             }))
         }
     }
@@ -264,12 +277,12 @@ object GeminiLiveClient {
         videoFramesJpeg: List<String> = emptyList()
     ): String {
         val ctx = StringBuilder()
-        val items = history.takeLast(12)
-        var budget = 2500
+        val items = history.takeLast(30)
+        var budget = 8000
         // Walk newest-first so the freshest context survives the budget.
         val kept = mutableListOf<Pair<String, String>>()
         for ((role, body) in items.reversed()) {
-            val clean = body.trim().replace(Regex("\\s+"), " ").take(400)
+            val clean = body.trim().replace(Regex("\\s+"), " ").take(1500)
             if (clean.isBlank()) continue
             if (clean.length + 12 > budget) break
             budget -= clean.length + 12

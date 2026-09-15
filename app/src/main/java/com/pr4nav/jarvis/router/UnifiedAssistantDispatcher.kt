@@ -570,7 +570,7 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                 val turn = com.pr4nav.jarvis.llm.GeminiLiveClient.oneShotTurn(
                     context, prompt,
                     timeoutSec = 90L,
-                    history = com.pr4nav.jarvis.context.ConversationalContext.getRecentTurns(12),
+                    history = com.pr4nav.jarvis.context.ConversationalContext.getRecentTurns(30),
                     contextLine = if (!userName.isNullOrBlank() && userName != "JARVIS") {
                         "User's name is $userName."
                     } else "",

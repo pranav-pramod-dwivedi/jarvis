@@ -205,9 +205,14 @@ object UserResponseSanitizer {
 
         val sanitized = sanitize(raw, fallbackQuery)
         val clean = sanitized
-            .replace(Regex("```[\\s\\S]*?```"), "") // Remove code blocks
-            .replace(Regex("[`*#_~>]"), "")          // Remove markdown formatting
+            .replace(Regex("```[\\s\\S]*?```"), " ") // Remove code blocks
+            .replace(Regex("https?://\\S+|www\\.\\S+"), " link ") // URLs are unreadable aloud
+            .replace(Regex("[`*#_~>]"), "") // Remove markdown formatting
+            .replace(Regex("[\\[\\](){}]"), " ") // Brackets trip up TTS rhythm
+            .replace(Regex("[=+*/\\\\$^|]"), "") // Math/code symbols TTS spells out
+            .replace(Regex("\\s&\\s"), " and ") // Ampersand → "and", not "ampersand"
             .replace(Regex("[^\\p{L}\\p{N}\\p{P}\\p{Z}]"), "") // Remove all emojis and special symbols
+            .replace(Regex("([!?.,;:…])\\1+"), "$1") // Collapse !!!, ???, ... into one
             .replace(Regex("\\s+"), " ")
             .trim()
 

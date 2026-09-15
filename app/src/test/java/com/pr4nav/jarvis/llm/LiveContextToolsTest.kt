@@ -19,6 +19,16 @@ class LiveContextToolsTest {
         assertTrue(r.optString("note", "").contains("teleport"))
     }
 
+    @Test fun deviceToolBranchNeverThrows() {
+        // Registry needs a real device; the contract is no-throw + ok flag.
+        val r1 = LiveToolExecutor.execute("execute_device_tool", "{}", null)
+        assertFalse(r1.optBoolean("ok", true))
+        val r2 = LiveToolExecutor.execute(
+            "execute_device_tool", "{\"tool_name\":\"no_such_tool_xyz\",\"parameters\":{}}", null
+        )
+        assertTrue(r2.has("ok"))
+    }
+
     @Test fun emptyArgsFailClean() {
         assertFalse(LiveToolExecutor.execute("run_shell", "{}", null).optBoolean("ok", true))
         assertFalse(LiveToolExecutor.execute("read_file", "{\"path\":\"\"}", null).optBoolean("ok", true))
@@ -68,18 +78,18 @@ class LiveContextToolsTest {
     )
 }
 
-@Test fun historyBudgetPrefersFresh() {
-    val big = (1..30).map { "user" to "question number $it with padding words here yes indeed" }
-    val j = JSONObject(GeminiLiveClient.buildConversationTurn(big, "now?", null, emptyList()))
-    val turns = j.getJSONObject("clientContent").getJSONArray("turns")
-    assertEquals(1, turns.length())
-    val full = turns.getJSONObject(0).getJSONArray("parts").getJSONObject(0).getString("text")
-    // Freshest (30) kept, oldest (1) dropped by the budget.
-    assertTrue(full.contains("30"))
-    assertFalse(full.contains("question number 1 "))
-    assertTrue(full.endsWith("now?"))
-    assertTrue(full.length < 3500)
-}
+    @Test fun historyBudgetPrefersFresh() {
+        // 40 long items overflow the ~8k budget: freshest kept, oldest dropped.
+        val big = (1..40).map { "user" to ("question number $it " + "with padding words here yes indeed ".repeat(6)) }
+        val j = JSONObject(GeminiLiveClient.buildConversationTurn(big, "now?", null, emptyList()))
+        val turns = j.getJSONObject("clientContent").getJSONArray("turns")
+        assertEquals(1, turns.length())
+        val full = turns.getJSONObject(0).getJSONArray("parts").getJSONObject(0).getString("text")
+        assertTrue(full.contains("40"))
+        assertFalse(full.contains("question number 1 "))
+        assertTrue(full.endsWith("now?"))
+        assertTrue(full.length <= 9500)
+    }
 
 @Test fun longHistoryLinesTruncated() {
     val long = "x".repeat(5000)

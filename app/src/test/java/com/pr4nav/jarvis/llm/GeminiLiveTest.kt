@@ -134,6 +134,7 @@ class GeminiLiveTest {
         assertTrue(names.contains("read_file"))
         assertTrue(names.contains("get_time"))
         assertTrue(names.contains("take_screenshot"))
+        assertTrue(names.contains("execute_device_tool"))
     }
 
     @Test fun textTurnWithAndWithoutImage() {

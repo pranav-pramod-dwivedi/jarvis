@@ -65,6 +65,35 @@ class UserResponseSanitizerTest {
     }
 
     @Test
+    fun testSpeechHardeningPunctuationSymbols() {
+        // URLs collapse to "link".
+        assertFalse(
+            UserResponseSanitizer.sanitizeForSpeech("read more at https://example.com/a?b=1 now").contains("example.com")
+        )
+        // Repeated punctuation collapses (no stutter).
+        val excited = UserResponseSanitizer.sanitizeForSpeech("Wow!!! Really??? Yes... done")
+        assertFalse(excited.contains("!!!"))
+        assertFalse(excited.contains("???"))
+        // Ampersand spoken as "and".
+        assertTrue(UserResponseSanitizer.sanitizeForSpeech("fish & chips").contains(" and "))
+        assertFalse(UserResponseSanitizer.sanitizeForSpeech("fish & chips").contains("&"))
+        // Brackets and math symbols stripped.
+        val math = UserResponseSanitizer.sanitizeForSpeech("result [x] = (a+b) * 2 / \$n")
+        assertFalse(math.contains("["))
+        assertFalse(math.contains("("))
+        assertFalse(math.contains("*"))
+        assertFalse(math.contains("$"))
+        assertFalse(math.contains("="))
+        // Code blocks vanish entirely.
+        val code = UserResponseSanitizer.sanitizeForSpeech("run ```ls -la``` now please")
+        assertFalse(code.contains("ls -la"))
+        assertFalse(code.contains("`"))
+        // Never blank, never null-ish.
+        assertTrue(UserResponseSanitizer.sanitizeForSpeech("⚡🔥").isNotBlank())
+        assertEquals("Task completed.", UserResponseSanitizer.sanitizeForSpeech("```only code```"))
+    }
+
+    @Test
     fun testSanitizesIdentityLeaksAndBoilerplate() {
         val qwenLeak = "I am Qwen, a large language model trained by Alibaba."
         val qwenCleaned = UserResponseSanitizer.sanitize(qwenLeak)

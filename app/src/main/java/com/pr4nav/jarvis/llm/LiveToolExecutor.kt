@@ -68,6 +68,28 @@ object LiveToolExecutor {
                             .put("note", "Screenshot not permitted from this sandbox.")
                     }
                 }
+                "execute_device_tool" -> {
+                    val inner = args.optString("tool_name", "").trim()
+                    val ctx = context
+                    if (inner.isBlank()) {
+                        result.put("ok", false).put("note", "empty tool_name")
+                    } else if (ctx == null) {
+                        result.put("ok", false).put("note", "no android context")
+                    } else {
+                        val innerArgs = args.optJSONObject("parameters") ?: JSONObject()
+                        try {
+                            val toolRes = com.pr4nav.jarvis.tools.CanonicalToolRegistry.execute(
+                                ctx, inner, innerArgs
+                            )
+                            val out = (toolRes.data?.toString()
+                                ?: toolRes.error?.message
+                                ?: toolRes.status.name).take(2000)
+                            result.put("ok", toolRes.success).put("output", out)
+                        } catch (e: Exception) {
+                            result.put("ok", false).put("note", e.message ?: "device tool failed")
+                        }
+                    }
+                }
                 else -> result.put("ok", false).put("note", "unknown tool: $name")
             }
         } catch (e: Exception) {
