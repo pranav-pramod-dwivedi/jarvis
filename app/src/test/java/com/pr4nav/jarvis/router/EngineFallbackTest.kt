@@ -57,6 +57,15 @@ class EngineFallbackTest {
         )
     }
 
+    @Test fun nearestPlatformId() {
+        val ids = listOf("glm-4.5-flash", "qwen3-235b-a22b", "kira-mini-1.0", "mimo-v2-flash")
+        assertEquals("glm-4.5-flash", KiraClient.nearestPlatformId("glm-5.3-free", ids))
+        assertEquals("kira-mini-1.0", KiraClient.nearestPlatformId("kira-mini-9.9", ids))
+        assertNull(KiraClient.nearestPlatformId("zzz-top-999", ids))
+        assertNull(KiraClient.nearestPlatformId("", ids))
+        assertNull(KiraClient.nearestPlatformId("glm", emptyList()))
+    }
+
     @Test fun localEngineAnswersConversationallyWithNoRuntime() {
         val ctx = android.content.ContextWrapper(null)
         val events = mutableListOf<com.pr4nav.jarvis.chat.AgentStreamEvent>()

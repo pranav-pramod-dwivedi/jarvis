@@ -267,6 +267,144 @@ object KiraClient {
         } catch (_: Exception) { }
     }
 
+    // ── Endpoint probe: why does chat 404 while /models lists? ───────────────
+    // Runs in-app with the stored key (no data wipe, unlike instrumentation).
+
+    data class ProbeResult(
+        val keyPresent: Boolean,
+        val modelsCode: Int,
+        val modelsCount: Int,
+        val platformIds: List<String>,
+        val chatCode: Int,
+        val chatBody: String,
+        val chatMs: Long,
+        val error: String? = null
+    )
+
+    fun probeEndpoints(context: Context, onDone: (ProbeResult) -> Unit) {
+        executor.execute {
+            val apiKey = cleanApiKey(getApiKey(context))
+            var modelsCode = -1
+            var ids = emptyList<String>()
+            try {
+                val conn = (URL(KIRA_MODELS_ENDPOINT).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8_000
+                    readTimeout = 15_000
+                    if (apiKey.isNotBlank()) setRequestProperty("Authorization", "Bearer $apiKey")
+                    setRequestProperty("User-Agent", "JARVIS-Android/1.2")
+                }
+                modelsCode = try {
+                    conn.responseCode
+                } catch (e: Exception) {
+                    -1
+                }
+                if (modelsCode in 200..299) {
+                    try {
+                        val raw = conn.inputStream.bufferedReader().use { it.readText() }
+                        val data = JSONObject(raw).optJSONArray("data")
+                        val list = mutableListOf<String>()
+                        if (data != null) {
+                            for (i in 0 until data.length()) {
+                                val id = data.optJSONObject(i)?.optString("id", "")?.trim().orEmpty()
+                                if (id.isNotBlank()) list.add(id)
+                            }
+                        }
+                        ids = list
+                    } catch (_: Exception) { }
+                }
+                try {
+                    conn.disconnect()
+                } catch (_: Exception) { }
+            } catch (e: Exception) {
+                onDone(ProbeResult(apiKey.isNotBlank(), modelsCode, 0, emptyList(), -1, "", 0L, e.message))
+                return@execute
+            }
+
+            // Minimal chat POST with the effective model (no tools, 1 token).
+            val model = try {
+                resolveStartModel(context, "hi", null)
+            } catch (_: Exception) {
+                DEFAULT_MODEL
+            }
+            var chatCode = -1
+            var chatBody = ""
+            val t0 = System.currentTimeMillis()
+            try {
+                val payload = JSONObject().apply {
+                    put("model", model)
+                    put(
+                        "messages",
+                        org.json.JSONArray().apply {
+                            put(JSONObject().put("role", "user").put("content", "hi"))
+                        }
+                    )
+                    put("max_tokens", 1)
+                }
+                val conn = (URL(KIRA_CHAT_ENDPOINT).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 8_000
+                    readTimeout = 20_000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    if (apiKey.isNotBlank()) setRequestProperty("Authorization", "Bearer $apiKey")
+                    setRequestProperty("User-Agent", "JARVIS-Android/1.2")
+                }
+                OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload.toString()) }
+                chatCode = try {
+                    conn.responseCode
+                } catch (e: Exception) {
+                    chatBody = e.message ?: "connection failed"
+                    -1
+                }
+                if (chatCode !in 200..299 && chatBody.isBlank()) {
+                    chatBody = try {
+                        conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                    } catch (_: Exception) {
+                        ""
+                    }
+                }
+                if (chatCode in 200..299) {
+                    chatBody = "OK"
+                }
+                try {
+                    conn.disconnect()
+                } catch (_: Exception) { }
+            } catch (e: Exception) {
+                chatBody = e.message ?: "failed"
+            }
+            onDone(
+                ProbeResult(
+                    keyPresent = apiKey.isNotBlank(),
+                    modelsCode = modelsCode,
+                    modelsCount = ids.size,
+                    platformIds = ids,
+                    chatCode = chatCode,
+                    chatBody = chatBody.take(600),
+                    chatMs = System.currentTimeMillis() - t0
+                )
+            )
+        }
+    }
+
+    /** Nearest platform id for a missing model (token-overlap match), or null. */
+    fun nearestPlatformId(wanted: String, platformIds: List<String>): String? {
+        if (platformIds.isEmpty() || wanted.isBlank()) return null
+        val wt = wanted.lowercase().split(Regex("[-_/.]")).filter { it.length >= 2 }.toSet()
+        if (wt.isEmpty()) return null
+        var best: String? = null
+        var bestScore = 0
+        for (id in platformIds) {
+            val it = id.lowercase().split(Regex("[-_/.]")).filter { s -> s.length >= 2 }.toSet()
+            val score = wt.intersect(it).size
+            if (score > bestScore) {
+                bestScore = score
+                best = id
+            }
+        }
+        return if (bestScore > 0) best else null
+    }
+
     // ── Auto-router: latency-aware task classification ────────────────────────
     // casual  → kira-mini-1.0 (fastest, least reasoning)
     // code    → glm-5.3-free (deepest reasoning)

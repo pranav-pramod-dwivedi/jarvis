@@ -95,6 +95,84 @@ class RouteHarnessActivity : AppCompatActivity() {
                 Toast.makeText(this, "Latency stats cleared", Toast.LENGTH_SHORT).show()
             })
         }
+
+        section("CONNECTION PROBE")
+        list.addView(hintRow("Queries /models + a 1-token chat POST with your stored key. Diagnoses 404/401/402 with the exact server message."))
+        list.addView(actionButton("TEST CONNECTION", danger = false) {
+            Toast.makeText(this, "Probing Kira endpoints…", Toast.LENGTH_SHORT).show()
+            KiraClient.probeEndpoints(this) { res ->
+                runOnUiThread { showProbeReport(res) }
+            }
+        })
+    }
+
+    private fun showProbeReport(res: KiraClient.ProbeResult) {
+        val sb = StringBuilder()
+        sb.appendLine("KIRA ENDPOINT PROBE")
+        sb.appendLine("key: ${if (res.keyPresent) "present" else "MISSING — add it in Kira AI settings"}")
+        sb.appendLine("models: HTTP ${res.modelsCode} · ${res.modelsCount} listed")
+        if (res.error != null) {
+            sb.appendLine("probe error: ${res.error}")
+        }
+        val current = KiraClient.getModel(this)
+        val effective = if (current == KiraClient.MODEL_AUTO) KiraClient.lastAutoModel() else current
+        sb.appendLine("chat(model=$effective): HTTP ${res.chatCode} in ${res.chatMs}ms")
+        if (res.chatBody.isNotBlank()) {
+            sb.appendLine("body: ${res.chatBody}")
+        }
+        if (res.platformIds.isNotEmpty()) {
+            sb.appendLine("---")
+            val checkIds = (listOf(effective) + KiraClient.FREE_MODEL_CASCADE).distinct()
+            for (id in checkIds) {
+                if (res.platformIds.contains(id)) {
+                    sb.appendLine("$id: IN LIST")
+                } else {
+                    val near = KiraClient.nearestPlatformId(id, res.platformIds)
+                    sb.appendLine("$id: NOT IN LIST" + (if (near != null) " → did you mean '$near'?" else ""))
+                }
+            }
+        }
+        sb.appendLine("---")
+        sb.appendLine(
+            when {
+                !res.keyPresent -> "verdict: no API key stored — chat will 401. Add the key first."
+                res.chatCode in 200..299 -> "verdict: chat endpoint works with '$effective'."
+                res.chatCode == 401 -> "verdict: key rejected — re-enter the Kira API key."
+                res.chatCode == 402 -> "verdict: wallet empty — top up at kiraai.vn."
+                res.chatCode == 404 -> "verdict: endpoint/model not found — server message above; try the suggested id."
+                res.chatCode == 429 -> "verdict: rate limited — wait a minute and retry."
+                else -> "verdict: HTTP ${res.chatCode} — server message above."
+            }
+        )
+
+        val scroll = android.widget.ScrollView(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                ChatUi.dp(this@RouteHarnessActivity, 320)
+            )
+        }
+        val tv = android.widget.TextView(this).apply {
+            text = sb.toString().trim()
+            setTextColor(android.graphics.Color.parseColor("#E6EDF6"))
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = android.graphics.Typeface.MONOSPACE
+            setTextIsSelectable(true)
+            setPadding(4, 4, 4, 4)
+        }
+        scroll.addView(tv)
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Connection probe")
+            .setView(scroll)
+            .setPositiveButton("Copy report") { _, _ ->
+                try {
+                    val cb = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cb.setPrimaryClip(android.content.ClipData.newPlainText("Kira probe", sb.toString().trim()))
+                    Toast.makeText(this, "Report copied", Toast.LENGTH_SHORT).show()
+                } catch (_: Exception) { }
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     private fun displayModel(): String {
@@ -316,11 +394,11 @@ class RouteHarnessActivity : AppCompatActivity() {
         return row
     }
 
-    private fun actionButton(text: String, onClick: () -> Unit): TextView {
+    private fun actionButton(text: String, danger: Boolean = true, onClick: () -> Unit): TextView {
         return TextView(this).apply {
             this.text = text
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#EF4444"))
+            setTextColor(Color.parseColor(if (danger) "#EF4444" else "#7DD3FC"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             setBackgroundResource(R.drawable.bg_btn_action_pill)
