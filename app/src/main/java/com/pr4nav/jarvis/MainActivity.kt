@@ -1120,7 +1120,7 @@ fun JarvisMainApp(
                             postSystemNote("${if (ok) "Done" else "Failed"} · ${meta.label} · ${ev.detail.take(80)} · $dur")
                         }
                         is AgentStreamEvent.TextDelta -> scope.launch(Dispatchers.Main) {
-                            if (ev.text.isNotBlank()) {
+                            if (ev.text.isNotEmpty()) {
                                 accumulatedChunks.append(ev.text)
                                 liveStreamingText = accumulatedChunks.toString()
                             }

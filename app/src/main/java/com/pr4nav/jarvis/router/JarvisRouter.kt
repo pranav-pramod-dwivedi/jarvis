@@ -223,7 +223,7 @@ object JarvisRouter {
                     val synthesized = AnswerSynthesizer.synthesize(
                         resolvedQuery,
                         tool,
-                        toolRes.data as? JSONObject,
+                        toolRes,
                         AnswerSynthesizer.determineResponseMode(resolvedQuery, "DEVICE")
                     )
                     finalOutput = synthesized
@@ -414,7 +414,7 @@ object JarvisRouter {
                 } else {
                     com.pr4nav.jarvis.context.ConversationalContext.updateContext(normalized.tool, normalized.args)
                 }
-                val synthesized = AnswerSynthesizer.synthesize(query, normalized.tool, toolRes.data as? JSONObject, AnswerSynthesizer.determineResponseMode(query, classification.category.name))
+                val synthesized = AnswerSynthesizer.synthesize(query, normalized.tool, toolRes, AnswerSynthesizer.determineResponseMode(query, classification.category.name))
                 val sanitized = UserResponseSanitizer.sanitize(synthesized, query)
                 val speech = UserResponseSanitizer.sanitizeForSpeech(synthesized, query)
                 emit(ActivityState.DONE, "Device command completed")
@@ -472,7 +472,7 @@ object JarvisRouter {
                     if (toolRes.success) {
                         com.pr4nav.jarvis.context.ContextManager.updateToolContext(translatedCall.tool, translatedCall.args)
                     }
-                    synthesized = AnswerSynthesizer.synthesize(query, translatedCall.tool, toolRes.data as? JSONObject, AnswerSynthesizer.determineResponseMode(query, classification.category.name))
+                    synthesized = AnswerSynthesizer.synthesize(query, translatedCall.tool, toolRes, AnswerSynthesizer.determineResponseMode(query, classification.category.name))
                 } else {
                     val rej = validation as com.pr4nav.jarvis.tools.ValidationResult.Rejected
                     toolRes = ToolResult.failure(rej.reasonCode, rej.error.message)

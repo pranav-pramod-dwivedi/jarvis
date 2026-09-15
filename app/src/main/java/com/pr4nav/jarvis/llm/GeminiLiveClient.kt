@@ -434,7 +434,7 @@ object GeminiLiveClient {
                         for (i in 0 until parts.length()) {
                             val p = parts.optJSONObject(i) ?: continue
                             val t = p.optString("text", "")
-                            if (t.isNotBlank()) {
+                            if (t.isNotEmpty()) {
                                 // Thought parts are reasoning, not the answer.
                                 if (p.optBoolean("thought", false)) thought += t
                                 else text += t
@@ -677,7 +677,7 @@ object GeminiLiveClient {
         if (msg.inputTranscript.isNotBlank()) {
             l.onUserTranscript(msg.inputTranscript)
         }
-        if (msg.outputTranscript.isNotBlank()) {
+        if (msg.outputTranscript.isNotEmpty()) {
             synchronized(lock) {
                 spokenBuffer.append(msg.outputTranscript)
                 spokenSeen = true
@@ -688,7 +688,7 @@ object GeminiLiveClient {
             l.onStatus("Server goAway — reconnect soon")
             return
         }
-        if (msg.textDelta.isNotBlank()) {
+        if (msg.textDelta.isNotEmpty()) {
             val emitLive = synchronized(lock) {
                 textBuffer.append(msg.textDelta)
                 !spokenSeen
@@ -725,6 +725,25 @@ object GeminiLiveClient {
         val audioPlayed: Boolean = false,
         val error: String? = null
     )
+
+    internal fun finishOneShotTurn(
+        completed: Boolean,
+        finalText: String,
+        streamedText: String,
+        thinkingTrace: String,
+        audioPlayed: Boolean,
+        error: String?
+    ): TurnResult {
+        // The final transcript replaces streamed fragments; it is not another delta.
+        val text = finalText.trim().ifBlank { streamedText.trim() }
+        val failure = when {
+            error != null -> error
+            !completed -> "turn timed out"
+            text.isBlank() -> "empty reply"
+            else -> null
+        }
+        return TurnResult(failure == null, text, thinkingTrace, audioPlayed, error = failure)
+    }
 
     fun oneShotTurn(
         context: Context,
@@ -837,14 +856,9 @@ object GeminiLiveClient {
         while (true) {
             drained.append(queue.poll() ?: break)
         }
-        val text = (outText.toString() + drained.toString()).trim()
-        val thought = thoughtText.toString().trim()
-        if (!done && text.isBlank()) {
-            return TurnResult(false, "", thought, voicePlayed, error = err ?: "turn timed out")
-        }
-        if (text.isBlank()) {
-            return TurnResult(false, "", thought, voicePlayed, error = err ?: "empty reply")
-        }
-        return TurnResult(true, text, thought, voicePlayed)
+        return finishOneShotTurn(
+            done, outText.toString(), drained.toString(),
+            thoughtText.toString().trim(), voicePlayed, err
+        )
     }
 }

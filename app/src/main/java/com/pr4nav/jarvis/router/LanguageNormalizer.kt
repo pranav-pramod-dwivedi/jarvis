@@ -659,7 +659,7 @@ object LanguageNormalizer {
             return NormalizedToolCall("navigate", args, 0.95f, raw, trace)
         }
 
-        // 12b. MEDIA PLAYBACK (songs → media.play, videos → YouTube app)
+        // 12b. MEDIA PLAYBACK (preserve the requested title for provider search)
         val videoWords = listOf(
             "video", "videos", "youtube", "movie", "movies", "film", "films",
             "episode", "episodes", "show", "shows", "trailer", "trailers",
@@ -691,19 +691,20 @@ object LanguageNormalizer {
         ) {
             val isVideo = videoWords.any { mediaQuery.contains(it) } || cleaned.contains(" on youtube")
             if (isVideo) {
-                val args = JSONObject().put("app", "YouTube").put("package", "YouTube")
+                val args = JSONObject().put("query", mediaQuery.removeSuffix(" on youtube").trim())
+                    .put("provider", "youtube")
                 val trace = NormalizationTrace(
                     rawInput = raw,
                     detectedLanguage = lang,
                     normalizedText = "media video query=$mediaQuery",
                     matchedObject = "VIDEO",
                     matchedAction = "PLAY",
-                    targetTool = "open_app",
+                    targetTool = "media.play",
                     resolvedArgs = args,
                     confidence = 0.93f,
                     isDirectMatch = true
                 )
-                return NormalizedToolCall("open_app", args, 0.93f, raw, trace)
+                return NormalizedToolCall("media.play", args, 0.93f, raw, trace)
             } else {
                 val args = JSONObject().put("query", mediaQuery)
                 val trace = NormalizationTrace(

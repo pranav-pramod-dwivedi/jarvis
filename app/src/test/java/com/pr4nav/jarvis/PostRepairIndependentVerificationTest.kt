@@ -21,12 +21,28 @@ import java.util.concurrent.atomic.AtomicReference
 class PostRepairIndependentVerificationTest {
 
     private val context = ContextWrapper(null)
+    private lateinit var originalBluetooth: com.pr4nav.jarvis.tools.CanonicalToolDef
+    private val bluetoothStates = mutableListOf<Boolean>()
 
     @Before
     fun setup() {
         CanonicalToolRegistry.init(context)
         ContextManager.clear()
         JarvisWorkspace.initWorkspace(null)
+        // Only hardware is a test double; real continuation, validation and
+        // result propagation must request and report the correct state.
+        originalBluetooth = CanonicalToolRegistry.get("system.bluetooth")!!
+        CanonicalToolRegistry.register(originalBluetooth.copy(execute = { _, args ->
+            val state = args.getBoolean("state")
+            bluetoothStates.add(state)
+            com.pr4nav.jarvis.tools.ToolResult.ok(JSONObject().put("state", state))
+        }))
+    }
+
+    @org.junit.After
+    fun restoreDevice() {
+        CanonicalToolRegistry.register(originalBluetooth)
+        ContextManager.clear()
     }
 
     // =========================================================================
@@ -53,6 +69,7 @@ class PostRepairIndependentVerificationTest {
         )
         assertTrue("Turn 2 (turn it off) must be handled by dispatcher", turn2Handled == true)
         assertNotNull(turn2Speech)
+        assertEquals("Bluetooth disabled.", turn2Speech)
 
         // Turn 3: User says "actually turn it back on"
         var turn3Handled: Boolean? = null
@@ -64,6 +81,7 @@ class PostRepairIndependentVerificationTest {
             }
         )
         assertTrue("Turn 3 (actually turn it back on) must be handled by dispatcher", turn3Handled == true)
+        assertEquals(listOf(false, true), bluetoothStates)
     }
 
     @Test

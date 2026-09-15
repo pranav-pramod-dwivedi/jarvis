@@ -95,7 +95,7 @@ object UnifiedAssistantDispatcher {
      * thinking blocks, tool cards and message bubbles uniformly on every engine.
      * (Streaming engines emit these themselves; never double-emit for Kira.)
      */
-    private fun emitTurn(
+    internal fun emitTurn(
         onEvent: ((AgentStreamEvent) -> Unit)?,
         thinking: String?,
         answer: String,
@@ -106,13 +106,17 @@ object UnifiedAssistantDispatcher {
         toolDetail: String = "",
         toolOutput: String = "",
         toolExit: Int = 0,
-        toolMs: Long = 0L
+        toolMs: Long = 0L,
+        contentAlreadyStreamed: Boolean = false
     ) {
+        if (toolName != null) {
+            Log.i(TAG, "engine=$model tool=$toolName handled=$handled exit=$toolExit durationMs=$toolMs")
+        }
         if (onEvent == null) return
         val cleanThink = thinking
             ?.replace(Regex("(?i)</?(think|thought|reasoning)>"), "")
             ?.trim().orEmpty()
-        if (cleanThink.isNotBlank()) onEvent(AgentStreamEvent.ThinkingDelta(cleanThink))
+        if (!contentAlreadyStreamed && cleanThink.isNotBlank()) onEvent(AgentStreamEvent.ThinkingDelta(cleanThink))
         onEvent(AgentStreamEvent.ThinkingDone(latencyMs))
         if (toolName != null) {
             onEvent(AgentStreamEvent.ToolStart(toolName, "", toolDetail))
@@ -125,7 +129,7 @@ object UnifiedAssistantDispatcher {
             )
         }
         val finalText = if (answer.isNotBlank()) answer else "Done."
-        onEvent(AgentStreamEvent.TextDelta(finalText))
+        if (!contentAlreadyStreamed) onEvent(AgentStreamEvent.TextDelta(finalText))
         onEvent(
             AgentStreamEvent.Final(
                 text = finalText, model = model, latencyMs = latencyMs,
@@ -323,17 +327,17 @@ object UnifiedAssistantDispatcher {
                     }
                     val toolDef = CanonicalToolRegistry.get(tool)
                     val responseMode = com.pr4nav.jarvis.response.AnswerSynthesizer.determineResponseMode(trimmed, "DEVICE")
-                    val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, tool, toolRes.data as? JSONObject, responseMode)
+                    val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, tool, toolRes, responseMode)
                     val latency = System.currentTimeMillis() - t0
                     val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: Pre-Routing Continuation Match [$tool]\n• Reason: ${preDecision.reason}\n• Latency: ${latency}ms\n</think>"
                     if (onEvent == null) onChunk?.invoke(synthesizedAnswer)
-                                                emitTurn(onEvent, thinkTrace, synthesizedAnswer, "Needle 2 Reflex", latency, true,
+                                                emitTurn(onEvent, thinkTrace, synthesizedAnswer, "Needle 2 Reflex", latency, toolRes.success,
                         tool, argSummary(args),
                         (toolRes.data?.toString() ?: toolRes.error?.message ?: "").take(1200),
                         if (toolRes.success) 0 else 1, latency);
                     onResult(
                         UnifiedExecutionResult(
-                            handled = true,
+                            handled = toolRes.success,
                             source = ExecutionSource.DETERMINISTIC_NEEDLE,
                             speechResponse = synthesizedAnswer,
 fullSummary = "$thinkTrace\n\n⚡ [Pre-Routing Match · ${latency}ms]\n$synthesizedAnswer",
@@ -394,19 +398,19 @@ fullSummary = "$thinkTrace\n\n⚡ [Deterministic Answer · ${latency}ms]\n$answe
                         }
                         val toolDef = CanonicalToolRegistry.get(normalized.tool)
                         val responseMode = com.pr4nav.jarvis.response.AnswerSynthesizer.determineResponseMode(trimmed, classified.category.name)
-                        val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, normalized.tool, toolRes.data, responseMode)
+                        val synthesizedAnswer = com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, normalized.tool, toolRes, responseMode)
                         val latency = System.currentTimeMillis() - t0
                         val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: Direct deterministic match [${normalized.tool}]\n• Purpose: ${toolDef?.purpose ?: com.pr4nav.jarvis.response.ToolPurpose.ACTION}\n• Mode: ${mode.displayName}\n• Latency: ${latency}ms\n</think>"
 
                         Log.i(TAG, "Tier 1: Direct deterministic match [${normalized.tool}] in ${latency}ms -> $synthesizedAnswer")
                         if (onEvent == null) onChunk?.invoke(synthesizedAnswer)
-                                                        emitTurn(onEvent, thinkTrace, synthesizedAnswer, "Needle 2 Reflex", latency, true,
+                                                        emitTurn(onEvent, thinkTrace, synthesizedAnswer, "Needle 2 Reflex", latency, toolRes.success,
                             normalized.tool, argSummary(normalized.args),
                             (toolRes.data?.toString() ?: toolRes.error?.message ?: "").take(1200),
                             if (toolRes.success) 0 else 1, latency);
                         onResult(
                             UnifiedExecutionResult(
-                                handled = true,
+                                handled = toolRes.success,
                                 source = ExecutionSource.DETERMINISTIC_NEEDLE,
                                 speechResponse = synthesizedAnswer,
 fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesizedAnswer",
@@ -591,7 +595,8 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                 // Record the FULL answer, not the (possibly empty) speech snippet —
                 // otherwise voice turns never enter history and every turn is contextless.
                 com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, finalAnswer)
-                emitTurn(onEvent, turn.thinkingTrace, finalAnswer, "Gemini Live ($model)", latency, true)
+                emitTurn(onEvent, turn.thinkingTrace, finalAnswer, "Gemini Live ($model)", latency, true,
+                    contentAlreadyStreamed = true)
                 onResult(
                     UnifiedExecutionResult(
                         handled = true,

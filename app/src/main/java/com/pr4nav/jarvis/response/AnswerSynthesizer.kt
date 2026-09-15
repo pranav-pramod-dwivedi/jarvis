@@ -53,6 +53,24 @@ object AnswerSynthesizer {
         toolData: Any?,
         responseMode: ResponseMode = ResponseMode.SEARCH_THEN_ANSWER
     ): String {
+        // Request paths must pass the whole result: data alone loses failure,
+        // permission, timeout and user-action states before prose is generated.
+        if (toolData is com.pr4nav.jarvis.tools.ToolResult) {
+            if (!toolData.success || toolData.status != com.pr4nav.jarvis.tools.ToolStatus.SUCCESS) {
+                return toolData.error?.message?.takeIf { it.isNotBlank() }
+                    ?: "Action not completed (${toolData.status.name.lowercase(Locale.ROOT).replace('_', ' ')})."
+            }
+            val data = toolData.data
+            if (data == null || data == JSONObject.NULL || (data is JSONObject && data.length() == 0)) {
+                return "The tool returned no confirmation of the requested result."
+            }
+            // Prefer the executor's outcome to guessed state or query keywords.
+            val message = (data as? JSONObject)?.optString("message", "")
+            if (!message.isNullOrBlank() && !message.equals("null", ignoreCase = true)) return message
+            if (data is String) return data.takeIf { it.isNotBlank() }
+                ?: "The tool returned no confirmation of the requested result."
+            return synthesize(originalQuery, toolName, data, responseMode)
+        }
         val lowerQuery = originalQuery.trim().lowercase(Locale.ROOT)
         val json = toolData as? JSONObject
 

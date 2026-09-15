@@ -131,7 +131,7 @@ object LocalEngine {
                     val mode = com.pr4nav.jarvis.response.AnswerSynthesizer
                         .determineResponseMode(trimmed, "DEVICE")
                     com.pr4nav.jarvis.response.AnswerSynthesizer
-                        .synthesize(trimmed, call.name, toolRes.data, mode)
+                        .synthesize(trimmed, call.name, toolRes, mode)
                 } catch (_: Exception) {
                     if (toolRes.success) "Done." else "That didn't work offline: ${toolRes.error?.message}"
                 }
@@ -225,7 +225,7 @@ object LocalEngine {
         val answer = try {
             val mode = com.pr4nav.jarvis.response.AnswerSynthesizer
                 .determineResponseMode(trimmed, "DEVICE")
-            com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, normalized.tool, toolRes.data, mode)
+            com.pr4nav.jarvis.response.AnswerSynthesizer.synthesize(trimmed, normalized.tool, toolRes, mode)
         } catch (_: Exception) {
             if (toolRes.success) "Done." else "That didn't work: ${toolRes.error?.message}"
         }

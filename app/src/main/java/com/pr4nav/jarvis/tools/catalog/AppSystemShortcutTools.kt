@@ -24,10 +24,7 @@ object AppSystemShortcutTools {
                 required = listOf("app")
             ),
             execute = { ctx, args ->
-                val name = args.optString("app", "")
-                val friendly = AnswerSynthesizer.cleanFriendlyAppName(name)
-                JarvisIntentRouter.routeAndExecute(ctx, "Open $friendly") {}
-                ok("▶️ Opening $friendly.", mapOf("app" to friendly))
+                com.pr4nav.jarvis.tools.CanonicalToolRegistry.execute(ctx, "open_app", args)
             }
         ))
 

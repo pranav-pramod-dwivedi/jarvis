@@ -12,15 +12,13 @@ object MediaAudioTools {
     fun register(reg: (CanonicalToolDef) -> Unit) {
         reg(CanonicalToolDef(
             name = "music_play",
-            description = "Plays music, songs, artists, or playlists on Spotify or default player.",
+            description = "Requests playback or opens Spotify/YouTube search; reports launch errors and unconfirmed playback.",
             argumentSchema = schema(
                 prop("query", "string", "Song title, artist, album, or playlist name"),
                 prop("provider", "string", "Streaming provider ('spotify', 'youtube', 'default')")
             ),
             execute = { ctx, args ->
-                val q = args.optString("query", "music")
-                JarvisIntentRouter.routeAndExecute(ctx, "Play $q on Spotify") {}
-                ok("🎵 Playing \"$q\".", mapOf("query" to q))
+                com.pr4nav.jarvis.tools.MediaPlayback.play(ctx, args)
             }
         ))
 
@@ -69,8 +67,9 @@ object MediaAudioTools {
             description = "Opens the Spotify music player app.",
             argumentSchema = schema(),
             execute = { ctx, _ ->
-                JarvisIntentRouter.routeAndExecute(ctx, "Open Spotify") {}
-                ok("▶️ Opening Spotify.")
+                com.pr4nav.jarvis.tools.CanonicalToolRegistry.execute(
+                    ctx, "open_app", org.json.JSONObject().put("app", "Spotify")
+                )
             }
         ))
     }

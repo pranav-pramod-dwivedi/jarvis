@@ -19,10 +19,26 @@ import java.io.File
 class HostileFindingsVerificationTest {
 
     private val context = ContextWrapper(null)
+    private lateinit var originalBluetooth: com.pr4nav.jarvis.tools.CanonicalToolDef
+    private val bluetoothStates = mutableListOf<Boolean>()
 
     @Before
     fun setup() {
         CanonicalToolRegistry.init(context)
+        ContextManager.clear()
+        // This suite tests continuation, not Android Bluetooth hardware. Keep the
+        // real dispatcher/validator and supply an explicit, state-recording device.
+        originalBluetooth = CanonicalToolRegistry.get("system.bluetooth")!!
+        CanonicalToolRegistry.register(originalBluetooth.copy(execute = { _, args ->
+            val state = args.getBoolean("state")
+            bluetoothStates.add(state)
+            com.pr4nav.jarvis.tools.ToolResult.ok(JSONObject().put("state", state))
+        }))
+    }
+
+    @org.junit.After
+    fun restoreDevice() {
+        CanonicalToolRegistry.register(originalBluetooth)
         ContextManager.clear()
     }
 
@@ -46,6 +62,8 @@ class HostileFindingsVerificationTest {
 
         assertTrue("Continuation should be handled by dispatcher", handled == true)
         assertNotNull("Speech response should not be null", speechResult)
+        assertEquals(listOf(false), bluetoothStates)
+        assertEquals("Bluetooth disabled.", speechResult)
 
         // Verify context was updated to off
         val contRes = ContextManager.resolveContinuation("turn it on again")

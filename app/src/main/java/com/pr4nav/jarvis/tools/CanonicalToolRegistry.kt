@@ -243,20 +243,18 @@ object CanonicalToolRegistry {
         // media.play
         val mediaPlayDef = CanonicalToolDef(
             name = "media.play",
-            description = "Plays requested music track, song, or artist in default media player.",
+            description = "Requests playback in the default player or opens provider search. Does not confirm playback.",
             argumentSchema = JSONObject().apply {
                 put("type", "object")
                 put("properties", JSONObject().apply {
-                    put("query", JSONObject().put("type", "string").put("description", "Song or artist name to play"))
+                    put("query", JSONObject().put("type", "string").put("description", "Song, artist, or video to find"))
+                    put("provider", JSONObject().put("type", "string").put("description", "youtube, spotify, or default"))
                 })
                 put("required", JSONArray().put("query"))
             },
             backend = ToolBackend.ANDROID_NATIVE,
             defaultTimeoutMs = 5_000L,
-            execute = { ctx, args ->
-                val q = args.optString("query").trim()
-                ToolResult.ok(JSONObject().put("action", "PLAYING_MEDIA").put("query", q))
-            }
+            execute = { ctx, args -> MediaPlayback.play(ctx, args) }
         )
         register(mediaPlayDef)
 

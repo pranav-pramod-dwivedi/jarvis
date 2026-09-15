@@ -54,7 +54,7 @@ class AgentTurnRenderer(
     private var thinkingStarted = false
     private var liveCard: LinearLayout? = null
     private var liveBody: LinearLayout? = null
-    private val liveText = StringBuilder()
+    private val liveText = StreamingReply()
     private var liveRenderAt = 0L
     private val openCards = mutableListOf<ToolCallCard>()
     private val toolSummaries = mutableListOf<String>()
@@ -222,26 +222,21 @@ class AgentTurnRenderer(
     }
 
     private fun appendLive(text: String) {
-        if (text.isBlank()) return
+        if (text.isEmpty()) return
         ensureLiveCard()
-        if (liveText.isNotEmpty()) liveText.append("\n\n")
-        liveText.append(text.trim())
+        liveText.append(text)
+        val snapshot = liveText.snapshot()
         val now = System.currentTimeMillis()
-        if (now - liveRenderAt < 450 && liveText.length > 400) return
+        if (now - liveRenderAt < 450 && snapshot.length > 400) return
         liveRenderAt = now
         val body = liveBody ?: return
         body.removeAllViews()
-        val capped = if (liveText.length > 6000) liveText.substring(0, 6000) + "\n\n…" else liveText.toString()
+        val capped = if (snapshot.length > 6000) snapshot.take(6000) + "\n\n…" else snapshot
         body.addView(Markdown.renderMessage(activity, capped))
     }
 
     private fun finishTurn(ev: AgentStreamEvent.Final) {
-        val text = ev.text.trim().ifBlank { "Done." }
-        // Merge any streamed text not already covered by the final answer.
-        val streamed = liveText.toString().trim()
-        val combined = if (streamed.isNotBlank() && !text.contains(streamed.take(120))) {
-            (streamed + "\n\n" + text).trim()
-        } else text
+        val combined = liveText.finish(ev.text).ifBlank { "Done." }
         finalizeBubbles(
             combined,
             success = ev.handled,
