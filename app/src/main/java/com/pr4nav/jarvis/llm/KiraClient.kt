@@ -1482,7 +1482,8 @@ The html MUST include: DOCTYPE, head (with viewport meta + complete CSS), body w
                 "{\"action\": \"execute_device_tool\", \"params\": {\"tool_name\": \"open_app\", \"parameters\": {\"app\": \"YouTube\"}}}\n" +
                 "{\"action\": \"read_file\", \"params\": {\"path\": \"/sdcard/notes.txt\"}}\n" +
                 "```\n" +
-                "Prefer acting over asking. After acting, verify the result and report what happened."
+                "Prefer acting over asking. After acting, verify the result and report what happened.\n" +
+                "NEVER refuse with inability claims ('I cannot', 'I am unable') — if a tool exists, USE IT. Never tell the user to do it themselves."
         return base + speed + tools
     }
 
@@ -1726,6 +1727,7 @@ The html MUST include: DOCTYPE, head (with viewport meta + complete CSS), body w
         var finalResponseText = ""
         var thinkingTrace = ""
         val executedToolSignatures = mutableListOf<String>()
+        var refusalRetries = 0
 
         try {
             for (iteration in 1..MAX_AGENT_TURNS) {
@@ -1850,6 +1852,20 @@ The html MUST include: DOCTYPE, head (with viewport meta + complete CSS), body w
                         val (_, fallbackText) = com.pr4nav.jarvis.response.UserResponseSanitizer.stripThinking(thinkingTrace)
                         if (fallbackText.isNotBlank() && !fallbackText.equals("null", ignoreCase = true) && !fallbackText.equals("null null", ignoreCase = true)) fallbackText else ""
                     } else ""
+
+                    // Refusal → exactly one forced tool-attempt retry instead of a cop-out.
+                    if (answerCandidate.isNotBlank() && refusalRetries < 1 &&
+                        com.pr4nav.jarvis.chat.RefusalGuard.isRefusal(answerCandidate)
+                    ) {
+                        refusalRetries++
+                        Log.w(TAG, "Model refused to act; forcing one tool-attempt retry.")
+                        onStatus?.invoke("Refused — forcing tool attempt…")
+                        messages.put(JSONObject().apply {
+                            put("role", "user")
+                            put("content", com.pr4nav.jarvis.chat.RefusalGuard.nudgePrompt())
+                        })
+                        continue
+                    }
 
                     finalResponseText = if (answerCandidate.isNotBlank() && !answerCandidate.equals("null", ignoreCase = true)) {
                         answerCandidate

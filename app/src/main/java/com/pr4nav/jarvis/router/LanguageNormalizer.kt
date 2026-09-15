@@ -659,6 +659,68 @@ object LanguageNormalizer {
             return NormalizedToolCall("navigate", args, 0.95f, raw, trace)
         }
 
+        // 12b. MEDIA PLAYBACK (songs → media.play, videos → YouTube app)
+        val videoWords = listOf(
+            "video", "videos", "youtube", "movie", "movies", "film", "films",
+            "episode", "episodes", "show", "shows", "trailer", "trailers",
+            "music video", "song on youtube", "gaana", "gana", "video song", "clip"
+        )
+        val playPrefixes = listOf("play ", "bajao ", "baja do ", "baja de ", "play kar ", "play karo ", "play kr ")
+        val playSuffixes = listOf(" bajao", " baja do", " baja de", " chalao", " chala do", " play karo", " play kar")
+        var mediaQuery: String? = null
+        for (p in playPrefixes) {
+            if (cleaned.startsWith(p)) {
+                mediaQuery = cleaned.removePrefix(p).trim()
+                break
+            }
+        }
+        if (mediaQuery == null) {
+            for (s in playSuffixes) {
+                if (cleaned.endsWith(s)) {
+                    mediaQuery = cleaned.removeSuffix(s).trim()
+                    break
+                }
+            }
+        }
+        // "open X and play Y" → the Y is the media query.
+        if (mediaQuery == null && cleaned.startsWith("open ") && cleaned.contains(" play ")) {
+            mediaQuery = cleaned.substringAfter(" play ").trim()
+        }
+        if (mediaQuery != null && mediaQuery.isNotBlank() &&
+            !mediaQuery.startsWith("store") && mediaQuery != "games" && mediaQuery != "game"
+        ) {
+            val isVideo = videoWords.any { mediaQuery.contains(it) } || cleaned.contains(" on youtube")
+            if (isVideo) {
+                val args = JSONObject().put("app", "YouTube").put("package", "YouTube")
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "media video query=$mediaQuery",
+                    matchedObject = "VIDEO",
+                    matchedAction = "PLAY",
+                    targetTool = "open_app",
+                    resolvedArgs = args,
+                    confidence = 0.93f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("open_app", args, 0.93f, raw, trace)
+            } else {
+                val args = JSONObject().put("query", mediaQuery)
+                val trace = NormalizationTrace(
+                    rawInput = raw,
+                    detectedLanguage = lang,
+                    normalizedText = "media play query=$mediaQuery",
+                    matchedObject = "MEDIA",
+                    matchedAction = "PLAY",
+                    targetTool = "media.play",
+                    resolvedArgs = args,
+                    confidence = 0.93f,
+                    isDirectMatch = true
+                )
+                return NormalizedToolCall("media.play", args, 0.93f, raw, trace)
+            }
+        }
+
         // 13. APP LAUNCH (Specific known apps or simple names)
         val knownApps = listOf("chrome", "youtube", "whatsapp", "spotify", "instagram", "gmail", "maps", "camera", "calculator", "settings", "twitter", "telegram", "photos", "gallery")
         val isAppAction = cleaned.startsWith("open ") || cleaned.startsWith("launch ") || cleaned.startsWith("kholo ") ||
