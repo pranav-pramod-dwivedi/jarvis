@@ -436,6 +436,7 @@ object GeminiLiveClient {
         audioResponses: Boolean = true,
         withTools: Boolean = true,
         voice: String = "Autonoe",
+        systemText: String = "You are JARVIS, a concise realtime assistant. Keep replies to 1-3 sentences.",
         listener: Listener
     ) {
         disconnect("reconnect")
@@ -446,8 +447,6 @@ object GeminiLiveClient {
         }
         this.listener = listener
         textBuffer.clear()
-        val systemText = "You are JARVIS, a terse on-device co-pilot. Keep replies short. " +
-            "You can run device shell commands and read files via tools when useful."
         val sock = LiveSocket()
         socket = sock
         sock.listener = object : LiveSocket.Listener {
@@ -632,11 +631,15 @@ object GeminiLiveClient {
         var err: String? = null
         val gotSetup = AtomicBoolean(false)
         val queue = ConcurrentLinkedQueue<String>()
+        // NOTE: AUDIO modality even though we only want text — the native-audio
+        // dialog models reject TEXT-only setups (server 1007). The reply text
+        // arrives via output transcription; audio chunks are ignored here.
         connect(
             context = context,
             model = MODEL_DIALOG,
-            audioResponses = false,
+            audioResponses = true,
             withTools = false,
+            voice = "Kore",
             listener = object : Listener {
                 override fun onStatus(text: String) {
                     if (text.startsWith("Live")) gotSetup.set(true)
@@ -658,7 +661,11 @@ object GeminiLiveClient {
                 override fun onToolCall(id: String, name: String, args: String) {}
                 override fun onClosed(reason: String) {
                     if (latch.count > 0 && outText.isEmpty() && queue.isEmpty()) {
-                        err = "closed early: $reason"
+                        err = if (!gotSetup.get()) {
+                            "Live setup rejected: $reason — check model/voice/modality"
+                        } else {
+                            "closed early: $reason"
+                        }
                         latch.countDown()
                     }
                 }
