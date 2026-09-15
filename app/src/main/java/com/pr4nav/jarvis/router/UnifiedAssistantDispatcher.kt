@@ -492,7 +492,7 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                 val candidate = if (cleanText.isNotBlank() && !cleanText.equals("null", ignoreCase = true)) cleanText else ollamaRes.response.trim()
                 val finalAnswer = if (candidate.isBlank() || candidate.equals("null", ignoreCase = true)) "Action completed successfully." else candidate
                 val speech = com.pr4nav.jarvis.response.UserResponseSanitizer.sanitizeForSpeech(finalAnswer, prompt)
-                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, speech)
+                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, finalAnswer)
                 emitTurn(onEvent, ollamaRes.thinkingTrace, finalAnswer,
                     "Ollama ${ollamaRes.modelUsed}", latency, true)
                 onResult(
@@ -588,7 +588,9 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                 val finalAnswer = if (cleanText.isNotBlank() && !cleanText.equals("null", ignoreCase = true)) cleanText else turn.text
                 // Gemini already spoke this aloud: system TTS stays silent (no doubles).
                 val speech = if (turn.audioPlayed) "" else com.pr4nav.jarvis.response.UserResponseSanitizer.sanitizeForSpeech(finalAnswer, prompt)
-                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, speech)
+                // Record the FULL answer, not the (possibly empty) speech snippet —
+                // otherwise voice turns never enter history and every turn is contextless.
+                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, finalAnswer)
                 emitTurn(onEvent, turn.thinkingTrace, finalAnswer, "Gemini Live ($model)", latency, true)
                 onResult(
                     UnifiedExecutionResult(
@@ -675,7 +677,7 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                 val finalAnswer = if (cleanText.isNotBlank() && !cleanText.equals("null", ignoreCase = true) && !cleanText.equals("null null", ignoreCase = true)) cleanText else rawResponse
 
                 val speech = com.pr4nav.jarvis.response.UserResponseSanitizer.sanitizeForSpeech(finalAnswer, prompt)
-                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, speech)
+                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, finalAnswer)
 
                 val toolSummary = if (kiraRes.toolCallsExecuted.isNotEmpty()) {
                     "• Shell/Device Tools: ${kiraRes.toolCallsExecuted.size} (${kiraRes.toolCallsExecuted.map { it.command }.joinToString(", ")})\n"
@@ -761,7 +763,7 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                 val candidate = if (cleanText.isNotBlank() && !cleanText.equals("null", ignoreCase = true)) cleanText else groqRes.response.trim()
                 val finalAnswer = if (candidate.isBlank() || candidate.equals("null", ignoreCase = true) || candidate.equals("null null", ignoreCase = true)) "Action completed successfully." else candidate
                 val speech = com.pr4nav.jarvis.response.UserResponseSanitizer.sanitizeForSpeech(finalAnswer, prompt)
-                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, speech)
+                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, finalAnswer)
 
                 if (onEvent != null) {
                     for (rec in groqRes.toolCallsExecuted) {
