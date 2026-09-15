@@ -28,7 +28,7 @@ import androidx.core.content.ContextCompat
 import com.pr4nav.jarvis.chat.ChatUi
 import com.pr4nav.jarvis.llm.GeminiCloudLLM
 import com.pr4nav.jarvis.llm.GeminiLiveClient
-import com.pr4nav.jarvis.llm.WsBase64
+import com.pr4nav.jarvis.llm.LiveAudioPlayer
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
@@ -149,7 +149,7 @@ class LivePlaygroundActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         stopMic()
-        stopPlayback()
+        LiveAudioPlayer.stop()
         try {
             GeminiLiveClient.disconnect("destroy")
         } catch (_: Exception) { }
@@ -170,7 +170,7 @@ class LivePlaygroundActivity : AppCompatActivity() {
 
     private fun toggleConnect() {        if (GeminiLiveClient.isConnected()) {
             GeminiLiveClient.disconnect("user")
-            stopPlayback()
+            LiveAudioPlayer.stop()
             stopMic()
             setStatus("Disconnected", "#94A3B8")
             btnConnect.text = "CONNECT"
@@ -209,7 +209,7 @@ class LivePlaygroundActivity : AppCompatActivity() {
         }
 
         override fun onAudioChunk(pcm16: ByteArray) {
-            playPcm(pcm16)
+            LiveAudioPlayer.play(pcm16)
         }
 
         override fun onImage(mime: String, bytes: ByteArray) {
@@ -227,7 +227,7 @@ class LivePlaygroundActivity : AppCompatActivity() {
         }
 
         override fun onInterrupted() {
-            stopPlayback()
+            LiveAudioPlayer.stop()
             runOnUiThread { note("Interrupted.") }
         }
 
@@ -237,7 +237,7 @@ class LivePlaygroundActivity : AppCompatActivity() {
         }
 
         override fun onClosed(reason: String) {
-            stopPlayback()
+            LiveAudioPlayer.stop()
             runOnUiThread {
                 setStatus("Disconnected", "#94A3B8")
                 btnConnect.text = "CONNECT"
@@ -364,7 +364,7 @@ class LivePlaygroundActivity : AppCompatActivity() {
 
     private fun startMic() {
         try {
-            stopPlayback() // barge-in: our voice stops the model
+            LiveAudioPlayer.stop() // barge-in: our voice stops the model
             val rec = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 GeminiLiveClient.IN_SAMPLE_RATE,
@@ -415,43 +415,6 @@ class LivePlaygroundActivity : AppCompatActivity() {
             btnMic.text = "MIC OFF"
             btnMic.setTextColor(Color.parseColor("#94A3B8"))
         }
-    }
-
-    // ── playback (inbuilt TTS) ────────────────────────────────────────────────
-
-    @Synchronized
-    private fun playPcm(pcm16: ByteArray) {
-        try {
-            var track = player
-            if (track == null || track.playState == AudioTrack.PLAYSTATE_STOPPED) {
-                track?.release()
-                val minBuf = AudioTrack.getMinBufferSize(
-                    GeminiLiveClient.OUT_SAMPLE_RATE,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT
-                ).coerceAtLeast(8192)
-                track = AudioTrack(
-                    AudioManager.STREAM_MUSIC,
-                    GeminiLiveClient.OUT_SAMPLE_RATE,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    minBuf * 4,
-                    AudioTrack.MODE_STREAM
-                )
-                player = track
-                track.play()
-            }
-            track.write(pcm16, 0, pcm16.size)
-        } catch (e: Exception) {
-            runOnUiThread { note("Playback error: ${e.message}") }
-        }
-    }
-
-    private fun stopPlayback() {
-        try {
-            player?.pause()
-            player?.flush()
-        } catch (_: Exception) { }
     }
 
     // ── tools ─────────────────────────────────────────────────────────────────

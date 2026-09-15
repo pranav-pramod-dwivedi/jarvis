@@ -74,6 +74,7 @@ object GeminiLiveClient {
     interface Listener {
         fun onStatus(text: String)
         fun onTextDelta(text: String)
+        fun onThought(text: String) {}
         fun onTurnDone(fullText: String)
         fun onAudioChunk(pcm16: ByteArray)
         fun onImage(mime: String, bytes: ByteArray)
@@ -89,6 +90,7 @@ object GeminiLiveClient {
     data class ParsedServerMessage(
         val setupComplete: Boolean = false,
         val textDelta: String = "",
+        val thoughtDelta: String = "",
         val audioPcm: ByteArray? = null,
         val images: List<Pair<String, ByteArray>> = emptyList(),
         val inputTranscript: String = "",
@@ -354,6 +356,7 @@ object GeminiLiveClient {
                     return ParsedServerMessage(interrupted = true)
                 }
                 var text = ""
+                var thought = ""
                 var audio: ByteArray? = null
                 val images = mutableListOf<Pair<String, ByteArray>>()
                 val turn = sc.optJSONObject("modelTurn")
@@ -363,7 +366,11 @@ object GeminiLiveClient {
                         for (i in 0 until parts.length()) {
                             val p = parts.optJSONObject(i) ?: continue
                             val t = p.optString("text", "")
-                            if (t.isNotBlank()) text += t
+                            if (t.isNotBlank()) {
+                                // Thought parts are reasoning, not the answer.
+                                if (p.optBoolean("thought", false)) thought += t
+                                else text += t
+                            }
                             val inline = p.optJSONObject("inlineData")
                             if (inline != null) {
                                 val b64 = inline.optString("data", "")
@@ -389,6 +396,7 @@ object GeminiLiveClient {
                 val outTr = sc.optJSONObject("outputTranscription")?.optString("text", "").orEmpty()
                 return ParsedServerMessage(
                     textDelta = text,
+                    thoughtDelta = thought,
                     audioPcm = audio,
                     images = images,
                     inputTranscript = inTr,
@@ -436,7 +444,7 @@ object GeminiLiveClient {
         audioResponses: Boolean = true,
         withTools: Boolean = true,
         voice: String = "Autonoe",
-        systemText: String = "You are JARVIS, a concise realtime assistant. Keep replies to 1-3 sentences.",
+        systemText: String = "You are JARVIS, a concise realtime assistant. Keep replies to 1-3 sentences. Answer directly; never speak internal reasoning aloud.",
         listener: Listener
     ) {
         disconnect("reconnect")
@@ -595,6 +603,9 @@ object GeminiLiveClient {
             synchronized(lock) { textBuffer.append(msg.textDelta) }
             l.onTextDelta(msg.textDelta)
         }
+        if (msg.thoughtDelta.isNotBlank()) {
+            l.onThought(msg.thoughtDelta)
+        }
         msg.audioPcm?.let { l.onAudioChunk(it) }
         for ((mime, bytes) in msg.images) {
             l.onImage(mime, bytes)
@@ -628,12 +639,14 @@ object GeminiLiveClient {
     ): TurnResult {
         val latch = CountDownLatch(1)
         val outText = StringBuilder()
+        val thoughtText = StringBuilder()
         var err: String? = null
         val gotSetup = AtomicBoolean(false)
         val queue = ConcurrentLinkedQueue<String>()
+        LiveAudioPlayer.stop() // never overlap a previous turn's voice
         // NOTE: AUDIO modality even though we only want text — the native-audio
         // dialog models reject TEXT-only setups (server 1007). The reply text
-        // arrives via output transcription; audio chunks are ignored here.
+        // arrives via output transcription; audio plays through LiveAudioPlayer.
         connect(
             context = context,
             model = MODEL_DIALOG,
@@ -649,12 +662,18 @@ object GeminiLiveClient {
                     queue.add(text)
                 }
 
+                override fun onThought(text: String) {
+                    thoughtText.append(text)
+                }
+
                 override fun onTurnDone(fullText: String) {
                     outText.append(fullText)
                     latch.countDown()
                 }
 
-                override fun onAudioChunk(pcm16: ByteArray) {}
+                override fun onAudioChunk(pcm16: ByteArray) {
+                    LiveAudioPlayer.play(pcm16)
+                }
                 override fun onImage(mime: String, bytes: ByteArray) {}
                 override fun onUserTranscript(text: String) {}
                 override fun onInterrupted() {}
@@ -693,8 +712,9 @@ object GeminiLiveClient {
             drained.append(queue.poll() ?: break)
         }
         val text = (outText.toString() + drained.toString()).trim()
-        if (!done && text.isBlank()) return TurnResult(false, "", error = err ?: "turn timed out")
-        if (text.isBlank()) return TurnResult(false, "", error = err ?: "empty reply")
-        return TurnResult(true, text)
+        val thought = thoughtText.toString().trim()
+        if (!done && text.isBlank()) return TurnResult(false, "", thought, error = err ?: "turn timed out")
+        if (text.isBlank()) return TurnResult(false, "", thought, error = err ?: "empty reply")
+        return TurnResult(true, text, thought)
     }
 }

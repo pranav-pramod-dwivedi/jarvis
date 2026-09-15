@@ -202,8 +202,18 @@ class GeminiLiveTest {
             """{"serverContent":{"modelTurn":{"parts":[{"text":"Hel"},{"text":"lo"}]},"turnComplete":true}}"""
         )
         assertEquals("Hello", m.textDelta)
+        assertEquals("", m.thoughtDelta)
         assertTrue(m.turnComplete)
         assertNull(m.audioPcm)
+    }
+
+    @Test fun thoughtPartsStayOutOfAnswer() {
+        val m = GeminiLiveClient.parseServerMessage(
+            """{"serverContent":{"modelTurn":{"parts":[{"text":"Let me think","thought":true},{"text":"Here you go"}]},"turnComplete":true}}"""
+        )
+        assertEquals("Here you go", m.textDelta)
+        assertEquals("Let me think", m.thoughtDelta)
+        assertTrue(m.turnComplete)
     }
 
     @Test fun parseAudioChunk() {
