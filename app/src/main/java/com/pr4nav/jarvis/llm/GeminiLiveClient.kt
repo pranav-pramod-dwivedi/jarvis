@@ -696,7 +696,7 @@ object GeminiLiveClient {
         timeoutSec: Long = 90L,
         history: List<Pair<String, String>> = emptyList(),
         contextLine: String = "",
-        withTools: Boolean = true,
+        withTools: Boolean = false,
         onEvent: ((com.pr4nav.jarvis.chat.AgentStreamEvent) -> Unit)? = null
     ): TurnResult {
         val latch = CountDownLatch(1)
