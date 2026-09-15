@@ -3,45 +3,41 @@
     android:id="@+id/splash_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000"
-    android:keepScreenOn="true">
+    android:background="#090B0E">
 
-    <FrameLayout
-        android:id="@+id/rot_container"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="center">
-
-        <androidx.media3.ui.PlayerView
-            android:id="@+id/player_view"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-    </FrameLayout>
-
-    <!-- Transparent touch overlay to capture all screen taps reliably -->
-    <View
-        android:id="@+id/touch_overlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clickable="true"
-        android:focusable="true" />
-
-    <!-- Clean DM Sans Metallic Silver Shine Skip (No border / No capsule / No extra spacing) -->
-    <com.pr4nav.jarvis.ui.MetallicShineTextView
-        android:id="@+id/btn_skip_splash"
+    <LinearLayout
+        android:id="@+id/splash_content"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="50dp"
-        android:layout_marginEnd="18dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:clickable="true"
-        android:focusable="true"
-        android:padding="8dp"
-        android:text="Skip"
-        android:textSize="15sp"
-        android:textStyle="bold"
-        android:visibility="invisible"
-        android:alpha="0"
-        android:elevation="12dp" />
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <ImageView
+            android:id="@+id/splash_logo"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:src="@mipmap/ic_launcher"
+            android:contentDescription="JARVIS" />
+
+        <TextView
+            android:id="@+id/splash_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="JARVIS"
+            android:textColor="#F3F4F6"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1" />
+
+        <TextView
+            android:id="@+id/splash_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="On-Device Assistant"
+            android:textColor="#9CA3AF"
+            android:textSize="12sp" />
+    </LinearLayout>
 </FrameLayout>

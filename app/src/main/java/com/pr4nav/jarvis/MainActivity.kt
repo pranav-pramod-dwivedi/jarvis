@@ -127,10 +127,7 @@ import java.util.Random
 import kotlin.math.cos
 import kotlin.math.sin
 
-// ─── Constants & View States ──────────────────────────────────────────────────
-
-private const val DRIBBBLE_ORB_VIDEO_URL =
-    "https://cdn.dribbble.com/userupload/48175050/file/a2c40840cf95dde8784132e3897449b8.mp4"
+// ─── View States ─────────────────────────────────────────────────────────────
 
 enum class ViewState {
     EXPLORE,
@@ -138,64 +135,6 @@ enum class ViewState {
     CONVERSATION
 }
 
-// ─── Retro CRT TV Analog Noise, Chunky Grain & Scanline Generator ───────────
-
-object DynamicCrtTvEffects {
-    private val grainFrameBrushes = mutableListOf<ShaderBrush>()
-    private val scanlineBrush: ShaderBrush
-    private const val TOTAL_FRAMES = 8
-    private const val TILE_SIZE = 256
-    private const val GRAIN_BLOCK_SIZE = 4 // 4x4 chunky pixels for retro CRT phosphor look
-
-    init {
-        // 1. Generate multi-frame chunky CRT phosphor grain
-        for (f in 0 until TOTAL_FRAMES) {
-            val bitmap = Bitmap.createBitmap(TILE_SIZE, TILE_SIZE, Bitmap.Config.ARGB_8888)
-            val pixels = IntArray(TILE_SIZE * TILE_SIZE)
-            val rnd = Random(4040L + f * 997L)
-
-            val blocksCount = TILE_SIZE / GRAIN_BLOCK_SIZE
-            for (by in 0 until blocksCount) {
-                for (bx in 0 until blocksCount) {
-                    val noiseVal = (rnd.nextGaussian() * 68 + 128).toInt().coerceIn(0, 255)
-                    // Refined chunky phosphor sparkle (alpha 28 to 68)
-                    val alphaVal = rnd.nextInt(40) + 28
-                    val color = android.graphics.Color.argb(alphaVal, noiseVal, noiseVal, noiseVal)
-
-                    val startY = by * GRAIN_BLOCK_SIZE
-                    val startX = bx * GRAIN_BLOCK_SIZE
-                    for (dy in 0 until GRAIN_BLOCK_SIZE) {
-                        val rowOffset = (startY + dy) * TILE_SIZE
-                        for (dx in 0 until GRAIN_BLOCK_SIZE) {
-                            pixels[rowOffset + startX + dx] = color
-                        }
-                    }
-                }
-            }
-            bitmap.setPixels(pixels, 0, TILE_SIZE, 0, 0, TILE_SIZE, TILE_SIZE)
-            val shader = BitmapShader(bitmap, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-            grainFrameBrushes.add(ShaderBrush(shader))
-        }
-
-        // 2. Generate delicate CRT horizontal raster scanlines (repeating 5px vertical strip)
-        val scanlineBitmap = Bitmap.createBitmap(1, 5, Bitmap.Config.ARGB_8888)
-        scanlineBitmap.setPixel(0, 0, android.graphics.Color.argb(0, 0, 0, 0))  // Phosphor row 1
-        scanlineBitmap.setPixel(0, 1, android.graphics.Color.argb(0, 0, 0, 0))  // Phosphor row 2
-        scanlineBitmap.setPixel(0, 2, android.graphics.Color.argb(0, 0, 0, 0))  // Phosphor row 3
-        scanlineBitmap.setPixel(0, 3, android.graphics.Color.argb(0, 0, 0, 0))  // Phosphor row 4
-        scanlineBitmap.setPixel(0, 4, android.graphics.Color.argb(38, 0, 0, 0)) // Subtle soft raster shadow line
-        val scanlineShader = BitmapShader(scanlineBitmap, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-        scanlineBrush = ShaderBrush(scanlineShader)
-    }
-
-    fun getGrainBrush(frameIndex: Int): ShaderBrush {
-        return grainFrameBrushes[frameIndex % TOTAL_FRAMES]
-    }
-
-    fun getScanlineBrush(): ShaderBrush {
-        return scanlineBrush
-    }
-}
 
 // ─── Main Activity Entry Point ────────────────────────────────────────────────
 
@@ -558,7 +497,7 @@ fun JarvisMainApp(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var viewState by remember { mutableStateOf(ViewState.EXPLORE) }
+    var viewState by remember { mutableStateOf(ViewState.CONVERSATION) }
     var isModelMenuOpen by remember { mutableStateOf(false) }
 
     // Execution & Streaming State
@@ -638,11 +577,11 @@ fun JarvisMainApp(
         }
     }
 
-    BackHandler(enabled = isSessionDrawerOpen || viewState != ViewState.EXPLORE) {
+    BackHandler(enabled = isSessionDrawerOpen || viewState != ViewState.CONVERSATION) {
         if (isSessionDrawerOpen) {
             isSessionDrawerOpen = false
         } else {
-            viewState = ViewState.EXPLORE
+            viewState = ViewState.CONVERSATION
         }
     }
 
@@ -808,9 +747,9 @@ fun JarvisMainApp(
         activeJob = null
 
         // ── AUTOMATIC NEW SESSION CREATION ──
-        // When launching a prompt from Explore or Voice, if currentSession already has messages,
+        // When launching a prompt from Explore, if currentSession already has messages,
         // automatically create a brand new session so conversations are not lumped together!
-        if ((viewState == ViewState.EXPLORE || viewState == ViewState.VOICE_ACTIVE) && currentSession.messages.isNotEmpty()) {
+        if (viewState == ViewState.EXPLORE && currentSession.messages.isNotEmpty()) {
             val sessionType = if (isFromVoice) SessionType.VOICE_CHAT else SessionType.AGENT_CHAT
             val newSess = JarvisSessionManager.createSession(context, sessionType, workingDir = SessionState.dir)
             currentSession = newSess
@@ -1220,7 +1159,7 @@ fun JarvisMainApp(
                         voiceEngine = voiceEngine,
                         titleFontFamily = spaceGroteskFamily,
                         bodyFontFamily = dmSansFamily,
-                        onClose = { viewState = ViewState.EXPLORE },
+                        onClose = { viewState = ViewState.CONVERSATION },
                         onSendVoiceInput = { transcript ->
                             dispatchCommand(transcript, isFromVoice = true)
                             viewState = ViewState.CONVERSATION // show response
@@ -1240,7 +1179,7 @@ fun JarvisMainApp(
                         currentMode = currentMode,
                         titleFontFamily = spaceGroteskFamily,
                         bodyFontFamily = dmSansFamily,
-                        onClose = { viewState = ViewState.EXPLORE },
+                        onClose = { /* noop */ },
                         onOpenVoice = { viewState = ViewState.VOICE_ACTIVE },
                         onOpenModelSelector = { isModelMenuOpen = true },
                         onOpenHistory = {
@@ -1319,309 +1258,15 @@ fun JarvisMainApp(
     }
 }
 
-// ─── Continuous Fluid Ambient Atmosphere Background with Film Grain Noise ─────
+// ─── Refined Executive Dark Atmosphere ────────────────────────────────────────
 
 @Composable
 fun LivingAtmosphereBackground(viewState: ViewState) {
-    val infiniteTransition = rememberInfiniteTransition(label = "AlwaysOnLivingAtmosphere")
-
-    // Continuous 25fps retro CRT phosphor grain flicker
-    val crtFrame by infiniteTransition.animateValue(
-        initialValue = 0,
-        targetValue = 7,
-        typeConverter = Int.VectorConverter,
-        animationSpec = infiniteRepeatable(
-            animation = tween(190, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "crtFrame"
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF090B0E))
     )
-
-    // Always-on continuous fluid wave drift (runs constantly even on static screen)
-    val wavePhase1 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 6.28318f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(7500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "wavePhase1"
-    )
-
-    val wavePhase2 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 6.28318f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(11000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "wavePhase2"
-    )
-
-    val breathingPulse by infiniteTransition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.06f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3800, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breathingPulse"
-    )
-
-    // Smooth Interpolation Weights Across All 3 Distinct Phases
-    val exploreWeight by animateFloatAsState(
-        targetValue = if (viewState == ViewState.EXPLORE) 1f else 0f,
-        animationSpec = tween(650, easing = EaseInOutCubic),
-        label = "exploreWeight"
-    )
-
-    val voiceWeight by animateFloatAsState(
-        targetValue = if (viewState == ViewState.VOICE_ACTIVE) 1f else 0f,
-        animationSpec = tween(650, easing = EaseInOutCubic),
-        label = "voiceWeight"
-    )
-
-    val chatWeight by animateFloatAsState(
-        targetValue = if (viewState == ViewState.CONVERSATION) 1f else 0f,
-        animationSpec = tween(650, easing = EaseInOutCubic),
-        label = "chatWeight"
-    )
-
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-
-        // ═════════════════════════════════════════════════════════════════════
-        // PHASE 1: EXPLORE (Always-On Undulating Fruity Molten Lava + Inverted U)
-        // ═════════════════════════════════════════════════════════════════════
-        if (exploreWeight > 0.005f) {
-            // 1. Continuously undulating bright fruity lava orange field
-            val startY = -h * 0.04f + h * 0.03f * sin(wavePhase1)
-            val endY = h * (0.88f + 0.05f * cos(wavePhase2))
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colorStops = arrayOf(
-                        0.00f to Color(0xFFFF7200).copy(alpha = exploreWeight), // Bright fruity magma
-                        0.24f to Color(0xFFFF4D00).copy(alpha = exploreWeight), // Electric lava orange
-                        0.44f to Color(0xFFE52200).copy(alpha = exploreWeight), // Vibrant crimson lava
-                        0.64f to Color(0xFF8B0600).copy(alpha = exploreWeight), // Deep ruby core (no brown!)
-                        0.84f to Color(0xFF000000).copy(alpha = exploreWeight), // Pure jet black base
-                        1.00f to Color(0xFF000000).copy(alpha = exploreWeight)
-                    ),
-                    startY = startY,
-                    endY = endY
-                )
-            )
-
-            // 2. Continuous floating solar radiant hotspot in upper-right
-            val hotX = w * (0.68f + 0.07f * sin(wavePhase1))
-            val hotY = h * (0.16f + 0.04f * cos(wavePhase2))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFF9500).copy(alpha = 0.80f * exploreWeight),
-                        Color(0xFFFF3D00).copy(alpha = 0.55f * exploreWeight),
-                        Color.Transparent
-                    ),
-                    center = Offset(hotX, hotY),
-                    radius = w * 0.94f * breathingPulse
-                ),
-                radius = w * 0.94f * breathingPulse,
-                center = Offset(hotX, hotY)
-            )
-
-            // 3. The Inverted-U Dark Volcanic Cavity breathing underneath headline
-            val cavX = w * (0.35f + 0.04f * cos(wavePhase1))
-            val cavY = h * (0.96f - 0.02f * sin(wavePhase2))
-            val cavR = w * (1.12f + 0.05f * sin(wavePhase2))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colorStops = arrayOf(
-                        0.00f to Color(0xFF000000).copy(alpha = exploreWeight),
-                        0.48f to Color(0xFF000000).copy(alpha = exploreWeight),
-                        0.72f to Color(0xFF140200).copy(alpha = 0.85f * exploreWeight),
-                        0.88f to Color(0xFF380600).copy(alpha = 0.35f * exploreWeight),
-                        1.00f to Color.Transparent
-                    ),
-                    center = Offset(cavX, cavY),
-                    radius = cavR
-                ),
-                radius = cavR,
-                center = Offset(cavX, cavY)
-            )
-
-            // 4. Continuously flowing Molten Lava stream along right margin
-            val flowRimX = w * (1.02f - 0.04f * sin(wavePhase2))
-            val flowRimY = h * (0.58f + 0.06f * cos(wavePhase1))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFF4D00).copy(alpha = 0.68f * exploreWeight),
-                        Color(0xFFB01000).copy(alpha = 0.38f * exploreWeight),
-                        Color.Transparent
-                    ),
-                    center = Offset(flowRimX, flowRimY),
-                    radius = w * 0.80f * breathingPulse
-                ),
-                radius = w * 0.80f * breathingPulse,
-                center = Offset(flowRimX, flowRimY)
-            )
-        }
-
-        // ═════════════════════════════════════════════════════════════════════
-        // PHASE 2: VOICE ACTIVE (Always-On Undulating Lava Canopy & Rim Surges)
-        // ═════════════════════════════════════════════════════════════════════
-        if (voiceWeight > 0.005f) {
-            // Base jet black floor
-            drawRect(color = Color(0xFF000000).copy(alpha = voiceWeight))
-
-            // 1. Arched molten lava canopy undulating at top
-            val voiceTopY = -h * 0.04f + h * 0.03f * sin(wavePhase1)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colorStops = arrayOf(
-                        0.00f to Color(0xFFFF9500).copy(alpha = 0.95f * voiceWeight),
-                        0.28f to Color(0xFFFF4D00).copy(alpha = 0.85f * voiceWeight),
-                        0.58f to Color(0xFFD51A00).copy(alpha = 0.55f * voiceWeight),
-                        0.85f to Color(0xFF550400).copy(alpha = 0.20f * voiceWeight),
-                        1.00f to Color.Transparent
-                    ),
-                    center = Offset(w * 0.50f, voiceTopY),
-                    radius = w * 1.15f * breathingPulse
-                ),
-                radius = w * 1.15f * breathingPulse,
-                center = Offset(w * 0.50f, voiceTopY)
-            )
-
-            // 2. Left glowing molten rim surging
-            val leftY = h * (0.42f + 0.05f * cos(wavePhase2))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFF4D00).copy(alpha = 0.82f * voiceWeight),
-                        Color(0xFF9E0B00).copy(alpha = 0.48f * voiceWeight),
-                        Color.Transparent
-                    ),
-                    center = Offset(-w * 0.12f, leftY),
-                    radius = w * 0.74f * breathingPulse
-                ),
-                radius = w * 0.74f * breathingPulse,
-                center = Offset(-w * 0.12f, leftY)
-            )
-
-            // 3. Right glowing molten rim surging
-            val rightY = h * (0.42f - 0.05f * sin(wavePhase2))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFF4D00).copy(alpha = 0.82f * voiceWeight),
-                        Color(0xFF9E0B00).copy(alpha = 0.48f * voiceWeight),
-                        Color.Transparent
-                    ),
-                    center = Offset(w * 1.12f, rightY),
-                    radius = w * 0.74f * breathingPulse
-                ),
-                radius = w * 0.74f * breathingPulse,
-                center = Offset(w * 1.12f, rightY)
-            )
-
-            // 4. Center dark volcanic chamber (forming the inverted U arch)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colorStops = arrayOf(
-                        0.00f to Color(0xFF000000).copy(alpha = 0.99f * voiceWeight),
-                        0.55f to Color(0xFF000000).copy(alpha = 0.95f * voiceWeight),
-                        0.82f to Color(0xFF160200).copy(alpha = 0.50f * voiceWeight),
-                        1.00f to Color.Transparent
-                    ),
-                    center = Offset(w * 0.50f, h * 0.48f),
-                    radius = w * 0.68f
-                ),
-                radius = w * 0.68f,
-                center = Offset(w * 0.50f, h * 0.48f)
-            )
-
-            // 5. Bottom amber smolder behind mic controls
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFF3D00).copy(alpha = 0.48f * voiceWeight),
-                        Color(0xFF8B0600).copy(alpha = 0.22f * voiceWeight),
-                        Color.Transparent
-                    ),
-                    center = Offset(w * 0.50f, h * 0.95f),
-                    radius = w * 0.72f
-                ),
-                radius = w * 0.72f,
-                center = Offset(w * 0.50f, h * 0.95f)
-            )
-        }
-
-        // ═════════════════════════════════════════════════════════════════════
-        // PHASE 3: CONVERSATION (Always-On Surging Right-Rim Lava & Top-Right Flame)
-        // ═════════════════════════════════════════════════════════════════════
-        if (chatWeight > 0.005f) {
-            // Base jet black floor
-            drawRect(color = Color(0xFF000000).copy(alpha = chatWeight))
-
-            // 1. Top-right blazing molten corner surging
-            val chatTopX = w * (1.06f - 0.04f * cos(wavePhase1))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colorStops = arrayOf(
-                        0.00f to Color(0xFFFF9500).copy(alpha = 0.92f * chatWeight),
-                        0.35f to Color(0xFFFF4D00).copy(alpha = 0.82f * chatWeight),
-                        0.68f to Color(0xFFD51A00).copy(alpha = 0.48f * chatWeight),
-                        1.00f to Color.Transparent
-                    ),
-                    center = Offset(chatTopX, -h * 0.02f),
-                    radius = w * 1.22f * breathingPulse
-                ),
-                radius = w * 1.22f * breathingPulse,
-                center = Offset(chatTopX, -h * 0.02f)
-            )
-
-            // 2. Right vertical glowing rim sweep continuously flowing
-            val chatRimY = h * (0.50f + 0.07f * sin(wavePhase1))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFF4D00).copy(alpha = 0.80f * chatWeight),
-                        Color(0xFF9E0B00).copy(alpha = 0.42f * chatWeight),
-                        Color.Transparent
-                    ),
-                    center = Offset(w * 1.12f, chatRimY),
-                    radius = w * 0.92f * breathingPulse
-                ),
-                radius = w * 0.92f * breathingPulse,
-                center = Offset(w * 1.12f, chatRimY)
-            )
-        }
-
-        // ═════════════════════════════════════════════════════════════════════
-        // RETRO CRT TV CHUNKY PHOSPHOR GRAIN & ANALOG SIZZLE (25 FPS)
-        // ═════════════════════════════════════════════════════════════════════
-        val crtGrainBrush = DynamicCrtTvEffects.getGrainBrush(crtFrame)
-        drawRect(
-            brush = crtGrainBrush,
-            blendMode = BlendMode.Overlay
-        )
-        drawRect(
-            brush = crtGrainBrush,
-            alpha = 0.26f,
-            blendMode = BlendMode.Screen
-        )
-
-        // ═════════════════════════════════════════════════════════════════════
-        // CRT TELEVISION HORIZONTAL RASTER SCANLINES
-        // ═════════════════════════════════════════════════════════════════════
-        val scanlineBrush = DynamicCrtTvEffects.getScanlineBrush()
-        drawRect(
-            brush = scanlineBrush,
-            alpha = 0.35f,
-            blendMode = BlendMode.Darken
-        )
-    }
 }
 
 // ─── Termux-Style Left-to-Right Sliding Session Drawer ───────────────────────
@@ -2242,7 +1887,7 @@ fun ExploreView(
                             fontFamily = bodyFontFamily,
                             fontWeight = FontWeight.Normal
                         ),
-                        cursorBrush = SolidColor(Color(0xFFE46313)),
+                        cursorBrush = SolidColor(Color(0xFF3B82F6)),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                         keyboardActions = KeyboardActions(onGo = {
                             if (textInput.isNotBlank()) {
@@ -2378,47 +2023,78 @@ fun ExploreView(
 // ─── View 2: Voice Session View (Refined to match Dribbble Screen 2) ──────────
 
 @Composable
-fun InAppListeningOrbVideo(
+fun NativeListeningVisualizer(
     modifier: Modifier = Modifier,
     isListening: Boolean = true
 ) {
-    val context = LocalContext.current
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            val uri = Uri.parse("asset:///voice/apple_siri_orb.mp4")
-            setMediaItem(MediaItem.fromUri(uri))
-            repeatMode = ExoPlayer.REPEAT_MODE_ALL
-            volume = 0f
-            prepare()
-            playWhenReady = true
-        }
-    }
-
-    LaunchedEffect(isListening) {
-        if (isListening) {
-            exoPlayer.play()
-        } else {
-            exoPlayer.pause()
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            exoPlayer.release()
-        }
-    }
-
-    AndroidView(
-        factory = { ctx ->
-            val playerView = android.view.LayoutInflater.from(ctx)
-                .inflate(R.layout.view_texture_player, null, false) as PlayerView
-            playerView.player = exoPlayer
-            playerView.setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
-            playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-            playerView
-        },
-        modifier = modifier
+    val infiniteTransition = rememberInfiniteTransition(label = "voiceRipple")
+    val pulse1 by infiniteTransition.animateFloat(
+        initialValue = 0.88f,
+        targetValue = 1.22f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = EaseInOutCubic),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse1"
     )
+    val pulse2 by infiniteTransition.animateFloat(
+        initialValue = 1.18f,
+        targetValue = 0.92f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2100, easing = EaseInOutCubic),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse2"
+    )
+
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2f, size.height / 2f)
+            val baseRadius = size.minDimension * 0.30f
+
+            if (isListening) {
+                // Subtle outer acoustic ripples
+                drawCircle(
+                    color = Color(0xFF3B82F6).copy(alpha = 0.12f),
+                    radius = baseRadius * pulse1 * 1.35f,
+                    center = center
+                )
+                drawCircle(
+                    color = Color(0xFF60A5FA).copy(alpha = 0.18f),
+                    radius = baseRadius * pulse2 * 1.15f,
+                    center = center
+                )
+            }
+
+            // Core active ring
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = if (isListening) {
+                        listOf(
+                            Color(0xFF2563EB),
+                            Color(0xFF1D4ED8),
+                            Color(0xFF1E293B)
+                        )
+                    } else {
+                        listOf(
+                            Color(0xFF334155),
+                            Color(0xFF1E293B),
+                            Color(0xFF0F172A)
+                        )
+                    },
+                    center = center,
+                    radius = baseRadius
+                ),
+                radius = baseRadius,
+                center = center
+            )
+        }
+
+        MicSvg(
+            modifier = Modifier.size(36.dp),
+            tint = if (isListening) Color.White else Color.White.copy(alpha = 0.5f)
+        )
+    }
 }
 
 @Composable
@@ -2483,8 +2159,8 @@ fun VoiceSessionView(
             Surface(
                 onClick = onClose,
                 shape = RoundedCornerShape(20.dp),
-                color = Color(0xFF1E1713).copy(alpha = 0.88f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+                color = Color(0xFF131722),
+                border = BorderStroke(1.dp, Color(0xFF232A3B))
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
@@ -2507,7 +2183,7 @@ fun VoiceSessionView(
             }
         }
 
-        // Center 3D Glowing Orb Video & Animated Dynamic Voice Text (Matching Dribbble)
+        // Center Native Acoustic Visualizer & Animated Voice Text
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2516,44 +2192,11 @@ fun VoiceSessionView(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            val infiniteTransition = rememberInfiniteTransition(label = "orbPulse")
-            val pulseScale by infiniteTransition.animateFloat(
-                initialValue = 0.98f,
-                targetValue = 1.03f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(2800, easing = EaseInOutSine),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "pulseScale"
-            )
-
             Box(
-                modifier = Modifier
-                    .size(270.dp)
-                    .scale(if (isListening) pulseScale else 0.95f)
-                    .alpha(if (isListening) 1.0f else 0.65f)
-                    .graphicsLayer {
-                        compositingStrategy = CompositingStrategy.Offscreen
-                    }
-                    .drawWithContent {
-                        drawContent()
-                        drawRect(
-                            brush = Brush.radialGradient(
-                                colorStops = arrayOf(
-                                    0.0f to Color.Black,
-                                    0.50f to Color.Black,
-                                    0.78f to Color.Black.copy(alpha = 0.45f),
-                                    0.98f to Color.Transparent
-                                ),
-                                center = center,
-                                radius = size.minDimension / 2f
-                            ),
-                            blendMode = BlendMode.DstIn
-                        )
-                    },
+                modifier = Modifier.size(240.dp),
                 contentAlignment = Alignment.Center
             ) {
-                InAppListeningOrbVideo(
+                NativeListeningVisualizer(
                     modifier = Modifier.fillMaxSize(),
                     isListening = isListening
                 )
@@ -2572,14 +2215,13 @@ fun VoiceSessionView(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Dynamic Animated Multi-Tier Text (Dribbble Screen 2: White active tokens + Muted gray context)
             AnimatedVoiceTranscript(
                 transcript = liveTranscript,
                 titleFontFamily = titleFontFamily
             )
         }
 
-        // Bottom Controls Bar (Pause, Central Glowing Mic, Send)
+        // Bottom Controls Bar (Pause, Central Mic, Send)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2606,12 +2248,12 @@ fun VoiceSessionView(
                     shape = CircleShape,
                     color = Color.Transparent,
                     modifier = Modifier
-                        .size(68.dp)
+                        .size(64.dp)
                         .shadow(
-                            elevation = 16.dp,
+                            elevation = 12.dp,
                             shape = CircleShape,
-                            ambientColor = Color(0xFFE8580D),
-                            spotColor = Color(0xFFE8580D)
+                            ambientColor = Color(0xFF2563EB).copy(alpha = 0.4f),
+                            spotColor = Color(0xFF2563EB).copy(alpha = 0.4f)
                         )
                 ) {
                     Box(
@@ -2620,13 +2262,13 @@ fun VoiceSessionView(
                             .background(
                                 brush = Brush.radialGradient(
                                     colors = listOf(
-                                        Color(0xFFFF9636),
-                                        Color(0xFFE8580D),
-                                        Color(0xFFAC3700)
+                                        Color(0xFF3B82F6),
+                                        Color(0xFF2563EB),
+                                        Color(0xFF1D4ED8)
                                     )
                                 )
                             )
-                            .border(1.5.dp, Color.White.copy(alpha = 0.45f), CircleShape),
+                            .border(1.5.dp, Color.White.copy(alpha = 0.35f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         MicSvg(
@@ -2774,79 +2416,52 @@ fun ConversationView(
             .statusBarsPadding(),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // Top Bar
+        // Clean Executive Top Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                onClick = onClose,
-                shape = RoundedCornerShape(20.dp),
-                color = Color(0xFF1E1713).copy(alpha = 0.88f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // Sessions Drawer Button
+                Surface(
+                    onClick = onOpenHistory,
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.08f),
+                    modifier = Modifier.size(36.dp)
                 ) {
-                    CloseSvg(
-                        modifier = Modifier.size(12.dp),
-                        tint = Color.White.copy(alpha = 0.9f)
-                    )
-                    Text(
-                        text = "Close chat",
-                        color = Color.White,
-                        fontSize = 12.5.sp,
-                        fontFamily = bodyFontFamily,
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = (-0.1).sp
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        HamburgerMenuSvg(
+                            modifier = Modifier.size(16.dp),
+                            tint = Color.White
+                        )
+                    }
                 }
+
+                Text(
+                    text = "JARVIS",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontFamily = titleFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
+                )
             }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // New Session Button
-                Surface(
-                    onClick = onNewSession,
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.1f),
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        PlusSvg(
-                            modifier = Modifier.size(14.dp),
-                            tint = Color.White
-                        )
-                    }
-                }
-
-                // History Button
-                Surface(
-                    onClick = onOpenHistory,
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.1f),
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        HamburgerMenuSvg(
-                            modifier = Modifier.size(15.dp),
-                            tint = Color.White
-                        )
-                    }
-                }
-
                 // Model Selector Pill
                 Surface(
                     onClick = onOpenModelSelector,
                     shape = RoundedCornerShape(16.dp),
-                    color = Color.White.copy(alpha = 0.1f),
+                    color = Color.White.copy(alpha = 0.08f),
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
                 ) {
                     Row(
@@ -2854,6 +2469,11 @@ fun ConversationView(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(Color(0xFF10B981), CircleShape)
+                        )
                         Text(
                             text = currentMode.displayName,
                             color = Color.White,
@@ -2863,124 +2483,41 @@ fun ConversationView(
                         )
                         Icon(
                             imageVector = Icons.Outlined.KeyboardArrowDown,
-                            contentDescription = "Dropdown",
-                            tint = Color.White.copy(alpha = 0.75f),
+                            contentDescription = "Select model",
+                            tint = Color.White.copy(alpha = 0.7f),
                             modifier = Modifier.size(14.dp)
                         )
                     }
                 }
-            }
-        }
 
-        // Quick Subpage Navigation Bar (Linked Services from AgentActivity)
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item {
-                QuickNavChip(
-                    label = "$kiraPrefix · $kiraLabel",
-                    icon = { ModelHubSvg(modifier = Modifier.size(13.dp), tint = Color(0xFF7DD3FC)) }
+                // New Session Button
+                Surface(
+                    onClick = onNewSession,
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.08f),
+                    modifier = Modifier.size(36.dp)
                 ) {
-                    isKiraSheetOpen = true
+                    Box(contentAlignment = Alignment.Center) {
+                        PlusSvg(
+                            modifier = Modifier.size(15.dp),
+                            tint = Color.White
+                        )
+                    }
                 }
-            }
-            item {
-                QuickNavChip(
-                    label = "ROUTE · $routeShort",
-                    icon = { SettingsSvg(modifier = Modifier.size(13.dp), tint = Color(0xFFF0ABFC)) }
+
+                // Tools / Hub Button
+                Surface(
+                    onClick = onOpenDeveloperHub,
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.08f),
+                    modifier = Modifier.size(36.dp)
                 ) {
-                    context.startActivity(Intent(context, RouteHarnessActivity::class.java))
-                }
-            }
-            item {
-                QuickNavChip(
-                    label = "ARTIFACTS",
-                    icon = { FolderSvg(modifier = Modifier.size(13.dp), tint = Color(0xFF6EE7B7)) }
-                ) {
-                    context.startActivity(Intent(context, ArtifactsActivity::class.java))
-                }
-            }
-            item {
-                QuickNavChip(
-                    label = "LIVE",
-                    icon = { MicSvg(modifier = Modifier.size(13.dp), tint = Color(0xFFF0ABFC)) }
-                ) {
-                    context.startActivity(Intent(context, LivePlaygroundActivity::class.java))
-                }
-            }
-            item {
-                QuickNavChip(
-                    label = "Files",
-                    icon = { FolderSvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f)) }
-                ) {
-                    context.startActivity(Intent(context, BrowserActivity::class.java))
-                }
-            }
-            item {
-                QuickNavChip(
-                    label = "Commander",
-                    icon = { CommanderSvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f)) }
-                ) {
-                    context.startActivity(Intent(context, CommanderActivity::class.java))
-                }
-            }
-            item {
-                QuickNavChip(
-                    label = "Terminal",
-                    icon = { TerminalSvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f)) }
-                ) {
-                    context.startActivity(Intent(context, TerminalActivity::class.java))
-                }
-            }
-            item {
-                QuickNavChip(
-                    label = "Diagnostics",
-                    icon = { DiagnosticsSvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f)) }
-                ) {
-                    context.startActivity(Intent(context, DiagnosticsActivity::class.java))
-                }
-            }
-            item {
-                QuickNavChip(
-                    label = "Model Hub",
-                    icon = { ModelHubSvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f)) }
-                ) {
-                    context.startActivity(Intent(context, com.pr4nav.jarvis.voice.ModelHubActivity::class.java))
-                }
-            }
-            item {
-                QuickNavChip(
-                    label = "Gaming Mode",
-                    icon = { Text("🎮", fontSize = 11.sp) }
-                ) {
-                    com.pr4nav.jarvis.system.GamingModeManager.forceStopAll(context)
-                }
-            }
-            item {
-                QuickNavChip(
-                    label = "Connected Services",
-                    icon = { ConnectedServicesSvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f)) }
-                ) {
-                    context.startActivity(Intent(context, ConnectedServicesActivity::class.java))
-                }
-            }
-            item {
-                QuickNavChip(
-                    label = "Playground",
-                    icon = { PlaygroundSvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f)) }
-                ) {
-                    context.startActivity(Intent(context, ToolPlaygroundActivity::class.java))
-                }
-            }
-            item {
-                QuickNavChip(
-                    label = "Tools",
-                    icon = { ToolsSvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f)) }
-                ) {
-                    onOpenDeveloperHub()
+                    Box(contentAlignment = Alignment.Center) {
+                        ToolsSvg(
+                            modifier = Modifier.size(16.dp),
+                            tint = Color.White.copy(alpha = 0.9f)
+                        )
+                    }
                 }
             }
         }
@@ -2994,25 +2531,64 @@ fun ConversationView(
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(horizontal = 32.dp)
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp)
                     ) {
-                        GlowingOrbAvatar(modifier = Modifier.size(44.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF1E2433))
+                                .border(1.dp, Color(0xFF3B82F6).copy(alpha = 0.4f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "J",
+                                color = Color(0xFF93C5FD),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
                         Text(
-                            text = "JARVIS Neural Agent Ready",
+                            text = "How can I help you?",
                             color = Color.White,
-                            fontSize = 19.sp,
+                            fontSize = 22.sp,
                             fontFamily = titleFontFamily,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.3).sp
                         )
+
                         Text(
-                            text = "Ask me anything. I can control your device, run code, manage files, search the web, make calls, and more.",
-                            color = Color.White.copy(alpha = 0.6f),
+                            text = "Ask questions, control device settings, inspect local files, or run system tasks.",
+                            color = Color.White.copy(alpha = 0.55f),
                             fontSize = 13.sp,
                             fontFamily = bodyFontFamily,
                             textAlign = TextAlign.Center,
-                            lineHeight = 18.sp
+                            lineHeight = 19.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp)
                         )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                PromptActionChip("Battery Status") { onSendMessage("Check device battery status") }
+                                PromptActionChip("Toggle Flashlight") { onSendMessage("Toggle flashlight") }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                PromptActionChip("Scan Wi-Fi") { onSendMessage("Scan local WiFi network") }
+                                PromptActionChip("Storage Space") { onSendMessage("Check storage free space") }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                PromptActionChip("Take Screenshot") { onSendMessage("Take a screenshot") }
+                                PromptActionChip("Recent Downloads") { onSendMessage("Find recent downloads") }
+                            }
+                        }
                     }
                 }
             } else {
@@ -3133,7 +2709,7 @@ fun ConversationView(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
-                PromptActionChip("✨ Make a UI") { onSendMessage("make an ui") }
+                PromptActionChip("Create UI") { onSendMessage("make an ui") }
             }
             item {
                 PromptActionChip("Take Screenshot") { onSendMessage("Take a screenshot") }
@@ -3192,7 +2768,7 @@ fun ConversationView(
 
 @Composable
 fun ThinkingDots(
-    tint: Color = Color(0xFFFF9636),
+    tint: Color = Color(0xFF60A5FA),
     modifier: Modifier = Modifier
 ) {
     val inf = rememberInfiniteTransition(label = "thinkDots")
@@ -3262,8 +2838,8 @@ fun StreamingExecutionCard(
 
         Surface(
             shape = RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp),
-            color = Color(0xFF140D0A).copy(alpha = 0.96f),
-            border = BorderStroke(1.dp, Color(0xFFFF9636).copy(alpha = 0.45f)),
+            color = Color(0xFF131722),
+            border = BorderStroke(1.dp, Color(0xFF2E384D)),
             modifier = Modifier.widthIn(max = 310.dp)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
@@ -3278,11 +2854,11 @@ fun StreamingExecutionCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Canvas(modifier = Modifier.size(8.dp)) {
-                            drawCircle(color = Color(0xFFFF9636).copy(alpha = alpha), radius = size.minDimension / 2f)
+                            drawCircle(color = Color(0xFF3B82F6).copy(alpha = alpha), radius = size.minDimension / 2f)
                         }
                         Text(
                             text = title,
-                            color = Color(0xFFFF9636),
+                            color = Color(0xFF60A5FA),
                             fontSize = 13.sp,
                             fontFamily = titleFontFamily,
                             fontWeight = FontWeight.Bold
@@ -3350,7 +2926,7 @@ fun StreamingExecutionCard(
                             modifier = Modifier
                                 .size(width = 2.dp, height = 15.dp)
                                 .alpha(if (cursorBlink > 0.5f) 1f else 0f)
-                                .background(Color(0xFFFF9636))
+                                .background(Color(0xFF3B82F6))
                         )
                     }
                     Spacer(modifier = Modifier.height(10.dp))
@@ -3409,8 +2985,8 @@ fun QuickNavChip(label: String, icon: @Composable () -> Unit, onClick: () -> Uni
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
-        color = Color(0xFF140D0A).copy(alpha = 0.88f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
+        color = Color(0xFF131722),
+        border = BorderStroke(1.dp, Color(0xFF232A3B))
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -3433,20 +3009,20 @@ fun PromptActionChip(label: String, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
-        color = Color(0xFF170F0C).copy(alpha = 0.92f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
+        color = Color(0xFF161B26),
+        border = BorderStroke(1.dp, Color(0xFF263045))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            LightningSvg(modifier = Modifier.size(11.dp), tint = Color(0xFFFF9636))
+            LightningSvg(modifier = Modifier.size(11.dp), tint = Color(0xFF60A5FA))
             Text(
                 text = label,
-                color = Color.White.copy(alpha = 0.85f),
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Normal
+                color = Color.White.copy(alpha = 0.9f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
             )
         }
     }
@@ -3968,120 +3544,20 @@ fun SendSvg(modifier: Modifier = Modifier, tint: Color = Color.White) {
     }
 }
 
-// ─── Video & Visual Components ────────────────────────────────────────────────
-
-@Composable
-fun SeamlessVideoOrb(
-    videoUrl: String,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.fromUri(Uri.parse(videoUrl))
-            setMediaItem(mediaItem)
-            repeatMode = Player.REPEAT_MODE_ALL
-            volume = 0f
-            prepare()
-            playWhenReady = true
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            exoPlayer.release()
-        }
-    }
-
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val r = size.minDimension / 2f
-            val center = Offset(size.width / 2f, size.height / 2f)
-
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFF9D42).copy(alpha = 0.85f),
-                        Color(0xFFE8580D).copy(alpha = 0.45f),
-                        Color.Transparent
-                    ),
-                    center = center,
-                    radius = r * 1.35f
-                ),
-                radius = r * 1.35f,
-                center = center
-            )
-
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFFE3A0),
-                        Color(0xFFF19126),
-                        Color(0xFFB54507),
-                        Color(0xFF2C0E00)
-                    ),
-                    center = Offset(center.x - r * 0.28f, center.y - r * 0.32f),
-                    radius = r * 1.15f
-                ),
-                radius = r,
-                center = center
-            )
-        }
-
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    player = exoPlayer
-                    useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                }
-            },
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-        )
-    }
-}
 
 @Composable
 fun FrostedGrainyGlassContainer(
     modifier: Modifier = Modifier,
-    cornerRadius: androidx.compose.ui.unit.Dp = 24.dp,
+    cornerRadius: androidx.compose.ui.unit.Dp = 16.dp,
     content: @Composable BoxScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(cornerRadius)
-
-    val noiseShaderBrush = remember {
-        val size = 128
-        val pixels = IntArray(size * size) {
-            val alpha = kotlin.random.Random.nextInt(15, 45)
-            android.graphics.Color.argb(alpha, 255, 255, 255)
-        }
-        val noiseBitmap = Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888)
-        val shader = BitmapShader(noiseBitmap, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-        ShaderBrush(shader)
-    }
-
     Box(
         modifier = modifier
             .clip(shape)
-            .blur(radius = 24.dp)
-            .background(Color(0xFF0F141C).copy(alpha = 0.75f))
-            .drawBehind {
-                drawRect(brush = noiseShaderBrush)
-            }
+            .background(Color(0xFF131722))
             .border(
-                BorderStroke(
-                    width = 1.dp,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.22f),
-                            Color.White.copy(alpha = 0.05f),
-                            Color.Transparent
-                        )
-                    )
-                ),
+                BorderStroke(1.dp, Color(0xFF232A3B)),
                 shape = shape
             )
             .padding(14.dp)
@@ -4128,33 +3604,20 @@ fun UserBubble(
     ) {
         Box(
             modifier = Modifier
-                .widthIn(max = 295.dp)
-                .shadow(
-                    elevation = 10.dp,
-                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 5.dp),
-                    ambientColor = Color(0xFFDF5A10).copy(alpha = 0.45f),
-                    spotColor = Color(0xFFDF5A10).copy(alpha = 0.55f)
-                )
-                .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color(0xFFE46313),
-                            Color(0xFFBD4301)
-                        )
-                    ),
-                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 5.dp)
-                )
+                .widthIn(max = 300.dp)
+                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 4.dp))
+                .background(Color(0xFF1E2433))
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.25f),
-                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 5.dp)
+                    color = Color(0xFF2E384D),
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 4.dp)
                 )
                 .clickable { onCopy() }
-                .padding(horizontal = 18.dp, vertical = 12.dp)
+                .padding(horizontal = 16.dp, vertical = 11.dp)
         ) {
             Text(
                 text = text,
-                color = Color.White,
+                color = Color(0xFFF3F4F6),
                 fontSize = 14.5.sp,
                 fontFamily = bodyFontFamily,
                 fontWeight = FontWeight.Normal,
@@ -4163,7 +3626,6 @@ fun UserBubble(
             )
         }
 
-        // Timestamp situated below the bubble on the right (matching Dribbble)
         Text(
             text = timeStr,
             color = Color.White.copy(alpha = 0.45f),
@@ -4322,44 +3784,19 @@ fun JarvisBubble(
 @Composable
 fun GlowingOrbAvatar(modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier.size(24.dp),
+        modifier = modifier
+            .size(24.dp)
+            .clip(CircleShape)
+            .background(Color(0xFF1E2638))
+            .border(1.dp, Color(0xFF3B82F6).copy(alpha = 0.5f), CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val r = size.minDimension / 2f
-            val center = Offset(size.width / 2f, size.height / 2f)
-
-            // Outer golden-orange aura
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFFB05A).copy(alpha = 0.75f),
-                        Color(0xFFE8580D).copy(alpha = 0.35f),
-                        Color.Transparent
-                    ),
-                    center = center,
-                    radius = r * 1.35f
-                ),
-                radius = r * 1.35f,
-                center = center
-            )
-
-            // 3D metallic sphere shading
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFFE8B2),
-                        Color(0xFFF0932B),
-                        Color(0xFFB54507),
-                        Color(0xFF331000)
-                    ),
-                    center = Offset(center.x - r * 0.32f, center.y - r * 0.35f),
-                    radius = r * 1.15f
-                ),
-                radius = r,
-                center = center
-            )
-        }
+        Text(
+            text = "J",
+            color = Color(0xFF60A5FA),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -4375,22 +3812,20 @@ fun ChatBar(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 18.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         Surface(
-            shape = RoundedCornerShape(26.dp),
-            color = Color(0xFF140D0A).copy(alpha = 0.95f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xFF131722),
+            border = BorderStroke(1.dp, Color(0xFF262F42)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // @ context button - reserved for future @files, @terminal mentions
-
                 Box(
                     modifier = Modifier.weight(1f),
                     contentAlignment = Alignment.CenterStart
@@ -4401,7 +3836,7 @@ fun ChatBar(
                             color = Color.White.copy(alpha = 0.45f),
                             fontSize = 14.5.sp,
                             fontFamily = bodyFontFamily,
-                            fontWeight = FontWeight.Light,
+                            fontWeight = FontWeight.Normal,
                             letterSpacing = (-0.1).sp
                         )
                     }
@@ -4416,29 +3851,29 @@ fun ChatBar(
                             fontFamily = bodyFontFamily,
                             fontWeight = FontWeight.Normal
                         ),
-                        cursorBrush = SolidColor(Color(0xFFE46313)),
+                        cursorBrush = SolidColor(Color(0xFF3B82F6)),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = { onSend() }),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
                 if (inputText.isNotBlank()) {
                     IconButton(
                         onClick = onSend,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(34.dp)
                     ) {
                         SendSvg(
                             modifier = Modifier.size(18.dp),
-                            tint = Color(0xFFE46313)
+                            tint = Color(0xFF3B82F6)
                         )
                     }
                 } else {
                     IconButton(
                         onClick = onMicClick,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(34.dp)
                     ) {
                         MicSvg(
                             modifier = Modifier.size(19.dp),
@@ -4506,7 +3941,7 @@ fun ModelPickerSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF15100D),
+        containerColor = Color(0xFF121620),
         contentColor = Color.White,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
@@ -4548,7 +3983,7 @@ fun ModelPickerSheet(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = p.title,
-                            color = if (isSelected) Color(0xFFFF9636) else Color.White,
+                            color = if (isSelected) Color(0xFF60A5FA) else Color.White,
                             fontSize = 15.sp,
                             fontFamily = titleFontFamily,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
@@ -4566,7 +4001,7 @@ fun ModelPickerSheet(
                     if (isSelected) {
                         CheckSvg(
                             modifier = Modifier.size(18.dp),
-                            tint = Color(0xFFFF9636)
+                            tint = Color(0xFF60A5FA)
                         )
                     }
                 }
@@ -4586,10 +4021,10 @@ fun ModelPickerSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    SettingsSvg(modifier = Modifier.size(16.dp), tint = Color(0xFFFFB45A))
+                    SettingsSvg(modifier = Modifier.size(16.dp), tint = Color(0xFF60A5FA))
                     Text(
                         text = "Configure provider keys",
-                        color = Color(0xFFFFB45A),
+                        color = Color(0xFF60A5FA),
                         fontSize = 12.5.sp,
                         fontFamily = bodyFontFamily,
                         fontWeight = FontWeight.Medium
@@ -4638,7 +4073,7 @@ fun KiraModelSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF15100D),
+        containerColor = Color(0xFF121620),
         contentColor = Color.White,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
