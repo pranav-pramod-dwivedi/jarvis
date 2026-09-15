@@ -80,13 +80,34 @@ object KiraClient {
     // Fast models get small prompts + short completions; deep models get everything.
 
     /** Max history turns: all models get the full window. */
-    fun historyLimitFor(model: String): Int = 220
+    fun historyLimitFor(model: String): Int {
+        val m = model.lowercase()
+        return when {
+            m.contains("mini") -> 30
+            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 80
+            else -> 220
+        }
+    }
 
     /** Max completion tokens: all models get the full 16384 token budget. */
-    fun maxTokensFor(model: String): Int = MAX_COMPLETION_TOKENS
+    fun maxTokensFor(model: String): Int {
+        val m = model.lowercase()
+        return when {
+            m.contains("mini") -> 2048
+            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 4096
+            else -> MAX_COMPLETION_TOKENS
+        }
+    }
 
     /** Context-packet budget: all models get 128k chars (~32k tokens, safe for 1M window models). */
-    fun packetBudgetFor(model: String): Int = 128_000
+    fun packetBudgetFor(model: String): Int {
+        val m = model.lowercase()
+        return when {
+            m.contains("mini") -> 6_000
+            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 14_000
+            else -> 64_000
+        }
+    }
 
     private val executor = Executors.newCachedThreadPool()
 
@@ -1386,8 +1407,15 @@ The html MUST include: DOCTYPE, head (with viewport meta + complete CSS), body w
     /** Hard ceiling per model attempt: a hung request can never stall a turn forever. */
     const val ATTEMPT_DEADLINE_SEC = 100L
 
-    /** All models get 120s to complete — needed for 16k-token web app generation. */
-    fun deadlineFor(model: String): Long = 120L
+    /** Tiered deadlines: fast models fail fast; deep models keep 120s for 16k-token generation. */
+    fun deadlineFor(model: String): Long {
+        val m = model.lowercase()
+        return when {
+            m.contains("mini") -> 25L
+            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 40L
+            else -> 120L
+        }
+    }
 
     /** Socket-level stalls share one sick path — never cascade through them. */
     fun isTimeoutError(msg: String?): Boolean {
@@ -1570,8 +1598,8 @@ The html MUST include: DOCTYPE, head (with viewport meta + complete CSS), body w
 
                 val conn = (URL(KIRA_CHAT_ENDPOINT).openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
-                    connectTimeout = 15_000
-                    readTimeout = 120_000
+                    connectTimeout = 8_000
+                    readTimeout = 30_000
                     doOutput = true
                     doInput = true
                     setRequestProperty("Content-Type", "application/json; charset=utf-8")

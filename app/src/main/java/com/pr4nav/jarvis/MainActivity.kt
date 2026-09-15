@@ -2888,6 +2888,14 @@ fun ConversationView(
             }
             item {
                 QuickNavChip(
+                    label = "ARTIFACTS",
+                    icon = { FolderSvg(modifier = Modifier.size(13.dp), tint = Color(0xFF6EE7B7)) }
+                ) {
+                    context.startActivity(Intent(context, ArtifactsActivity::class.java))
+                }
+            }
+            item {
+                QuickNavChip(
                     label = "Files",
                     icon = { FolderSvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f)) }
                 ) {

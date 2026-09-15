@@ -12,9 +12,9 @@ class EngineFallbackTest {
         assertEquals(40L, KiraClient.deadlineFor(KiraClient.MODEL_QWEN_3_8_FLASH_FREE))
         assertEquals(40L, KiraClient.deadlineFor(KiraClient.MODEL_MIMO_2_5_FREE))
         assertEquals(40L, KiraClient.deadlineFor(KiraClient.MODEL_KIRA_3_5_FLASH))
-        assertEquals(90L, KiraClient.deadlineFor(KiraClient.MODEL_GLM_5_3_FREE))
-        assertEquals(90L, KiraClient.deadlineFor(KiraClient.MODEL_KIRA_3_5_PRO))
-        assertEquals(90L, KiraClient.deadlineFor("some-unknown-model"))
+        assertEquals(120L, KiraClient.deadlineFor(KiraClient.MODEL_GLM_5_3_FREE))
+        assertEquals(120L, KiraClient.deadlineFor(KiraClient.MODEL_KIRA_3_5_PRO))
+        assertEquals(120L, KiraClient.deadlineFor("some-unknown-model"))
     }
 
     @Test fun timeoutDetection() {
