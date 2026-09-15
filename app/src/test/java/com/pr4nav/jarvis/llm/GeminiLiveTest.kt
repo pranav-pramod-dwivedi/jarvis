@@ -91,6 +91,20 @@ class GeminiLiveTest {
 
     // ── Builders ──────────────────────────────────────────────────────────────
 
+    @Test fun setupHasVoiceAndTranscriptions() {
+        val s = JSONObject(
+            GeminiLiveClient.buildSetup(GeminiLiveClient.MODEL_DIALOG, true, "sys", null, voice = "Kore")
+        ).getJSONObject("setup")
+        assertEquals(
+            "Kore",
+            s.getJSONObject("generationConfig").getJSONObject("speechConfig")
+                .getJSONObject("voiceConfig").getJSONObject("prebuiltVoiceConfig")
+                .getString("voiceName")
+        )
+        assertTrue(s.has("inputAudioTranscription"))
+        assertTrue(s.has("outputAudioTranscription"))
+    }
+
     @Test fun setupAudioVsText() {
         val audio = JSONObject(GeminiLiveClient.buildSetup(GeminiLiveClient.MODEL_DIALOG, true, "sys", null))
         val mods = audio.getJSONObject("setup").getJSONObject("generationConfig").getJSONArray("responseModalities")
@@ -152,10 +166,20 @@ class GeminiLiveTest {
     }
 
     @Test fun audioChunkShape() {
+        // Reference shape: realtimeInput.audio (NOT mediaChunks).
         val j = JSONObject(GeminiLiveClient.buildAudioChunk("AAAA"))
-        val chunk = j.getJSONObject("realtimeInput").getJSONArray("mediaChunks").getJSONObject(0)
+        val chunk = j.getJSONObject("realtimeInput").getJSONObject("audio")
         assertEquals("audio/pcm;rate=16000", chunk.getString("mimeType"))
         assertEquals("AAAA", chunk.getString("data"))
+    }
+
+    @Test fun streamEndAndVideoShapes() {
+        val end = JSONObject(GeminiLiveClient.buildAudioStreamEnd())
+        assertTrue(end.getJSONObject("realtimeInput").getBoolean("audioStreamEnd"))
+        val vid = JSONObject(GeminiLiveClient.buildVideoChunk("VVVV"))
+        val chunk = vid.getJSONObject("realtimeInput").getJSONObject("video")
+        assertEquals("image/jpeg", chunk.getString("mimeType"))
+        assertEquals("VVVV", chunk.getString("data"))
     }
 
     @Test fun toolResponseShape() {
@@ -205,6 +229,17 @@ class GeminiLiveTest {
         assertArrayEquals(img, m.images[0].second)
     }
 
+    @Test fun parseTranscriptionsAndGoAway() {
+        val m = GeminiLiveClient.parseServerMessage(
+            """{"serverContent":{"inputTranscription":{"text":"hello there"},"outputTranscription":{"text":"Hi human"},"turnComplete":true}}"""
+        )
+        assertEquals("hello there", m.inputTranscript)
+        assertEquals("Hi human", m.outputTranscript)
+        assertTrue(m.turnComplete)
+        val g = GeminiLiveClient.parseServerMessage("""{"goAway":{}}""")
+        assertTrue(g.goAway)
+    }
+
     @Test fun parseInterrupted() {
         val m = GeminiLiveClient.parseServerMessage("""{"serverContent":{"interrupted":true}}""")
         assertTrue(m.interrupted)
@@ -237,7 +272,13 @@ class GeminiLiveTest {
     }
 
     @Test fun liveModelIds() {
-        assertTrue(GeminiLiveClient.LIVE_MODELS.all { it.startsWith("models/gemini-2.5-flash") })
-        assertTrue(GeminiLiveClient.LIVE_MODELS.any { it.contains("native-audio-dialog") })
+        // Reference-verified IDs (AI Studio Live playground).
+        assertTrue(GeminiLiveClient.LIVE_MODELS.contains(GeminiLiveClient.MODEL_DIALOG))
+        assertEquals(
+            "models/gemini-2.5-flash-native-audio-preview-09-2025",
+            GeminiLiveClient.MODEL_DIALOG
+        )
+        assertTrue(GeminiLiveClient.VOICES.contains("Aoede"))
+        assertTrue(GeminiLiveClient.VOICES.contains("Kore"))
     }
 }

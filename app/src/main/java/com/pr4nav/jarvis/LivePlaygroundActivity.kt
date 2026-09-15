@@ -54,6 +54,7 @@ class LivePlaygroundActivity : AppCompatActivity() {
 
     private var audioResponses = true
     private var toolsOn = true
+    private var voiceIdx = 4 // Aoede in GeminiLiveClient.VOICES
 
     private var player: AudioTrack? = null
     private var recorder: AudioRecord? = null
@@ -111,6 +112,7 @@ class LivePlaygroundActivity : AppCompatActivity() {
         btnConnect = findViewById(R.id.btn_connect)
         btnModality = findViewById(R.id.btn_modality)
         btnTools = findViewById(R.id.btn_tools)
+        findViewById<View>(R.id.btn_voice)?.setOnClickListener { cycleVoice() }
         btnMic = findViewById(R.id.btn_mic)
         input = findViewById(R.id.live_input)
 
@@ -155,8 +157,17 @@ class LivePlaygroundActivity : AppCompatActivity() {
 
     // ── connection ────────────────────────────────────────────────────────────
 
-    private fun toggleConnect() {
-        if (GeminiLiveClient.isConnected()) {
+    private fun cycleVoice() {
+        voiceIdx = (voiceIdx + 1) % GeminiLiveClient.VOICES.size
+        val v = GeminiLiveClient.VOICES[voiceIdx]
+        findViewById<android.widget.Button>(R.id.btn_voice)?.text = "VOICE · ${v.uppercase()}"
+        note("Voice: $v. Reconnect to apply.")
+    }
+
+    private fun currentVoice(): String =
+        GeminiLiveClient.VOICES[voiceIdx % GeminiLiveClient.VOICES.size]
+
+    private fun toggleConnect() {        if (GeminiLiveClient.isConnected()) {
             GeminiLiveClient.disconnect("user")
             stopPlayback()
             stopMic()
@@ -171,6 +182,7 @@ class LivePlaygroundActivity : AppCompatActivity() {
                 model = GeminiLiveClient.MODEL_DIALOG,
                 audioResponses = audioResponses,
                 withTools = toolsOn,
+                voice = currentVoice(),
                 listener = liveListener
             )
         }
@@ -206,6 +218,13 @@ class LivePlaygroundActivity : AppCompatActivity() {
             }
         }
 
+        override fun onUserTranscript(text: String) {
+            runOnUiThread {
+                userRow("You (voice): $text")
+                scroll()
+            }
+        }
+
         override fun onInterrupted() {
             stopPlayback()
             runOnUiThread { note("Interrupted.") }
@@ -222,6 +241,12 @@ class LivePlaygroundActivity : AppCompatActivity() {
                 setStatus("Disconnected", "#94A3B8")
                 btnConnect.text = "CONNECT"
                 note("Session closed: $reason")
+                if (reason.contains("1007")) {
+                    note("Hint 1007: server rejected a message. Reconnect and retry.")
+                }
+                if (reason.contains("1008") && reason.contains("not found", ignoreCase = true)) {
+                    note("Hint: model ID not available for this key type. Check the model.")
+                }
             }
         }
 
@@ -271,7 +296,14 @@ class LivePlaygroundActivity : AppCompatActivity() {
         if (frames.isNotEmpty()) note("You sent ${frames.size} video frames.")
         if (text.isNotBlank()) userRow(text)
         scroll()
+        // Mixing an open mic stream with a text turn triggers server 1007: end it first.
+        val wasMicLive = micStreaming
         thread {
+            if (wasMicLive) {
+                try {
+                    GeminiLiveClient.sendAudioStreamEnd()
+                } catch (_: Exception) { }
+            }
             GeminiLiveClient.sendText(
                 text.ifBlank {
                     when {

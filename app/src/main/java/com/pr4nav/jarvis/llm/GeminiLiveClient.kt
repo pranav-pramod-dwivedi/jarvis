@@ -21,13 +21,23 @@ object GeminiLiveClient {
 
     private const val TAG = "GeminiLive"
     const val LIVE_HOST = "generativelanguage.googleapis.com"
-    const val LIVE_PATH = "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
+    // v1beta path verified against the working reference playground.
+    const val LIVE_PATH = "/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
 
-    const val MODEL_DIALOG = "models/gemini-2.5-flash-preview-native-audio-dialog"
+    const val MODEL_DIALOG = "models/gemini-2.5-flash-native-audio-preview-09-2025"
+    const val MODEL_DIALOG_12 = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+    const val MODEL_LEGACY = "models/gemini-2.0-flash-live-001"
     const val MODEL_DIALOG_THINKING = "models/gemini-2.5-flash-exp-native-audio-thinking-dialog"
 
-    /** Live models (no list endpoint — the dialog models). */
-    val LIVE_MODELS = listOf(MODEL_DIALOG, MODEL_DIALOG_THINKING)
+    /** Live models (no list endpoint — the dialog family). */
+    val LIVE_MODELS = listOf(MODEL_DIALOG, MODEL_DIALOG_12, MODEL_LEGACY)
+
+    /** Output voices (reference list). */
+    val VOICES = listOf(
+        "Kore", "Puck", "Charon", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr",
+        "Callirrhoe", "Autonoe", "Enceladus", "Iapetus", "Umbriel", "Algieba",
+        "Despina", "Erinome", "Sadachbia", "Schedar", "Sulafat", "Duende"
+    )
 
     private const val PREFS_NAME = "jarvis_live_prefs"
     private const val KEY_MODEL = "live_model"
@@ -51,7 +61,9 @@ object GeminiLiveClient {
     }
 
     fun shortLabel(modelId: String): String = when (modelId) {
-        MODEL_DIALOG -> "Native Audio Dialog"
+        MODEL_DIALOG -> "Native Audio 09-2025"
+        MODEL_DIALOG_12 -> "Native Audio 12-2025"
+        MODEL_LEGACY -> "Live 2.0 Legacy"
         MODEL_DIALOG_THINKING -> "Native Audio Thinking"
         else -> modelId.substringAfterLast("/").substringAfterLast(":")
     }
@@ -65,6 +77,7 @@ object GeminiLiveClient {
         fun onTurnDone(fullText: String)
         fun onAudioChunk(pcm16: ByteArray)
         fun onImage(mime: String, bytes: ByteArray)
+        fun onUserTranscript(text: String)
         fun onInterrupted()
         fun onToolCall(id: String, name: String, args: String)
         fun onClosed(reason: String)
@@ -78,6 +91,9 @@ object GeminiLiveClient {
         val textDelta: String = "",
         val audioPcm: ByteArray? = null,
         val images: List<Pair<String, ByteArray>> = emptyList(),
+        val inputTranscript: String = "",
+        val outputTranscript: String = "",
+        val goAway: Boolean = false,
         val turnComplete: Boolean = false,
         val interrupted: Boolean = false,
         val toolCalls: List<ToolCall> = emptyList(),
@@ -99,12 +115,29 @@ object GeminiLiveClient {
         model: String,
         audioResponses: Boolean,
         systemText: String,
-        tools: JSONArray?
+        tools: JSONArray?,
+        voice: String = "Aoede",
+        inputTranscription: Boolean = true,
+        outputTranscription: Boolean = true
     ): String {
         val genConfig = JSONObject().apply {
             put("responseModalities", JSONArray().apply {
                 put(if (audioResponses) "AUDIO" else "TEXT")
             })
+            put(
+                "speechConfig",
+                JSONObject().apply {
+                    put(
+                        "voiceConfig",
+                        JSONObject().apply {
+                            put(
+                                "prebuiltVoiceConfig",
+                                JSONObject().apply { put("voiceName", voice) }
+                            )
+                        }
+                    )
+                }
+            )
         }
         val setup = JSONObject().apply {
             put("model", model)
@@ -123,6 +156,8 @@ object GeminiLiveClient {
                 )
             }
             if (tools != null) put("tools", tools)
+            if (inputTranscription) put("inputAudioTranscription", JSONObject())
+            if (outputTranscription) put("outputAudioTranscription", JSONObject())
         }
         return JSONObject().put("setup", setup).toString()
     }
@@ -241,14 +276,34 @@ object GeminiLiveClient {
                 "realtimeInput",
                 JSONObject().apply {
                     put(
-                        "mediaChunks",
-                        JSONArray().apply {
-                            put(
-                                JSONObject().apply {
-                                    put("mimeType", "audio/pcm;rate=16000")
-                                    put("data", base64Pcm16)
-                                }
-                            )
+                        "audio",
+                        JSONObject().apply {
+                            put("mimeType", "audio/pcm;rate=16000")
+                            put("data", base64Pcm16)
+                        }
+                    )
+                }
+            )
+        }.toString()
+    }
+
+    /** End the mic stream before a text turn (mixing both triggers server 1007). */
+    fun buildAudioStreamEnd(): String {
+        return JSONObject().apply {
+            put("realtimeInput", JSONObject().put("audioStreamEnd", true))
+        }.toString()
+    }
+
+    fun buildVideoChunk(base64Jpeg: String): String {
+        return JSONObject().apply {
+            put(
+                "realtimeInput",
+                JSONObject().apply {
+                    put(
+                        "video",
+                        JSONObject().apply {
+                            put("mimeType", "image/jpeg")
+                            put("data", base64Jpeg)
                         }
                     )
                 }
@@ -320,12 +375,19 @@ object GeminiLiveClient {
                     }
                 }
                 val done = sc.optBoolean("turnComplete", false)
+                val inTr = sc.optJSONObject("inputTranscription")?.optString("text", "").orEmpty()
+                val outTr = sc.optJSONObject("outputTranscription")?.optString("text", "").orEmpty()
                 return ParsedServerMessage(
                     textDelta = text,
                     audioPcm = audio,
                     images = images,
+                    inputTranscript = inTr,
+                    outputTranscript = outTr,
                     turnComplete = done
                 )
+            }
+            if (root.optJSONObject("goAway") != null) {
+                return ParsedServerMessage(goAway = true)
             }
             root.optJSONObject("toolCall")?.let { tc ->
                 val calls = mutableListOf<ToolCall>()
@@ -363,6 +425,7 @@ object GeminiLiveClient {
         model: String = MODEL_DIALOG,
         audioResponses: Boolean = true,
         withTools: Boolean = true,
+        voice: String = "Aoede",
         listener: Listener
     ) {
         disconnect("reconnect")
@@ -381,7 +444,10 @@ object GeminiLiveClient {
             override fun onOpen() {
                 try {
                     sock.sendText(
-                        buildSetup(model, audioResponses, systemText, if (withTools) buildTools() else null)
+                        buildSetup(
+                            model, audioResponses, systemText,
+                            if (withTools) buildTools() else null, voice
+                        )
                     )
                     listener.onStatus("Connected — waiting for setup…")
                 } catch (e: Exception) {
@@ -441,6 +507,18 @@ object GeminiLiveClient {
         } catch (_: Exception) { }
     }
 
+    fun sendAudioStreamEnd() {
+        try {
+            socket?.sendText(buildAudioStreamEnd())
+        } catch (_: Exception) { }
+    }
+
+    fun sendVideoFrame(base64Jpeg: String) {
+        try {
+            socket?.sendText(buildVideoChunk(base64Jpeg))
+        } catch (_: Exception) { }
+    }
+
     fun respondTool(id: String, name: String, result: JSONObject) {
         try {
             socket?.sendText(buildToolResponse(id, name, result))
@@ -482,6 +560,17 @@ object GeminiLiveClient {
         if (msg.interrupted) {
             synchronized(lock) { textBuffer.clear() }
             l.onInterrupted()
+            return
+        }
+        if (msg.inputTranscript.isNotBlank()) {
+            l.onUserTranscript(msg.inputTranscript)
+        }
+        if (msg.outputTranscript.isNotBlank()) {
+            synchronized(lock) { textBuffer.append(msg.outputTranscript) }
+            l.onTextDelta(msg.outputTranscript)
+        }
+        if (msg.goAway) {
+            l.onStatus("Server goAway — reconnect soon")
             return
         }
         if (msg.textDelta.isNotBlank()) {
@@ -545,6 +634,7 @@ object GeminiLiveClient {
 
                 override fun onAudioChunk(pcm16: ByteArray) {}
                 override fun onImage(mime: String, bytes: ByteArray) {}
+                override fun onUserTranscript(text: String) {}
                 override fun onInterrupted() {}
                 override fun onToolCall(id: String, name: String, args: String) {}
                 override fun onClosed(reason: String) {

@@ -4491,7 +4491,9 @@ fun ModelPickerSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val modes = AgentExecutionMode.values().toList()
+    val route = remember {
+        com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.getRoute(context)
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -4504,9 +4506,10 @@ fun ModelPickerSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 22.dp)
                 .padding(bottom = 36.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             Text(
-                text = "Select Intelligence Engine",
+                text = "Select provider",
                 color = Color.White,
                 fontSize = 18.sp,
                 fontFamily = titleFontFamily,
@@ -4514,20 +4517,28 @@ fun ModelPickerSheet(
                 modifier = Modifier.padding(vertical = 12.dp)
             )
 
-            modes.forEach { mode ->
-                val isSelected = currentMode == mode
+            com.pr4nav.jarvis.llm.AIProvider.values().forEach { p ->
+                val isSelected = route.contains(p.engine) && route.size == 1
+                val current = try {
+                    p.currentModel(context)
+                } catch (_: Exception) { "" }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .clickable { onSelect(mode) }
+                        .clickable {
+                            com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.setRoute(
+                                context, listOf(p.engine)
+                            )
+                            onDismiss()
+                        }
                         .padding(vertical = 12.dp, horizontal = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = mode.displayName,
+                            text = p.title,
                             color = if (isSelected) Color(0xFFFF9636) else Color.White,
                             fontSize = 15.sp,
                             fontFamily = titleFontFamily,
@@ -4535,7 +4546,7 @@ fun ModelPickerSheet(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = mode.description,
+                            text = p.hint + if (current.isNotBlank()) " · $current" else "",
                             color = Color.White.copy(alpha = 0.5f),
                             fontSize = 12.sp,
                             fontFamily = bodyFontFamily,

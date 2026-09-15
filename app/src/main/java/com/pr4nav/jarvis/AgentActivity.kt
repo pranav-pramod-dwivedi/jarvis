@@ -377,16 +377,27 @@ class AgentActivity : AppCompatActivity() {
     }
 
     private fun showModeSelectorDialog() {
-        val modes = com.pr4nav.jarvis.router.AgentExecutionMode.values()
-        val items = modes.map { "${it.displayName}\n${it.description}" }.toTypedArray()
+        val providers = com.pr4nav.jarvis.llm.AIProvider.values().toList()
+        val items = (providers.map { p ->
+            "${p.title}\n${p.hint} · current: ${p.currentModel(this)}"
+        } + "Needle Only (deterministic, offline)\nFast on-device actions, no models").toTypedArray()
 
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Select Intelligence & Router Mode")
+            .setTitle("Select provider")
             .setItems(items) { _, which ->
-                val chosen = modes[which]
-                com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.setAgentMode(this, chosen)
-                updateCtx()
-                Toast.makeText(this, "Switched to ${chosen.displayName}", Toast.LENGTH_SHORT).show()
+                if (which < providers.size) {
+                    val p = providers[which]
+                    com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.setRoute(this, listOf(p.engine))
+                    updateModelPill()
+                    updateCtx()
+                    Toast.makeText(this, "${p.title} active (solo engine)", Toast.LENGTH_SHORT).show()
+                } else {
+                    com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.setAgentMode(
+                        this, com.pr4nav.jarvis.router.AgentExecutionMode.NEEDLE_ONLY
+                    )
+                    updateCtx()
+                    Toast.makeText(this, "Needle Only (offline deterministic)", Toast.LENGTH_SHORT).show()
+                }
             }
             .setPositiveButton("Kira AI") { _, _ ->
                 showConfigureKiraDialog()
@@ -547,28 +558,11 @@ class AgentActivity : AppCompatActivity() {
     }
 
     private fun showRegenerateDialog(prompt: String) {
-        val options = arrayOf(
-            "· Auto (Tri-Tier Cascade)",
-            "· Groq LLaMA 3.3 70B",
-            "· Cloud (Gemini 2.0 Flash)",
-            "· Kira + Needle"
-        )
-
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Regenerate with:")
-            .setItems(options) { _, which ->
-                val targetMode = when (which) {
-                    0 -> com.pr4nav.jarvis.router.AgentExecutionMode.AUTO
-                    1 -> com.pr4nav.jarvis.router.AgentExecutionMode.GROQ_NEEDLE
-                    2, 3 -> com.pr4nav.jarvis.router.AgentExecutionMode.CLOUD_NEEDLE
-                    else -> com.pr4nav.jarvis.router.AgentExecutionMode.AUTO
-                }
-                com.pr4nav.jarvis.router.UnifiedAssistantDispatcher.setAgentMode(this, targetMode)
-                updateCtx()
-                submit(prompt)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        com.pr4nav.jarvis.llm.KiraModelPicker.show(this) {
+            updateModelPill()
+            updateCtx()
+            submit(prompt)
+        }
     }
 
     private fun addUserMessage(text: String) {

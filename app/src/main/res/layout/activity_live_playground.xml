@@ -104,6 +104,18 @@
             android:textStyle="bold" />
 
         <Button
+            android:id="@+id/btn_voice"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_btn_action_pill"
+            android:paddingHorizontal="10dp"
+                    android:text="VOICE · AOEDE"
+            android:textColor="#7DD3FC"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <Button
             android:id="@+id/btn_mic"
             android:layout_width="wrap_content"
             android:layout_height="30dp"
