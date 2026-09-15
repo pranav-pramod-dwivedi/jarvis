@@ -295,7 +295,8 @@ object JarvisIntentRouter {
                 "Resolved to Media Provider → Searching \"$query\""
             }
         } catch (e: Exception) {
-            Shell.termux("am start -a android.media.action.MEDIA_PLAY_FROM_SEARCH --es query '${query}' 2>/dev/null || true")
+            val safeQuery = escapeShellArg(query)
+            Shell.termux("am start -a android.media.action.MEDIA_PLAY_FROM_SEARCH --es query $safeQuery 2>/dev/null || true")
             "Triggered Media Playback: $query"
         }
     }
@@ -319,7 +320,8 @@ object JarvisIntentRouter {
                 "Resolved to Google Maps → Navigating to \"$destination\""
             }
         } catch (e: Exception) {
-            Shell.termux("am start -a android.intent.action.VIEW -d 'google.navigation:q=${Uri.encode(destination)}' 2>/dev/null || true")
+            val safeDest = escapeShellArg("google.navigation:q=" + Uri.encode(destination))
+            Shell.termux("am start -a android.intent.action.VIEW -d $safeDest 2>/dev/null || true")
             "Navigating via Maps: $destination"
         }
     }
@@ -327,7 +329,8 @@ object JarvisIntentRouter {
     private fun executeFileSearch(context: Context, query: String): String {
         // Searches local storage + Drive search intent
         Thread {
-            Shell.termux("find /sdcard/Download /sdcard/Documents ~/ -iname '*${query}*' 2>/dev/null | head -n 10")
+            val cleanQuery = query.replace(Regex("[^a-zA-Z0-9 _.-]"), "")
+            Shell.termux("find /sdcard/Download /sdcard/Documents ~/ -iname '*${cleanQuery}*' 2>/dev/null | head -n 10")
         }.start()
 
         return try {
@@ -370,7 +373,8 @@ object JarvisIntentRouter {
             if (query.lowercase().contains("shopping list")) {
                 val item = query.replace(Regex("^(?i)add\\s+"), "").replace(Regex("(?i)\\s+to my shopping list.*"), "").trim()
                 Thread {
-                    Shell.termux("mkdir -p /sdcard/Documents && echo '- $item' >> /sdcard/Documents/shopping_list.txt")
+                    val safeItem = escapeShellArg("- $item")
+                    Shell.termux("mkdir -p /sdcard/Documents && printf '%s\\n' $safeItem >> /sdcard/Documents/shopping_list.txt")
                 }.start()
                 "Added \"$item\" to shopping list (/sdcard/Documents/shopping_list.txt)"
             } else {
@@ -458,7 +462,8 @@ object JarvisIntentRouter {
             launchSafe(context, intent)
             "Resolved to YouTube → Playing video \"$query\""
         } catch (e: Exception) {
-            Shell.termux("am start -a android.intent.action.VIEW -d 'https://www.youtube.com/results?search_query=${Uri.encode(query)}'")
+            val safeUrl = escapeShellArg("https://www.youtube.com/results?search_query=" + Uri.encode(query))
+            Shell.termux("am start -a android.intent.action.VIEW -d $safeUrl")
             "Launching YouTube: $query"
         }
     }
@@ -509,5 +514,9 @@ object JarvisIntentRouter {
         } catch (_: PackageManager.NameNotFoundException) {
             false
         }
+    }
+
+    private fun escapeShellArg(arg: String): String {
+        return "'" + arg.replace("'", "'\\''") + "'"
     }
 }

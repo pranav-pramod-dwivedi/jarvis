@@ -64,6 +64,8 @@ class PermissionsActivity : ComponentActivity() {
         val onGrant: (() -> Unit)? = null
     )
 
+    private var termuxExecutionWorking by mutableStateOf<Boolean?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -74,6 +76,7 @@ class PermissionsActivity : ComponentActivity() {
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
 
         checkRoot()
+        checkTermux()
 
         setContent {
             val trigger = refreshTrigger.value
@@ -97,7 +100,19 @@ class PermissionsActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        checkTermux()
         refreshTrigger.value++
+    }
+
+    private fun checkTermux() {
+        thread {
+            TermuxBridge.init(applicationContext)
+            val working = TermuxBridge.verifyExecution(timeoutMs = 2500L)
+            runOnUiThread {
+                termuxExecutionWorking = working
+                refreshTrigger.value++
+            }
+        }
     }
 
     private fun getPermissionItems(): List<PermItem> = listOf(
@@ -145,10 +160,26 @@ class PermissionsActivity : ComponentActivity() {
         ),
         PermItem(
             title = "Termux Command Bridge",
-            description = "Execute shell commands inside Termux and PRoot Ubuntu Linux environment.",
+            description = when {
+                !TermuxBridge.hasPermission() ->
+                    "Execute shell commands inside Termux and PRoot Ubuntu Linux environment."
+                termuxExecutionWorking == false ->
+                    "RUN_COMMAND is granted, but Termux execution is blocked. Tap to configure 'allow-external-apps=true'."
+                termuxExecutionWorking == null ->
+                    "Verifying Termux bridge and allow-external-apps status…"
+                else ->
+                    "Termux bridge active with external app execution enabled."
+            },
             isEssential = true,
-            isGranted = TermuxBridge.hasPermission(),
-            onGrant = { requestRuntime("com.termux.permission.RUN_COMMAND") }
+            isGranted = TermuxBridge.hasPermission() && (termuxExecutionWorking == true),
+            onGrant = {
+                if (!TermuxBridge.hasPermission()) {
+                    requestRuntime("com.termux.permission.RUN_COMMAND")
+                } else {
+                    val intent = Intent(this, com.pr4nav.jarvis.setup.TermuxPermissionFixActivity::class.java)
+                    startActivity(intent)
+                }
+            }
         ),
         PermItem(
             title = "Battery Optimization Exemption",
@@ -219,6 +250,10 @@ class PermissionsActivity : ComponentActivity() {
         queue.clear()
         for (g in runtimeGroups()) queue.addLast(g)
         pump()
+        if (TermuxBridge.hasPermission() && termuxExecutionWorking == false) {
+            val intent = Intent(this, com.pr4nav.jarvis.setup.TermuxPermissionFixActivity::class.java)
+            startActivity(intent)
+        }
     }
 
     private fun runtimeGroups(): List<Array<String>> {

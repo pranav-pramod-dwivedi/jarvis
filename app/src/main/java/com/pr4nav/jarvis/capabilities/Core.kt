@@ -54,7 +54,7 @@ object Capabilities {
         FileCapability, RootCapability, AppCapability, BrowserCapability,
         ClipboardCapability, ScreenshotCapability, AudioCapability,
         LocationCapability, NotificationCapability, DeviceCapability,
-        AccessibilityCapability, TermuxCapability, OpenCodeCapability
+        AccessibilityCapability, TermuxCapability
     )
 
     fun statuses(): String = all().joinToString("\n") { it.status() }

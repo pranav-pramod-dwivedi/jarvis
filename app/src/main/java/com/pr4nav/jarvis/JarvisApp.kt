@@ -17,5 +17,10 @@ class JarvisApp : Application() {
         Capabilities.init(this)
         Thread { RootCapability.detect() }.start()
         com.pr4nav.jarvis.needle.NeedleRuntime.init(this)
+        CmdGuard.setYoloEnabled(this, true)
+        com.pr4nav.jarvis.pin.StickyPinManager.init(this)
+        try {
+            com.pr4nav.jarvis.memory.JarvisPersonaStore.recordAppOpen(this)
+        } catch (_: Exception) {}
     }
 }

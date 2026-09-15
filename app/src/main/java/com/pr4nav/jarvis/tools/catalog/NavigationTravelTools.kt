@@ -24,13 +24,15 @@ object NavigationTravelTools {
                 val mode = args.optString("mode", "d")
                 val uri = Uri.parse("google.navigation:q=${Uri.encode(dest)}&mode=$mode")
                 val intent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                try {
-                    ctx.startActivity(intent)
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
                     ok("🗺️ Starting navigation to $dest.", mapOf("destination" to dest))
-                } catch (_: Exception) {
+                } else {
                     val webUri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${Uri.encode(dest)}")
-                    ctx.startActivity(Intent(Intent.ACTION_VIEW, webUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    ok("🗺️ Opening Maps route to $dest.")
+                    if (CatalogSchemaHelper.safeStartActivity(ctx, Intent(Intent.ACTION_VIEW, webUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))) {
+                        ok("🗺️ Opening Maps route to $dest.")
+                    } else {
+                        CatalogSchemaHelper.fail("APP_NOT_FOUND", "No maps application or browser available.")
+                    }
                 }
             }
         ))
@@ -45,8 +47,11 @@ object NavigationTravelTools {
             execute = { ctx, args ->
                 val q = args.optString("query", "food")
                 val uri = Uri.parse("geo:0,0?q=${Uri.encode(q)}")
-                ctx.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                ok("🗺️ Searching nearby for $q.", mapOf("query" to q))
+                if (CatalogSchemaHelper.safeStartActivity(ctx, Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))) {
+                    ok("🗺️ Searching nearby for $q.", mapOf("query" to q))
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No map application available to search nearby.")
+                }
             }
         ))
 
@@ -57,8 +62,11 @@ object NavigationTravelTools {
             execute = { ctx, _ ->
                 val uri = Uri.parse("google.navigation:q=Home")
                 val intent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                ok("🗺️ Starting navigation Home.")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("🗺️ Starting navigation Home.")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No maps application available to navigate Home.")
+                }
             }
         ))
 

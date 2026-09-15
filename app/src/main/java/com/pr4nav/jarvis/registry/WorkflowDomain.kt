@@ -115,15 +115,11 @@ object WorkflowDomain {
             id = "workflow.coding",
             category = "workflow",
             name = "Developer / Coding Mode",
-            description = "Start autonomous coding workspace: Check Termux & Ubuntu, check AGY on :5050, launch OpenCode",
+            description = "Start autonomous coding workspace: Kira AI primary engine ready for commands, scripts and device tools",
             aliases = listOf("start coding", "developer mode", "open coding environment", "code mode", "start development"),
-            backend = BackendType.OPENCODE,
-            execute = { ctx, _ ->
-                val intent = android.content.Intent(ctx, com.pr4nav.jarvis.OpenCodeActivity::class.java).apply {
-                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                ctx.startActivity(intent)
-                CapabilityExecutionResult.ok("💻 Developer Mode: Launched OpenCode autonomous coding workspace. AGY & PRoot Ubuntu active.")
+            backend = BackendType.ANDROID_API,
+            execute = { _, _ ->
+                CapabilityExecutionResult.ok("💻 Developer Mode: Kira AI (glm-5.3-free cascade) is active for coding, terminal commands, and system development.")
             }
         ),
 

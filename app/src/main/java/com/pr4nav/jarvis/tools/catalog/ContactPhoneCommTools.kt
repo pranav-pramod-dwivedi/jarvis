@@ -48,8 +48,11 @@ object ContactPhoneCommTools {
                     if (email.isNotBlank()) putExtra(ContactsContract.Intents.Insert.EMAIL, email)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                ctx.startActivity(intent)
-                ok("👤 Opened contact card to save $name ($phone).")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("👤 Opened contact card to save $name ($phone).")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No contacts application found to save contact.")
+                }
             }
         ))
 
@@ -174,8 +177,11 @@ object ContactPhoneCommTools {
                     putExtra(Intent.EXTRA_TEXT, text)
                 }
                 val chooser = Intent.createChooser(intent, "Share via").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(chooser)
-                ok("📤 Opening share sheet for text.")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, chooser)) {
+                    ok("📤 Opening share sheet for text.")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No application available to share text.")
+                }
             }
         ))
     }

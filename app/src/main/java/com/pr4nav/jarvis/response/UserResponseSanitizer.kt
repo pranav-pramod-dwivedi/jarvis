@@ -52,16 +52,67 @@ object UserResponseSanitizer {
     )
 
     /**
+     * Extracts and strips reasoning tags (<think>, <thought>, <reasoning>) from text.
+     * Handles closed blocks, unclosed blocks, and provides fallback recovery if answer is inside.
+     */
+    fun stripThinking(raw: String): Pair<String, String> {
+        var text = raw.trim()
+        val thinkBlocks = mutableListOf<String>()
+
+        // 1. Closed thinking blocks: <think>...</think>, <thought>...</thought>, <reasoning>...</reasoning>
+        val closedRegex = Regex("(?i)<(think|thought|reasoning)>([\\s\\S]*?)</\\1>")
+        val matches = closedRegex.findAll(text).toList()
+        for (m in matches) {
+            val body = m.groupValues[2].trim()
+            if (body.isNotBlank()) thinkBlocks.add(body)
+        }
+        text = text.replace(closedRegex, "").trim()
+
+        // 2. Unclosed thinking block: e.g. <think>... without closing tag
+        val unclosedRegex = Regex("(?i)<(think|thought|reasoning)>([\\s\\S]*)$")
+        val unclosedMatch = unclosedRegex.find(text)
+        if (unclosedMatch != null) {
+            val body = unclosedMatch.groupValues[2].trim()
+            if (body.isNotBlank()) thinkBlocks.add(body)
+            text = text.replace(unclosedRegex, "").trim()
+        }
+
+        // Also clean stray closing tags
+        text = text.replace(Regex("(?i)</(think|thought|reasoning)>"), "").trim()
+
+        val extractedThinking = thinkBlocks.joinToString("\n\n").trim()
+
+        // 3. Fallback: If removing thinking left the response empty, extract the substantive conclusion from thinking
+        if (text.isBlank() && extractedThinking.isNotBlank()) {
+            val paragraphs = extractedThinking.split(Regex("\\n\\s*\\n")).map { it.trim() }.filter { it.isNotEmpty() }
+            val candidateAnswer = paragraphs.lastOrNull { p ->
+                !p.startsWith("Let's", ignoreCase = true) &&
+                !p.startsWith("I need to", ignoreCase = true) &&
+                !p.startsWith("First,", ignoreCase = true) &&
+                !p.startsWith("Thinking Process:", ignoreCase = true)
+            } ?: paragraphs.lastOrNull() ?: extractedThinking
+            text = candidateAnswer
+        }
+
+        return Pair(extractedThinking, text)
+    }
+
+    /**
      * Sanitizes any response into clean, natural human language for UI display.
      * Enforces JARVIS identity, removes model leaks, and strips useless boilerplate.
      */
     fun sanitize(raw: String, fallbackQuery: String? = null): String {
         var text = raw.trim()
-        if (text.isEmpty()) return "I'm here to help. What would you like to do?"
+        if (text.isEmpty() || text.equals("null", ignoreCase = true) || text.equals("null null", ignoreCase = true)) {
+            return "I'm here to help. What would you like to do?"
+        }
 
-        // Strip <think>...</think> blocks if present
-        if (text.contains("<think>")) {
-            text = text.replace(Regex("<think>[\\s\\S]*?</think>"), "").trim()
+        // Strip thinking traces completely
+        val (_, cleanText) = stripThinking(text)
+        text = cleanText
+
+        if (text.isEmpty() || text.equals("null", ignoreCase = true) || text.equals("null null", ignoreCase = true)) {
+            return "Task completed successfully."
         }
 
         // Check if raw text is internal JSON or structural output
@@ -135,7 +186,7 @@ object UserResponseSanitizer {
             cleaned = cleaned.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
         }
 
-        return if (cleaned.isBlank()) "Task completed successfully." else cleaned
+        return if (cleaned.isBlank() || cleaned.equals("null", ignoreCase = true) || cleaned.equals("null null", ignoreCase = true)) "Task completed successfully." else cleaned
     }
 
     /**
@@ -144,6 +195,9 @@ object UserResponseSanitizer {
      */
     fun sanitizeForSpeech(raw: String, fallbackQuery: String? = null): String {
         val trimmed = raw.trim()
+        if (trimmed.isBlank() || trimmed.equals("null", ignoreCase = true) || trimmed.equals("null null", ignoreCase = true)) {
+            return "Task completed."
+        }
         val lower = trimmed.lowercase()
         if (lower in listOf("jarvis", "hey jarvis", "hello jarvis", "hi jarvis", "ok jarvis")) {
             return "Yes?"
@@ -157,7 +211,7 @@ object UserResponseSanitizer {
             .replace(Regex("\\s+"), " ")
             .trim()
 
-        if (clean.isBlank()) return "Yes?"
+        if (clean.isBlank() || clean.equals("null", ignoreCase = true) || clean.equals("null null", ignoreCase = true)) return "Task completed."
 
         // Spoken brevity guard: extract at most 1-2 punchy sentences (~140 chars max)
         val sentences = clean.split(Regex("(?<=[.!?])\\s+"))

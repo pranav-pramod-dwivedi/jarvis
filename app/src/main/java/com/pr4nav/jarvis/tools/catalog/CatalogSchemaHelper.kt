@@ -43,4 +43,20 @@ object CatalogSchemaHelper {
     fun fail(code: String, message: String): ToolResult {
         return ToolResult.failure(code, message)
     }
+
+    fun safeStartActivity(context: android.content.Context, intent: android.content.Intent): Boolean {
+        return try {
+            if (intent.flags and android.content.Intent.FLAG_ACTIVITY_NEW_TASK == 0) {
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            true
+        } catch (e: android.content.ActivityNotFoundException) {
+            android.util.Log.w("CatalogSchemaHelper", "Activity not found: ${e.message}")
+            false
+        } catch (e: Exception) {
+            android.util.Log.w("CatalogSchemaHelper", "safeStartActivity failed: ${e.message}")
+            false
+        }
+    }
 }

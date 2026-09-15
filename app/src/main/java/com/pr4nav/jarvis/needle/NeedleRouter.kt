@@ -50,7 +50,7 @@ object NeedleRouter {
         val risk = NeedleConfig.riskLevel(toolName)
 
         // Stricter handling for high-risk operations (destructive filesystem, external messaging)
-        if (risk == RiskLevel.HIGH && envelope.confidence < NeedleConfig.destructiveThreshold) {
+        if (risk == RiskLevel.HIGH && envelope.confidence < NeedleConfig.destructiveThreshold && !com.pr4nav.jarvis.CmdGuard.isYoloEnabled()) {
             return NeedleRouteResult(
                 route = RouteType.CLARIFICATION,
                 tool = toolName,

@@ -97,6 +97,17 @@ object JarvisBrowserAppManager {
         File(targetDir, "manifest.json").writeText(manifestObj.toString(2))
 
         Log.i(TAG, "Created JarvisBrowser app '$cleanId' at: ${targetDir.absolutePath} (temp=$isTemporary)")
+        try {
+            com.pr4nav.jarvis.artifacts.JarvisArtifactManager.registerExistingFile(
+                context = ctx,
+                id = cleanId,
+                title = title,
+                type = "UI_APP",
+                file = indexFile,
+                summary = description,
+                tags = tags
+            )
+        } catch (_: Exception) {}
         return JarvisBrowserApp.fromManifest(targetDir, isTemporary) ?: JarvisBrowserApp(
             id = cleanId,
             title = title,

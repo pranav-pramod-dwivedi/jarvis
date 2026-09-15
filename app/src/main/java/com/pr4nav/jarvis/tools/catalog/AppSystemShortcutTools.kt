@@ -168,7 +168,10 @@ object AppSystemShortcutTools {
             description = "Pings a network host to test connectivity.",
             argumentSchema = schema(prop("host", "string", "Host to ping (default 8.8.8.8)")),
             execute = { _, args ->
-                val host = args.optString("host", "8.8.8.8")
+                val host = args.optString("host", "8.8.8.8").trim()
+                if (host.isEmpty() || !host.matches(Regex("^[a-zA-Z0-9.-]+$")) || host.startsWith("-")) {
+                    return@CanonicalToolDef CatalogSchemaHelper.fail("INVALID_HOST", "Invalid host format: '$host'. Only alphanumeric characters, dots, and hyphens are allowed.")
+                }
                 val r = Shell.termux("ping -c 2 -W 2 $host", 5000)
                 val msg = if (r.rc == 0) "🌐 Connectivity verified: $host is reachable." else "❌ Host $host unreachable."
                 ok(msg, mapOf("output" to r.out))

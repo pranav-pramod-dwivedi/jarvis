@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -55,6 +56,7 @@ private const val VIDEO_URL =
 class JarvisWakeLoadingActivity : ComponentActivity() {
 
     @Volatile private var isSetupDone = false
+    @Volatile private var isTermuxWorking = false
     @Volatile private var isNavigating = false
     private var exoPlayer: ExoPlayer? = null
 
@@ -74,9 +76,7 @@ class JarvisWakeLoadingActivity : ComponentActivity() {
                 Fs.init(applicationContext)
                 try { RootCapability.detect() } catch (_: Exception) {}
                 TermuxBridge.init(applicationContext)
-                try {
-                    Shell.termux("echo 'JARVIS_WAKE_SETUP_OK'", timeoutMs = 3500)
-                } catch (_: Exception) {}
+                isTermuxWorking = TermuxBridge.verifyExecution(timeoutMs = 3500L)
                 try {
                     Shell.ubuntu("which agy || test -x /usr/local/bin/agy", timeoutMs = 3500)
                 } catch (_: Exception) {}
@@ -86,6 +86,11 @@ class JarvisWakeLoadingActivity : ComponentActivity() {
             } finally {
                 isSetupDone = true
             }
+        }
+
+        lifecycleScope.launch {
+            kotlinx.coroutines.delay(7000L)
+            proceedToMain()
         }
 
         setContent {
@@ -120,20 +125,41 @@ class JarvisWakeLoadingActivity : ComponentActivity() {
                     }
                 }
             }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                proceedToMain()
+            }
         })
     }
 
     private fun proceedToMain() {
         if (isNavigating || isFinishing || isDestroyed) return
         isNavigating = true
-        SetupManager.setSetupCompleted(this, true)
-        val intent = Intent(this, JarvisIntroActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        lifecycleScope.launch {
+            // Await setup completion if still running (up to 3 seconds)
+            var waitLoops = 0
+            while (!isSetupDone && waitLoops < 30) {
+                kotlinx.coroutines.delay(100L)
+                waitLoops++
+            }
+            if (isFinishing || isDestroyed) return@launch
+
+            if (TermuxBridge.hasPermission() && isSetupDone && !isTermuxWorking) {
+                val intent = Intent(this@JarvisWakeLoadingActivity, TermuxPermissionFixActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+                finish()
+                return@launch
+            }
+            SetupManager.setSetupCompleted(this@JarvisWakeLoadingActivity, true)
+            val intent = Intent(this@JarvisWakeLoadingActivity, JarvisIntroActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            finish()
+            @Suppress("DEPRECATION")
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
         }
-        startActivity(intent)
-        finish()
-        @Suppress("DEPRECATION")
-        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 
     override fun onDestroy() {

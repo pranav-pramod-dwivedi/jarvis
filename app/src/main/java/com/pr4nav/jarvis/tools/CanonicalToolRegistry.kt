@@ -52,6 +52,81 @@ object CanonicalToolRegistry {
     private fun registerDefaults() {
         SiriAssistantToolCatalog.registerAll(::register)
 
+        // remember: Searches persistent past session context, topics, tables, and discussions
+        val rememberDef = CanonicalToolDef(
+            name = "remember",
+            description = "Searches JARVIS's persistent memory and historical session archive for past topics, decisions, JEE study plans, and discussion tables.",
+            argumentSchema = JSONObject().apply {
+                put("type", "object")
+                put("properties", JSONObject().apply {
+                    put("query", JSONObject().put("type", "string").put("description", "Search query or keyword (e.g. 'jee', 'physics', 'math', 'routine', 'previous session')"))
+                    put("topic", JSONObject().put("type", "string").put("description", "Optional topic filter (e.g. 'roadmap', 'schedule', 'sessions')"))
+                })
+            },
+            backend = ToolBackend.ANDROID_NATIVE,
+            execute = { ctx, args ->
+                val q = args.optString("query", args.optString("q", ""))
+                val t = args.optString("topic", "")
+                val res = com.pr4nav.jarvis.session.JarvisSessionContextArchive.searchContext(ctx, q, t)
+                ToolResult.ok(JSONObject().put("status", "CONTEXT_RETRIEVED").put("context", res))
+            }
+        )
+        register(rememberDef)
+        register(rememberDef.copy(name = "search_context"))
+        register(rememberDef.copy(name = "query_memory"))
+
+        // pin.create: Creates a persistent, sticky human pin (non-swipeable)
+        register(
+            CanonicalToolDef(
+                name = "pin.create",
+                description = "Creates a persistent, non-swipeable sticky human pin notification for reminders, study check-ins, or tasks with actions (done/snooze/talk).",
+                argumentSchema = JSONObject().apply {
+                    put("type", "object")
+                    put("properties", JSONObject().apply {
+                        put("title", JSONObject().put("type", "string").put("description", "Terse, lowercase title of the pin"))
+                        put("body", JSONObject().put("type", "string").put("description", "One-line action body"))
+                        put("priority", JSONObject().put("type", "string").put("description", "NORMAL, JEE_STUDY, CRITICAL, or SYSTEM"))
+                    })
+                    put("required", JSONArray().put("title").put("body"))
+                },
+                backend = ToolBackend.ANDROID_NATIVE,
+                execute = { ctx, args ->
+                    val title = args.optString("title", "pin")
+                    val body = args.optString("body", "")
+                    val prioStr = args.optString("priority", "NORMAL").uppercase()
+                    val prio = try { com.pr4nav.jarvis.pin.PinPriority.valueOf(prioStr) } catch (_: Exception) { com.pr4nav.jarvis.pin.PinPriority.NORMAL }
+                    val id = "pin_${System.currentTimeMillis()}"
+                    val created = com.pr4nav.jarvis.pin.StickyPinManager.postPin(ctx, id, title, body, prio, isProactive = false)
+                    if (created != null) {
+                        ToolResult.ok(JSONObject().put("status", "PIN_POSTED").put("id", id).put("title", title))
+                    } else {
+                        ToolResult.failure("PIN_FAILED", "Could not post sticky pin")
+                    }
+                }
+            )
+        )
+
+        // pin.dismiss: Dismisses an active pin by id
+        register(
+            CanonicalToolDef(
+                name = "pin.dismiss",
+                description = "Dismisses or acknowledges an active sticky human pin by id.",
+                argumentSchema = JSONObject().apply {
+                    put("type", "object")
+                    put("properties", JSONObject().apply {
+                        put("id", JSONObject().put("type", "string").put("description", "ID of pin to dismiss"))
+                    })
+                    put("required", JSONArray().put("id"))
+                },
+                backend = ToolBackend.ANDROID_NATIVE,
+                execute = { ctx, args ->
+                    val id = args.optString("id", "")
+                    com.pr4nav.jarvis.pin.StickyPinManager.acknowledgePin(ctx, id)
+                    ToolResult.ok(JSONObject().put("status", "PIN_DISMISSED").put("id", id))
+                }
+            )
+        )
+
         // system.torch (and aliases: torch, flashlight_on, flashlight_off, set_flashlight)
         val torchDef = CanonicalToolDef(
             name = "system.torch",
@@ -469,7 +544,12 @@ object CanonicalToolRegistry {
                             @Suppress("DEPRECATION")
                             android.telephony.SmsManager.getDefault()
                         }
-                        smsManager.sendTextMessage(targetNumber, null, msg, null, null)
+                        val parts = smsManager.divideMessage(msg)
+                        if (parts.size > 1) {
+                            smsManager.sendMultipartTextMessage(targetNumber, null, parts, null, null)
+                        } else {
+                            smsManager.sendTextMessage(targetNumber, null, msg, null, null)
+                        }
                         ToolResult.ok(
                             JSONObject().apply {
                                 put("action", "SMS_SENT")

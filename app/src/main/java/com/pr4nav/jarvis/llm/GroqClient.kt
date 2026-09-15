@@ -641,7 +641,10 @@ object GroqClient {
             put("type", "function")
             put("function", JSONObject().apply {
                 put("name", "browser_render_app")
-                put("description", "Generates and renders an on-demand, interactive HTML/CSS/JS mini web-app in JarvisBrowser. Use whenever a visual UI, physics simulation, comparison table, or custom dashboard is better than plain text or voice.")
+                put("description", """Generates and renders an on-demand, interactive HTML/CSS/JS mini web-app in JarvisBrowser.
+MANDATORY: The 'html' field MUST be a COMPLETE, runnable HTML document (<!DOCTYPE html>.....</html>) with all CSS and JavaScript inlined.
+NO placeholders. NO truncation. NO "...rest of code here". Write EVERY line of code needed for the app to work.
+Use whenever a visual UI, physics simulation, comparison table, calculator, game, chart, or custom dashboard is better than plain text or voice.""")
                 put("parameters", JSONObject().apply {
                     put("type", "object")
                     put("properties", JSONObject().apply {
@@ -655,7 +658,7 @@ object GroqClient {
                         })
                         put("html", JSONObject().apply {
                             put("type", "string")
-                            put("description", "Complete self-contained HTML5 code (with inline styles, canvas, and script)")
+                            put("description", "COMPLETE self-contained HTML5 document. Must start with <!DOCTYPE html> and end with </html>. All CSS in <style> tags, all JS in <script> tags. Zero external CDN dependencies. No placeholders or truncation allowed.")
                         })
                         put("explanation_speech", JSONObject().apply {
                             put("type", "string")

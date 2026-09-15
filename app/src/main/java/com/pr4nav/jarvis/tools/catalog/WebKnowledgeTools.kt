@@ -24,8 +24,11 @@ object WebKnowledgeTools {
                     putExtra(SearchManager.QUERY, q)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                ctx.startActivity(intent)
-                ok("🔍 Searching web for \"$q\".", mapOf("query" to q))
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("🔍 Searching web for \"$q\".", mapOf("query" to q))
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No application available to perform web search.")
+                }
             }
         ))
 
@@ -40,8 +43,11 @@ object WebKnowledgeTools {
                 var url = args.optString("url", "")
                 if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://$url"
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                ok("🌐 Opening $url.", mapOf("url" to url))
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("🌐 Opening $url.", mapOf("url" to url))
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No browser available to open $url.")
+                }
             }
         ))
 
@@ -56,8 +62,11 @@ object WebKnowledgeTools {
                 val topic = args.optString("topic", "")
                 val url = "https://en.wikipedia.org/wiki/${Uri.encode(topic)}"
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                ok("📖 Opening Wikipedia for \"$topic\".")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("📖 Opening Wikipedia for \"$topic\".")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No browser available to open Wikipedia.")
+                }
             }
         ))
     }

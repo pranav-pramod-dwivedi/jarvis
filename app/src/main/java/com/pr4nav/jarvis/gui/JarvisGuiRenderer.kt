@@ -7,7 +7,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
-import com.pr4nav.jarvis.AgyWebActivity
+import com.pr4nav.jarvis.browser.JarvisBrowserActivity
+import com.pr4nav.jarvis.browser.JarvisBrowserAppManager
 import com.pr4nav.jarvis.capabilities.DeviceCapability
 import java.io.File
 
@@ -90,13 +91,16 @@ object JarvisGuiRenderer {
 
         // Write HTML to local cache and open in Web Activity
         try {
-            val file = File(context.cacheDir, "jarvis_dashboard.html")
-            file.writeText(html)
-            val intent = Intent(context, AgyWebActivity::class.java).apply {
-                putExtra("target_url", "file://${file.absolutePath}")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
+            val app = JarvisBrowserAppManager.createApp(
+                ctx = context,
+                appId = "system-dashboard",
+                title = "Hardware Metrics",
+                description = "Live System Dashboard",
+                html = html,
+                isTemporary = true,
+                icon = "📊"
+            )
+            JarvisBrowserActivity.launch(context, app.id)
             return "Rendered live hardware dashboard (CPU: $cores cores, RAM: $ramPct%, Storage: $storagePct%)."
         } catch (e: Exception) {
             return "RAM: $usedRamMb / $totalRamMb MB ($ramPct%) · Storage: $storagePct% · Battery: $batteryPct%"

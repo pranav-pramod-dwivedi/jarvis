@@ -79,37 +79,24 @@ object KiraClient {
     // ── Latency budgets per tier (probe-measured path: ~100ms TCP, ~1.2s HTTPS) ──
     // Fast models get small prompts + short completions; deep models get everything.
 
-    /** Max history turns per model: mini stays light, glm gets the full window. */
-    fun historyLimitFor(model: String): Int {
-        val m = model.lowercase()
-        return when {
-            m.contains("mini") -> 30
-            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 80
-            else -> 220
-        }
-    }
+    /** Max history turns: all models get the full window. */
+    fun historyLimitFor(model: String): Int = 220
 
-    /** Max completion tokens per model: short answers stop the server sooner. */
-    fun maxTokensFor(model: String): Int {
-        val m = model.lowercase()
-        return when {
-            m.contains("mini") -> 2048
-            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 4096
-            else -> MAX_COMPLETION_TOKENS
-        }
-    }
+    /** Max completion tokens: all models get the full 16384 token budget. */
+    fun maxTokensFor(model: String): Int = MAX_COMPLETION_TOKENS
 
-    /** Context-packet budget per model (chars). */
-    fun packetBudgetFor(model: String): Int {
-        val m = model.lowercase()
-        return when {
-            m.contains("mini") -> 6_000
-            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 14_000
-            else -> 26_000
-        }
-    }
+    /** Context-packet budget: all models get 128k chars (~32k tokens, safe for 1M window models). */
+    fun packetBudgetFor(model: String): Int = 128_000
 
     private val executor = Executors.newCachedThreadPool()
+
+    /** Active HTTP connection — stored so cancel() can call disconnect() on it immediately. */
+    @Volatile private var activeConn: HttpURLConnection? = null
+
+    fun cancelActiveRequest() {
+        try { activeConn?.disconnect() } catch (_: Exception) {}
+        activeConn = null
+    }
 
     data class ToolCallRecord(
         val iteration: Int,
@@ -757,18 +744,41 @@ object KiraClient {
             })
         })
 
+        // 6b. web_search (DuckDuckGo instant answers + scraping)
+        arr.put(JSONObject().apply {
+            put("type", "function")
+            put("function", JSONObject().apply {
+                put("name", "web_search")
+                put("description", "Search the web for current information, news, prices, facts, weather, or anything requiring real-time data beyond training knowledge. Returns top results with snippets.")
+                put("parameters", JSONObject().apply {
+                    put("type", "object")
+                    put("properties", JSONObject().apply {
+                        put("query", JSONObject().apply {
+                            put("type", "string")
+                            put("description", "The search query to look up on the web")
+                        })
+                    })
+                    put("required", JSONArray().put("query"))
+                })
+            })
+        })
+
         // 7. browser_render_app (JarvisBrowser dynamic on-demand UI)
         arr.put(JSONObject().apply {
             put("type", "function")
             put("function", JSONObject().apply {
                 put("name", "browser_render_app")
-                put("description", "Renders an interactive, dynamic HTML/CSS/JS mini web-app in JarvisBrowser surface for simulations, interactive charts, and tools.")
+                put("description", """Renders a complete, interactive, self-contained HTML5 mini web-app in the JarvisBrowser surface.
+MANDATORY: The 'html' field MUST be a COMPLETE, runnable HTML document (<!DOCTYPE html>.....</html>) with all CSS and JavaScript inlined.
+NO placeholders. NO truncation. NO "...rest of code here". Write EVERY line of code needed for the app to work.
+Use this for: interactive simulations, calculators, games, dashboards, visualizations, charts, tools, and any web UI request.
+The html MUST include: DOCTYPE, head (with viewport meta + complete CSS), body with all UI elements, and complete JavaScript logic.""")
                 put("parameters", JSONObject().apply {
                     put("type", "object")
                     put("properties", JSONObject().apply {
                         put("app_id", JSONObject().apply {
                             put("type", "string")
-                            put("description", "Unique alphanumeric identifier for the app")
+                            put("description", "Unique alphanumeric slug identifier for the app (e.g. 'todo-app', 'calc-1')")
                         })
                         put("title", JSONObject().apply {
                             put("type", "string")
@@ -776,7 +786,11 @@ object KiraClient {
                         })
                         put("html", JSONObject().apply {
                             put("type", "string")
-                            put("description", "Complete self-contained HTML5 code (with styles and scripts)")
+                            put("description", "COMPLETE self-contained HTML5 document. Must start with <!DOCTYPE html> and end with </html>. All CSS in <style> tags, all JS in <script> tags. Zero external CDN dependencies. No placeholders or truncation allowed.")
+                        })
+                        put("explanation_speech", JSONObject().apply {
+                            put("type", "string")
+                            put("description", "Short verbal description JARVIS speaks when launching the app (1-2 sentences)")
                         })
                     })
                     put("required", JSONArray().put("app_id").put("title").put("html"))
@@ -1146,7 +1160,7 @@ object KiraClient {
                         title = title,
                         description = "Autonomous UI generated by Kira AI",
                         html = html,
-                        isTemporary = true
+                        isTemporary = false
                     )
                     com.pr4nav.jarvis.browser.JarvisBrowserActivity.launch(context, app.id)
                     output = "Successfully launched dynamic UI in JarvisBrowser for $title ($appId)"
@@ -1167,6 +1181,57 @@ object KiraClient {
                 success = toolRes.success
                 exitCode = if (success) 0 else 1
                 output = if (toolRes.data != null) toolRes.data.toString() else (toolRes.error?.message ?: toolRes.status.name)
+            }
+            "web_search" -> {
+                val query = args.optString("query", "").trim()
+                command = "web_search: $query"
+                backend = "WEB"
+                try {
+                    val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+                    val url = java.net.URL("https://ddg-webapp-aagd.vercel.app/search?q=$encoded&max_results=5")
+                    val conn2 = url.openConnection() as java.net.HttpURLConnection
+                    conn2.connectTimeout = 8_000
+                    conn2.readTimeout = 15_000
+                    conn2.setRequestProperty("User-Agent", "JARVIS-Android/1.2")
+                    val code2 = conn2.responseCode
+                    if (code2 in 200..299) {
+                        val raw = conn2.inputStream.bufferedReader().use { it.readText() }
+                        // Parse JSON array of results
+                        val results = org.json.JSONArray(raw)
+                        val sb = StringBuilder()
+                        for (i in 0 until minOf(results.length(), 5)) {
+                            val r = results.optJSONObject(i) ?: continue
+                            val title = r.optString("title", "")
+                            val body = r.optString("body", r.optString("snippet", ""))
+                            val link = r.optString("href", r.optString("url", ""))
+                            if (title.isNotBlank()) sb.append("**$title**\n")
+                            if (body.isNotBlank()) sb.append(body.take(300)).append("\n")
+                            if (link.isNotBlank()) sb.append(link).append("\n")
+                            sb.append("\n")
+                        }
+                        output = if (sb.isNotEmpty()) sb.toString().trim() else "No results found for: $query"
+                        success = true
+                        exitCode = 0
+                    } else {
+                        // Fallback: try DuckDuckGo instant answer API
+                        val ddgUrl = java.net.URL("https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1")
+                        val ddgConn = ddgUrl.openConnection() as java.net.HttpURLConnection
+                        ddgConn.connectTimeout = 6_000
+                        ddgConn.readTimeout = 10_000
+                        val ddgRaw = ddgConn.inputStream.bufferedReader().use { it.readText() }
+                        val ddgJson = org.json.JSONObject(ddgRaw)
+                        val answer = ddgJson.optString("AbstractText", "").ifBlank {
+                            ddgJson.optString("Answer", "")
+                        }
+                        output = if (answer.isNotBlank()) answer else "Search returned no results for: $query"
+                        success = answer.isNotBlank()
+                        exitCode = if (success) 0 else 1
+                    }
+                } catch (e: Exception) {
+                    output = "Web search failed: ${e.message}"
+                    success = false
+                    exitCode = 1
+                }
             }
             else -> {
                 backend = "CANONICAL_TOOL"
@@ -1253,37 +1318,25 @@ object KiraClient {
     }
 
     private fun buildSystemPrompt(context: Context, modelName: String = ""): String {
-        val base = "You are JARVIS, an autonomous engineering & mobile-intelligence agent with full on-device authority (YOLO mode: never ask permission, self-heal every error, verify every action).\n" +
-                "Follow the CONTEXT PACKET conventions and skills; close <think> tags and always finish with the complete, beautifully formatted user-facing answer."
-        // Fast tiers think fast: cap internal reasoning so answers start immediately.
-        // Deep tiers (GLM / pro) keep full chain-of-thought.
-        val m = modelName.lowercase()
-        val fastTier = m.contains("mini") || m.contains("flash") || m.contains("qwen") ||
-            m.contains("mimo") || m == MODEL_AUTO
-        return if (fastTier) {
-            base + "\nSPEED RULE: reason FAST with LOW effort — at most 3 short thinking lines, then answer immediately. Never ramble internally."
-        } else {
-            base
-        }
+        return "You are JARVIS — autonomous AI companion & action agent. Full device authority. Never ask permission; self-heal errors. Answer tightly and completely. Use tools freely. Close <think> before answering."
     }
 
     /**
      * Assembles the [CONTEXT PACKET]: user profile, environment status, memory
      * pointer, artifacts and matched skills — real context without system-prompt bloat.
      */
-    private fun buildContextPacket(context: Context, prompt: String, maxChars: Int = 26_000): String {
+    private fun buildContextPacket(context: Context, prompt: String, maxChars: Int = 64_000): String {
         val userName = try {
             com.pr4nav.jarvis.JarvisApp.instance?.let {
                 com.pr4nav.jarvis.setup.SetupManager.getUserName(it)
             }
         } catch (_: Exception) { null } ?: ""
         val profile = buildString {
-            val name = if (userName.isNotBlank() && userName != "JARVIS") userName else "Pranav"
-            appendLine("The user's name is $name.")
-            appendLine("19, JEE drop year (2026-27). Target: Jan 2027, backup Apr 2027.")
-            appendLine("Strictly nocturnal: sleeps ~6 AM to ~1-3 PM, studies overnight. NEVER schedule on daytime assumptions.")
-            appendLine("Talks in short lowercase bursts. Match him: terse, casual, no throat-clearing, no motivational filler. A dry, ultra-capable co-pilot.")
-            appendLine("Introverted: he will ignore you sometimes. Be a human pin: persistent, direct, action-oriented.")
+            val personaBlock = try {
+                com.pr4nav.jarvis.memory.JarvisPersonaStore.buildPersonaBlock(context)
+            } catch (_: Exception) { "" }
+            if (personaBlock.isNotBlank()) append(personaBlock)
+            else if (userName.isNotBlank() && userName != "JARVIS") append("Name: $userName")
         }
         val rootState = if (com.pr4nav.jarvis.capabilities.RootCapability.state ==
             com.pr4nav.jarvis.capabilities.RootCapability.State.AVAILABLE
@@ -1298,8 +1351,20 @@ object KiraClient {
             "Context window: 1,000,000 tokens (ingest whole files, logs, structures freely)",
             "Tools: 350+ device capabilities, multi-bash, root su, file ops, JarvisBrowser mini-app engine (call tools via OpenAI tool_calls OR ```json {\"action\": ..., }``` blocks)"
         )
-        val memory = "Past sessions, JEE roadmaps and topic tables are archived in /sdcard/jarvis_sessions_context.txt. " +
-                "Use the `remember` tool or `read_file` to pull specifics on demand instead of guessing."
+        // Inject stored long-term memories so the model always knows what the user told it to remember
+        val storedMemories = try {
+            val items = com.pr4nav.jarvis.memory.JarvisMemoryStore.getAll(context)
+            if (items.isNotEmpty()) {
+                items.take(20).joinToString("\n") { "• ${it.key}: ${it.value}" }
+            } else ""
+        } catch (_: Exception) { "" }
+        val memory = buildString {
+            if (storedMemories.isNotBlank()) {
+                appendLine("User's stored memories (always use these):")
+                appendLine(storedMemories)
+            }
+            appendLine("Past sessions are archived in /sdcard/jarvis_sessions_context.txt. Use the `remember` tool to store new facts, `read_file` to retrieve past sessions.")
+        }.trim()
         return try {
             com.pr4nav.jarvis.context.SkillContextEngine.buildContextPacket(
                 context = context,
@@ -1321,15 +1386,8 @@ object KiraClient {
     /** Hard ceiling per model attempt: a hung request can never stall a turn forever. */
     const val ATTEMPT_DEADLINE_SEC = 100L
 
-    /** Tiered deadlines: fast models fail fast, deep models get room to think. */
-    fun deadlineFor(model: String): Long {
-        val m = model.lowercase()
-        return when {
-            m.contains("mini") -> 25L
-            m.contains("qwen") || m.contains("mimo") || m.contains("flash") -> 40L
-            else -> 90L
-        }
-    }
+    /** All models get 120s to complete — needed for 16k-token web app generation. */
+    fun deadlineFor(model: String): Long = 120L
 
     /** Socket-level stalls share one sick path — never cascade through them. */
     fun isTimeoutError(msg: String?): Boolean {
@@ -1512,14 +1570,14 @@ object KiraClient {
 
                 val conn = (URL(KIRA_CHAT_ENDPOINT).openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
-                    connectTimeout = 8_000
-                    readTimeout = 30_000
+                    connectTimeout = 15_000
+                    readTimeout = 120_000
                     doOutput = true
                     doInput = true
                     setRequestProperty("Content-Type", "application/json; charset=utf-8")
                     setRequestProperty("Authorization", "Bearer $apiKey")
                     setRequestProperty("User-Agent", "JARVIS-Android/1.2")
-                }
+                }.also { activeConn = it }
 
                 OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload.toString()) }
 
@@ -1536,6 +1594,7 @@ object KiraClient {
                 }
 
                 val rawResponse = conn.inputStream.bufferedReader().use { it.readText() }
+                activeConn = null
                 val json = JSONObject(rawResponse)
                 val choices = json.optJSONArray("choices")
                 if (choices == null || choices.length() == 0) {
@@ -1625,10 +1684,22 @@ object KiraClient {
                     } else {
                         "Task executed successfully."
                     }
-                    if (onEvent == null) onChunk?.invoke(finalResponseText)
-                    onEvent?.invoke(
-                        com.pr4nav.jarvis.chat.AgentStreamEvent.TextDelta(finalResponseText)
-                    )
+                    // Progressive word-by-word reveal so the UI shows text arriving live
+                    if (onEvent == null) {
+                        onChunk?.invoke(finalResponseText)
+                    } else {
+                        val words = finalResponseText.split(" ")
+                        val sb = StringBuilder()
+                        for ((idx, word) in words.withIndex()) {
+                            if (Thread.currentThread().isInterrupted) break
+                            sb.append(if (idx == 0) word else " $word")
+                            if (idx % 6 == 5 || idx == words.size - 1) {
+                                onEvent.invoke(com.pr4nav.jarvis.chat.AgentStreamEvent.TextDelta(sb.toString()))
+                                sb.clear()
+                                try { Thread.sleep(12) } catch (_: InterruptedException) { break }
+                            }
+                        }
+                    }
                     onEvent?.invoke(
                         com.pr4nav.jarvis.chat.AgentStreamEvent.ThinkingDone(System.currentTimeMillis() - t0)
                     )

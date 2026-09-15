@@ -39,6 +39,7 @@ import com.pr4nav.jarvis.TermuxBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val TERMUX_CHECK_VIDEO_URL =
     "https://cdn.dribbble.com/userupload/13830057/file/original-881cd859857eb90cd1819c08f52d9e22.mp4"
@@ -59,10 +60,28 @@ class TermuxCheckActivity : ComponentActivity() {
 
         // Run Termux background execution check
         lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                TermuxBridge.init(applicationContext)
-                Shell.termux("echo 'JARVIS_ALLOW_EXTERNAL_APPS_OK'", timeoutMs = 4000)
-            } catch (_: Exception) {}
+            val startTime = System.currentTimeMillis()
+            TermuxBridge.init(applicationContext)
+            val allowed = TermuxBridge.verifyExecution(timeoutMs = 3500L)
+            val elapsed = System.currentTimeMillis() - startTime
+            if (elapsed < 2400L) {
+                delay(2400L - elapsed)
+            }
+            withContext(Dispatchers.Main) {
+                if (allowed) {
+                    val intent = android.content.Intent(this@TermuxCheckActivity, com.pr4nav.jarvis.MainActivity::class.java).apply {
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                    finish()
+                } else {
+                    val intent = android.content.Intent(this@TermuxCheckActivity, com.pr4nav.jarvis.setup.TermuxPermissionFixActivity::class.java).apply {
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                    finish()
+                }
+            }
         }
 
         setContent { TermuxCheckScreen() }

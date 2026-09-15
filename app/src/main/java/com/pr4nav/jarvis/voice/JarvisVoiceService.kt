@@ -447,10 +447,10 @@ class JarvisVoiceService : Service() {
             },
             onDetectorDied = {
                 mainHandler.post {
-                    if (isRunning && currentState == VoiceState.IDLE) {
+                    if (isRunning && currentState == VoiceState.IDLE && !com.pr4nav.jarvis.system.GamingModeManager.isGamingModeActive(applicationContext)) {
                         Log.w(TAG, "AcousticWakeDetector thread ended unexpectedly; auto-reviving in 600ms...")
                         mainHandler.postDelayed({
-                            if (isRunning && currentState == VoiceState.IDLE) {
+                            if (isRunning && currentState == VoiceState.IDLE && !com.pr4nav.jarvis.system.GamingModeManager.isGamingModeActive(applicationContext)) {
                                 returnToIdleState("Acoustic detector revival")
                             }
                         }, 600L)
@@ -458,13 +458,12 @@ class JarvisVoiceService : Service() {
                 }
             }
         )
-        acquireAmbientWakeLock()
+        // Battery optimization: NO permanent background wake lock! AudioRecord streams natively in FGS.
         acousticDetector?.start()
     }
 
     private fun stopAcousticDetector() {
         try {
-            releaseAmbientWakeLock()
             acousticDetector?.stop()
             acousticDetector = null
         } catch (_: Exception) {}
@@ -802,34 +801,6 @@ class JarvisVoiceService : Service() {
         }
     }
 
-    private var ambientListenWakeLock: PowerManager.WakeLock? = null
-
-    private fun acquireAmbientWakeLock() {
-        try {
-            if (ambientListenWakeLock == null) {
-                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
-                ambientListenWakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "jarvis:ambient_acoustic")
-            }
-            if (ambientListenWakeLock?.isHeld != true) {
-                ambientListenWakeLock?.acquire()
-                Log.d(TAG, "Acquired ambient acoustic WakeLock")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Ambient WakeLock acquire error: ${e.message}")
-        }
-    }
-
-    private fun releaseAmbientWakeLock() {
-        try {
-            if (ambientListenWakeLock?.isHeld == true) {
-                ambientListenWakeLock?.release()
-                Log.d(TAG, "Released ambient acoustic WakeLock")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Ambient WakeLock release error: ${e.message}")
-        }
-    }
-
     private fun wakeUpScreen() {
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
@@ -973,6 +944,10 @@ class JarvisVoiceService : Service() {
         watchdogRunnable = object : Runnable {
             override fun run() {
                 try {
+                    if (com.pr4nav.jarvis.system.GamingModeManager.isGamingModeActive(applicationContext)) {
+                        mainHandler.postDelayed(this, 15000L)
+                        return
+                    }
                     val handsFree = VoiceAssistantPreferences.isHandsFreeEnabled(applicationContext)
                     if (isRunning && handsFree && !isCallActive && currentState != VoiceState.CALL_INTERRUPTED) {
                         if (currentState == VoiceState.IDLE) {

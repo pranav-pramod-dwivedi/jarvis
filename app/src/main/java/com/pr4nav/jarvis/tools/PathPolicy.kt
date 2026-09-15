@@ -29,13 +29,18 @@ object PathPolicy {
         return "/" + out.joinToString("/")
     }
 
+    private fun isWithin(path: String, base: String): Boolean {
+        val cleanBase = base.trimEnd('/')
+        return path == cleanBase || path.startsWith("$cleanBase/")
+    }
+
     fun readable(path: String): Boolean {
         if (path.startsWith("saf:/")) return true
         val p = normalize(path)
-        if (p.startsWith(TERMUX_HOME)) return true
-        if (p.startsWith(PRIMARY)) return true
-        if (p == "/sdcard" || p.startsWith("/sdcard/")) return true
-        if (p.startsWith(APP_DATA) || p.startsWith("/data/user/0/com.pr4nav.jarvis")) return true
+        if (isWithin(p, TERMUX_HOME)) return true
+        if (isWithin(p, PRIMARY)) return true
+        if (isWithin(p, "/sdcard")) return true
+        if (isWithin(p, APP_DATA) || isWithin(p, "/data/user/0/com.pr4nav.jarvis")) return true
         return false
     }
 

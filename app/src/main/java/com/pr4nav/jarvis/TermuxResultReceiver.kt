@@ -44,6 +44,18 @@ object ResultBus {
     const val KEY_ERRMSG = "errmsg"
 
     val listeners = CopyOnWriteArrayList<(TermuxResult) -> Unit>()
+
+    fun register(listener: (TermuxResult) -> Unit) {
+        listeners.add(listener)
+    }
+
+    fun unregister(listener: (TermuxResult) -> Unit) {
+        listeners.remove(listener)
+    }
+
+    fun clear() {
+        listeners.clear()
+    }
 }
 
 /** Receiver targeted by the PendingIntents we hand to Termux. */
@@ -99,6 +111,32 @@ object TermuxBridge {
 
     fun hasPermission(): Boolean =
         ctx?.let { androidx.core.content.ContextCompat.checkSelfPermission(it, PERM) } == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    @Volatile private var cachedExecutionWorking: Boolean? = null
+    @Volatile private var lastExecutionCheckTime: Long = 0L
+
+    fun isExecutionWorking(forceRecheck: Boolean = false): Boolean {
+        if (!hasPermission()) return false
+        val now = System.currentTimeMillis()
+        if (!forceRecheck && cachedExecutionWorking != null && (now - lastExecutionCheckTime < 15_000L)) {
+            return cachedExecutionWorking == true
+        }
+        return verifyExecution(timeoutMs = 2500L)
+    }
+
+    fun verifyExecution(timeoutMs: Long = 3000L): Boolean {
+        if (!hasPermission()) {
+            cachedExecutionWorking = false
+            android.util.Log.w("TermuxBridge", "verifyExecution: RUN_COMMAND permission not granted")
+            return false
+        }
+        val r = Shell.termuxRaw("echo 'JARVIS_ALLOW_EXTERNAL_APPS_OK'", timeoutMs = timeoutMs)
+        val ok = r.rc == 0 && r.out.contains("JARVIS_ALLOW_EXTERNAL_APPS_OK")
+        android.util.Log.d("TermuxBridge", "verifyExecution: rc=${r.rc}, out='${r.out.trim()}', err='${r.err.trim()}', timedOut=${r.timedOut}, ok=$ok")
+        cachedExecutionWorking = ok
+        lastExecutionCheckTime = System.currentTimeMillis()
+        return ok
+    }
 
     fun deliver(r: TermuxResult) { pending[r.reqId]?.offer(r) }
 
@@ -187,25 +225,8 @@ object Shell {
      * falling back smoothly to root su.
      */
     fun agy(prompt: String, model: String? = null, timeoutMs: Long = 45_000): Res {
-        val escapedPrompt = prompt.replace("\"", "\\\"").replace("'", "'\\''")
-        val sanitizedModel = com.pr4nav.jarvis.agy.AgyManager.sanitizeModel(model)
-        val agyCmd = "agy -p \"$escapedPrompt\" --continue --dangerously-skip-permissions --model \"$sanitizedModel\""
-        val wrapped = wrapUbuntu(agyCmd)
-
-        // Try TermuxBridge IPC first
-        val termuxRes = termux(wrapped, timeoutMs, inUbuntu = false, viaName = "termux-agy")
-        if (termuxRes.rc == 0 && termuxRes.out.isNotBlank()) {
-            return termuxRes
-        }
-
-        // Fallback to root su directly if TermuxBridge timed out or is unavailable
-        val rootRes = root(wrapped, timeoutMs)
-        return if (rootRes.rc == 0 && rootRes.out.isNotBlank()) {
-            Res(rootRes.out, rootRes.err, rootRes.rc, rootRes.ms, rootRes.timedOut, "root-agy")
-        } else {
-            // Return whichever had more useful info
-            if (termuxRes.out.isNotBlank()) termuxRes else rootRes
-        }
+        // AGY disabled per configuration; primary models are Kira and Groq
+        return Res("", "AGY engine is disabled. Kira AI and Groq are active primary models.", -1, 0L, false, "disabled")
     }
 
     fun termuxRaw(command: String, timeoutMs: Long = 30_000): Res {
@@ -254,9 +275,10 @@ object Shell {
     }
 
     @Volatile private var reachableCache: Boolean? = null
-    fun termuxReachable(): Boolean {
+    fun termuxReachable(forceRecheck: Boolean = false): Boolean {
+        if (forceRecheck) reachableCache = null
         reachableCache?.let { return it }
-        val r = termux("echo OK", 10_000)
+        val r = termuxRaw("echo OK", 3_000)
         val ok = r.rc == 0 && r.out.contains("OK")
         reachableCache = ok
         return ok
@@ -275,6 +297,30 @@ object SessionState {
  * owned, audited, and idempotent — not arbitrary user input).
  */
 object CmdGuard {
+    @Volatile
+    var yoloMode: Boolean = false // Default false for unit test isolation; enabled on device in JarvisApp
+
+    fun isYoloEnabled(context: android.content.Context? = null): Boolean {
+        if (yoloMode) return true
+        if (context != null) {
+            try {
+                val prefs = context.getSharedPreferences("jarvis_prefs", android.content.Context.MODE_PRIVATE)
+                return prefs.getBoolean("yolo_dangerously_skip_permissions", false)
+            } catch (_: Exception) {}
+        }
+        return false
+    }
+
+    fun setYoloEnabled(context: android.content.Context?, enabled: Boolean) {
+        yoloMode = enabled
+        try {
+            context?.getSharedPreferences("jarvis_prefs", android.content.Context.MODE_PRIVATE)
+                ?.edit()
+                ?.putBoolean("yolo_dangerously_skip_permissions", enabled)
+                ?.apply()
+        } catch (_: Exception) {}
+    }
+
     private val patterns = listOf(
         Regex("""\brm\b"""), Regex("""\brmdir\b"""), Regex("""\bunlink\b"""),
         Regex("""\bshred\b"""), Regex("""\bdd\b"""), Regex("""\bmkfs"""), Regex("""\btruncate\b"""),
@@ -289,6 +335,7 @@ object CmdGuard {
 
     /** Returns a refusal reason if the command is destructive, null if allowed. */
     fun check(command: String): String? {
+        if (yoloMode) return null
         val reason = patterns.firstOrNull { it.containsMatchIn(command) }?.pattern
             ?: return null
         return "Blocked: matches destructive pattern /$reason/\n" +

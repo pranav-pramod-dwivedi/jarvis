@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import com.pr4nav.jarvis.R
+import com.pr4nav.jarvis.companion.JarvisProactiveEngine
 
 class VoiceSettingsActivity : AppCompatActivity() {
 
@@ -122,6 +123,12 @@ class VoiceSettingsActivity : AppCompatActivity() {
         }
 
         btnChangeVoice.setOnClickListener { showVoicePickerDialog() }
+
+        val switchProactive = findViewById<SwitchCompat>(R.id.switch_proactive_messages)
+        switchProactive?.isChecked = JarvisProactiveEngine.isEnabled(this)
+        switchProactive?.setOnCheckedChangeListener { _, checked ->
+            JarvisProactiveEngine.setEnabled(this, checked)
+        }
     }
 
     private fun refreshCloudVoice() {

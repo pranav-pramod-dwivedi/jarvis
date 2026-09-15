@@ -570,6 +570,8 @@ fun JarvisMainApp(
     val thinkingBuffer = remember { StringBuilder() }
     var activeJob by remember { mutableStateOf<Job?>(null) }
     var lastSubmittedPrompt by remember { mutableStateOf("") }
+    // Monotonic turn id: callbacks from an interrupted turn are dropped.
+    var turnSeq by remember { mutableStateOf(0) }
 
     // Active execution mode
     var currentMode by remember {
@@ -760,6 +762,19 @@ fun JarvisMainApp(
         JarvisSessionManager.appendMessage(context, currentSession, jarvisMsg)
         sessionMessages = sessionMessages + jarvisMsg
 
+        // Auto-compact on reaching the context limit.
+        if (com.pr4nav.jarvis.context.SessionCompactor.needsCompact(currentSession.messages)) {
+            val before = currentSession.messages.size
+            val compacted = com.pr4nav.jarvis.context.SessionCompactor.compact(currentSession.messages)
+            currentSession.messages.clear()
+            currentSession.messages.addAll(compacted)
+            try {
+                JarvisSessionManager.saveSession(context, currentSession)
+            } catch (_: Exception) { }
+            sessionMessages = compacted.toList()
+            postSystemNote("Auto-compact: $before → ${compacted.size} messages (context limit reached)")
+        }
+
         isWorking = false
         liveStreamingText = ""
         liveThinkingSteps = emptyList()
@@ -773,6 +788,15 @@ fun JarvisMainApp(
     fun dispatchCommand(prompt: String, isFromVoice: Boolean = false) {
         val trimmed = prompt.trim()
         if (trimmed.isBlank()) return
+
+        // Interrupt: a new message always kills the running turn. Stale
+        // callbacks carry the old sequence id and are ignored on arrival.
+        turnSeq++
+        val mySeq = turnSeq
+        try {
+            activeJob?.cancel()
+        } catch (_: Exception) { }
+        activeJob = null
 
         // ── AUTOMATIC NEW SESSION CREATION ──
         // When launching a prompt from Explore or Voice, if currentSession already has messages,
@@ -807,6 +831,24 @@ fun JarvisMainApp(
 
         // ── Built-in Developer Commands from AgentActivity ──
         when {
+            lower == "/compact" -> {
+                val before = currentSession.messages.size
+                val compacted = com.pr4nav.jarvis.context.SessionCompactor.compact(currentSession.messages)
+                currentSession.messages.clear()
+                currentSession.messages.addAll(compacted)
+                com.pr4nav.jarvis.session.JarvisSessionManager.saveSession(context, currentSession)
+                sessionMessages = compacted.toList()
+                sessionsList = com.pr4nav.jarvis.session.JarvisSessionManager.listSessions(context)
+                val msg = SessionMessage(
+                    sender = "agent",
+                    text = "Compacted $before → ${compacted.size} messages. Older context condensed into the summary above; recent turns kept.",
+                    isSuccess = true
+                )
+                com.pr4nav.jarvis.session.JarvisSessionManager.appendMessage(context, currentSession, msg)
+                sessionMessages = sessionMessages + msg
+                return
+            }
+
             lower.startsWith("/ui") || lower.startsWith("make an ui") || lower.startsWith("make a ui") ||
             lower.startsWith("create ui") || lower.startsWith("generate ui") -> {
                 val uiPrompt = when {
@@ -850,8 +892,7 @@ fun JarvisMainApp(
                 return
             }
 
-            lower == "help" -> {
-                val msg = SessionMessage(
+            lower == "help" -> {                val msg = SessionMessage(
                     sender = "agent",
                     text = "Reference loaded.",
                     steps = listOf(
@@ -944,6 +985,7 @@ fun JarvisMainApp(
                     }
                     val r = Shell.termux(arg, 60_000)
                     withContext(Dispatchers.Main) {
+                        if (mySeq != turnSeq) return@withContext
                         isWorking = false
                         val outText = if (r.out.isNotBlank()) r.out.take(1000) else if (r.err.isNotBlank()) r.err.take(500) else "(no output)"
                         val msg = SessionMessage(
@@ -990,6 +1032,7 @@ fun JarvisMainApp(
                 context = context,
                 rawQuery = trimmed,
                 onStatus = { status ->
+                    if (mySeq != turnSeq) return@execute
                     if (status.isNotBlank() && !status.contains("null", ignoreCase = true)) {
                         scope.launch(Dispatchers.Main) {
                             val clean = ThinkingSanitizer.cleanLine(status, 90)
@@ -1002,6 +1045,7 @@ fun JarvisMainApp(
                     }
                 },
                 onChunk = { chunk ->
+                    if (mySeq != turnSeq) return@execute
                     if (chunk.isNotBlank() && !chunk.equals("null", ignoreCase = true) && !chunk.equals("null null", ignoreCase = true)) {
                         scope.launch(Dispatchers.Main) {
                             accumulatedChunks.append(chunk)
@@ -1011,6 +1055,7 @@ fun JarvisMainApp(
                 },
                 onResult = { res ->
                     scope.launch(Dispatchers.Main) {
+                        if (mySeq != turnSeq) return@launch
                         try {
                             appendAgentResult(res, accumulatedChunks.toString(), intermediateSteps.toList())
                         } catch (e: Exception) {
@@ -1034,6 +1079,7 @@ fun JarvisMainApp(
                     }
                 },
                 onEvent = { ev ->
+                    if (mySeq != turnSeq) return@execute
                     when (ev) {
                         is AgentStreamEvent.ThinkingDelta -> scope.launch(Dispatchers.Main) {
                             thinkingBuffer.append(ev.text.trim()).append("\n\n")

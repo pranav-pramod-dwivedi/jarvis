@@ -283,6 +283,95 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- Kira AI Platform Section (Primary Chat & Code Engine) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="#131B2B"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="✨ KIRA AI PLATFORM (PRIMARY DEFAULT ENGINE)"
+                android:textColor="#38BDF8"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/kira_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Status: Free Cascade Active (glm-5.3-free) ✓"
+                android:textColor="#10B981"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/kira_cascade_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Cascade Priority: glm-5.3-free ➔ mimo-v2.5-free ➔ qwen3.8-flash-free"
+                android:textColor="#38BDF8"
+                android:textSize="11sp" />
+
+            <EditText
+                android:id="@+id/input_kira_api_key"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
+                android:background="#0F172A"
+                android:fontFamily="monospace"
+                android:hint="Kira API Key (Bearer ...)"
+                android:inputType="textPassword"
+                android:paddingHorizontal="10dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#64748B"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btn_save_kira"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#0284C7"
+                    android:text="SAVE KIRA KEY"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btn_select_kira_model"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:backgroundTint="#334155"
+                    android:text="MODEL: GLM-5.3"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btn_test_kira"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:backgroundTint="#10B981"
+                    android:text="TEST KIRA CASCADE"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- Connected Services List -->
         <TextView
             android:layout_width="match_parent"

@@ -98,4 +98,28 @@ class UserResponseSanitizerTest {
         assertEquals(com.pr4nav.jarvis.response.TerminationStatus.FINAL_ANSWER, resp.status)
         assertFalse(resp.isError)
     }
+
+    @Test
+    fun testStripThinking() {
+        // Standard closed think tag
+        val standard = "<think>Let me reason about this.\n2+2 is 4.</think>The result is 4."
+        val (trace1, text1) = UserResponseSanitizer.stripThinking(standard)
+        assertEquals("The result is 4.", text1)
+        assertTrue(trace1.contains("2+2 is 4."))
+
+        // Alternate tags
+        val altTags = "<thought>Thinking...</thought><reasoning>Deep dive</reasoning>Done successfully."
+        val (_, text2) = UserResponseSanitizer.stripThinking(altTags)
+        assertEquals("Done successfully.", text2)
+
+        // Unclosed think tag
+        val unclosed = "<think>Calculating in progress..."
+        val (trace3, text3) = UserResponseSanitizer.stripThinking(unclosed)
+        assertTrue(trace3.contains("Calculating in progress"))
+
+        // Answer trapped inside think tags with empty outer body
+        val trapped = "<think>The user wants to know the speed of light.\nTherefore, the speed of light is approximately 299,792,458 m/s.</think>"
+        val (_, text4) = UserResponseSanitizer.stripThinking(trapped)
+        assertTrue("Must extract answer from thinking", text4.contains("299,792,458"))
+    }
 }

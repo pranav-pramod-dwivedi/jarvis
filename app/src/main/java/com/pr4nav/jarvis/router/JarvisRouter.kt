@@ -464,11 +464,20 @@ object JarvisRouter {
             userRequest = query,
             onSuccess = { translatedCall ->
                 emit(ActivityState.EXECUTING, "Executing translated command [${translatedCall.tool}]…")
-                val toolRes = CanonicalToolRegistry.execute(context, translatedCall.tool, translatedCall.args)
-                if (toolRes.success) {
-                    com.pr4nav.jarvis.context.ContextManager.updateToolContext(translatedCall.tool, translatedCall.args)
+                val validation = com.pr4nav.jarvis.tools.ToolValidator.validate(context, translatedCall.tool, translatedCall.args, query)
+                val toolRes: ToolResult
+                val synthesized: String
+                if (validation is com.pr4nav.jarvis.tools.ValidationResult.Valid) {
+                    toolRes = CanonicalToolRegistry.execute(context, translatedCall.tool, translatedCall.args)
+                    if (toolRes.success) {
+                        com.pr4nav.jarvis.context.ContextManager.updateToolContext(translatedCall.tool, translatedCall.args)
+                    }
+                    synthesized = AnswerSynthesizer.synthesize(query, translatedCall.tool, toolRes.data as? JSONObject, AnswerSynthesizer.determineResponseMode(query, classification.category.name))
+                } else {
+                    val rej = validation as com.pr4nav.jarvis.tools.ValidationResult.Rejected
+                    toolRes = ToolResult.failure(rej.reasonCode, rej.error.message)
+                    synthesized = rej.error.message
                 }
-                val synthesized = AnswerSynthesizer.synthesize(query, translatedCall.tool, toolRes.data as? JSONObject, AnswerSynthesizer.determineResponseMode(query, classification.category.name))
                 val sanitized = UserResponseSanitizer.sanitize(synthesized, query)
                 val speech = UserResponseSanitizer.sanitizeForSpeech(synthesized, query)
                 emit(ActivityState.DONE, "Command executed via translator")

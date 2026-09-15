@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import com.pr4nav.jarvis.DeviceCommandHandler
 import com.pr4nav.jarvis.Fs
-import com.pr4nav.jarvis.OpenCodeActivity
 import com.pr4nav.jarvis.Shell
 import com.pr4nav.jarvis.capabilities.AudioCapability
 import com.pr4nav.jarvis.capabilities.DeviceCapability
@@ -168,7 +167,16 @@ object NeedleExecutor {
 
                 "file.delete" -> {
                     val path = args["path"] as? String ?: ""
-                    "⚠️ [Safety Gate] Destructive operation on $path requires confirmation."
+                    if (com.pr4nav.jarvis.CmdGuard.isYoloEnabled()) {
+                        try {
+                            Fs.delete(path)
+                            "🗑️ Deleted $path."
+                        } catch (e: Exception) {
+                            "Failed to delete $path: ${e.message}"
+                        }
+                    } else {
+                        "⚠️ [Safety Gate] Destructive operation on $path requires confirmation."
+                    }
                 }
 
                 "app.launch", "open_app" -> {
@@ -184,11 +192,7 @@ object NeedleExecutor {
                 }
 
                 "opencode.open" -> {
-                    val intent = Intent(context, OpenCodeActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(intent)
-                    "🤖 Opening OpenCode autonomous coding workspace."
+                    "🤖 Kira AI is active as your primary coding engine. Ask me any coding or development query directly."
                 }
 
                 "gui.show_dashboard" -> {

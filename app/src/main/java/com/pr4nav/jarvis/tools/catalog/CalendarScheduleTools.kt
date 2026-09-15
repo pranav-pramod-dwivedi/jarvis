@@ -30,19 +30,18 @@ object CalendarScheduleTools {
                 val loc = args.optString("location", "")
                 val notes = args.optString("notes", "")
 
-                try {
-                    val intent = Intent(Intent.ACTION_INSERT)
-                        .setData(CalendarContract.Events.CONTENT_URI)
-                        .putExtra(CalendarContract.Events.TITLE, title)
-                        .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
-                        .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endMs)
-                        .putExtra(CalendarContract.Events.EVENT_LOCATION, loc)
-                        .putExtra(CalendarContract.Events.DESCRIPTION, notes)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    ctx.startActivity(intent)
+                val intent = Intent(Intent.ACTION_INSERT)
+                    .setData(CalendarContract.Events.CONTENT_URI)
+                    .putExtra(CalendarContract.Events.TITLE, title)
+                    .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
+                    .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endMs)
+                    .putExtra(CalendarContract.Events.EVENT_LOCATION, loc)
+                    .putExtra(CalendarContract.Events.DESCRIPTION, notes)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
                     ok("📆 Created calendar event: \"$title\".", mapOf("title" to title))
-                } catch (e: Exception) {
-                    CatalogSchemaHelper.fail("CALENDAR_ERROR", e.message ?: "Failed to create event")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No calendar application available to create event.")
                 }
             }
         ))
@@ -55,8 +54,11 @@ object CalendarScheduleTools {
                 val ms = args.optLong("timestampMs", System.currentTimeMillis())
                 val builder = CalendarContract.CONTENT_URI.buildUpon().appendPath("time").appendPath(ms.toString())
                 val intent = Intent(Intent.ACTION_VIEW).setData(builder.build()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                ok("📆 Opening Calendar schedule.")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("📆 Opening Calendar schedule.")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No calendar application available to view schedule.")
+                }
             }
         ))
 
@@ -93,8 +95,11 @@ object CalendarScheduleTools {
                     .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
                     .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endMs)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                ok("📆 Scheduled 30-min meeting: \"$title\".")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("📆 Scheduled 30-min meeting: \"$title\".")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No calendar application available.")
+                }
             }
         ))
     }

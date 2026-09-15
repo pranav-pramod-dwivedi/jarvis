@@ -23,7 +23,7 @@ object SkillContextEngine {
 
     private const val TAG = "SkillContextEngine"
     private const val DEVICE_SKILLS_DIR = "JARVIS/skills"
-    private const val MAX_PACKET_CHARS = 26_000
+    private const val MAX_PACKET_CHARS = 64_000
 
     data class SkillPack(
         val id: String,

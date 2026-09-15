@@ -80,13 +80,6 @@ class AgentActivity : AppCompatActivity() {
             cancelCurrentTask()
         }
 
-        findViewById<View>(R.id.btn_force_stop)?.setOnClickListener {
-            com.pr4nav.jarvis.system.GamingModeManager.forceStopAll(this)
-            cancelCurrentTask()
-            hideThinking()
-            Toast.makeText(this, "All background processes force stopped. 0% CPU & battery active.", Toast.LENGTH_SHORT).show()
-        }
-
         voiceEngine = JarvisVoiceEngine.getInstance(this)
 
         findViewById<View>(R.id.btn_back)?.setOnClickListener { finish() }
@@ -132,15 +125,7 @@ class AgentActivity : AppCompatActivity() {
             findViewById<ImageButton>(R.id.agent_send)?.setImageResource(R.drawable.ic_send)
             findViewById<ImageButton>(R.id.btn_voice_mic)?.setImageResource(R.drawable.ic_mic)
         } catch (_: Exception) { }
-        // Tab + chip icons via start drawables.
-        setStartIcon(R.id.tab_files, R.drawable.ic_folder)
-        setStartIcon(R.id.tab_services, R.drawable.ic_bolt)
-        setStartIcon(R.id.tab_playground, R.drawable.ic_tool)
-        setStartIcon(R.id.tab_commander, R.drawable.ic_brain)
-        setStartIcon(R.id.tab_terminal, R.drawable.ic_terminal)
-        setStartIcon(R.id.tab_diagnostics, R.drawable.ic_window)
-        setStartIcon(R.id.tab_gaming_mode, R.drawable.ic_bolt)
-        setStartIcon(R.id.tab_artifacts, R.drawable.ic_layers)
+        // Prompt chip icons
         setStartIcon(R.id.prompt_card_1, R.drawable.ic_phone)
         setStartIcon(R.id.prompt_card_2, R.drawable.ic_speaker)
         setStartIcon(R.id.prompt_card_3, R.drawable.ic_search)
@@ -223,6 +208,15 @@ class AgentActivity : AppCompatActivity() {
                 } else {
                     renderHistoryAgent(m)
                 }
+            }
+        }
+        // Restore conversation history into the in-memory context so the model
+        // has continuity after a restart or session switch
+        com.pr4nav.jarvis.context.ConversationalContext.clear()
+        val pairs = session.messages.zipWithNext()
+        for ((a, b) in pairs) {
+            if (a.sender == "user" && b.sender == "agent" && a.text.isNotBlank() && b.text.isNotBlank()) {
+                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(a.text, b.text)
             }
         }
         scrollToBottom()
@@ -551,38 +545,22 @@ class AgentActivity : AppCompatActivity() {
     }
 
     private fun setupQuickNavTabs() {
-        findViewById<View>(R.id.tab_files)?.setOnClickListener {
-            startActivity(Intent(this, BrowserActivity::class.java))
-        }
-        findViewById<View>(R.id.tab_artifacts)?.setOnClickListener {
-            startActivity(Intent(this, ArtifactsActivity::class.java))
-        }
-        findViewById<View>(R.id.tab_services)?.setOnClickListener {
-            startActivity(Intent(this, ConnectedServicesActivity::class.java))
-        }
-        findViewById<View>(R.id.tab_playground)?.setOnClickListener {
-            startActivity(Intent(this, ToolPlaygroundActivity::class.java))
-        }
-        findViewById<View>(R.id.tab_commander)?.setOnClickListener {
-            startActivity(Intent(this, CommanderActivity::class.java))
-        }
-        findViewById<View>(R.id.tab_terminal)?.setOnClickListener {
-            startActivity(Intent(this, TerminalActivity::class.java))
-        }
-        findViewById<View>(R.id.tab_diagnostics)?.setOnClickListener {
-            startActivity(Intent(this, DiagnosticsActivity::class.java))
-        }
-        findViewById<View>(R.id.tab_gaming_mode)?.setOnClickListener {
-            com.pr4nav.jarvis.system.GamingModeManager.forceStopAll(this)
-        }
+        // Dev tabs removed from main chat UI — accessible via the pages hub button instead
     }
 
     private fun setupPromptCards() {
-        findViewById<TextView>(R.id.prompt_card_1)?.setOnClickListener { submit("Call Akhil") }
-        findViewById<TextView>(R.id.prompt_card_2)?.setOnClickListener { submit("Play chill music") }
-        findViewById<TextView>(R.id.prompt_card_3)?.setOnClickListener { submit("Take me home") }
-        findViewById<TextView>(R.id.prompt_card_4)?.setOnClickListener { submit("Take a screenshot") }
-        findViewById<TextView>(R.id.prompt_card_5)?.setOnClickListener { submit("Find my recent downloads") }
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        val suggestions = when {
+            hour in 11..15 -> listOf("What's the weather?", "Set a timer", "Play music", "Take a screenshot", "Battery level")
+            hour in 16..21 -> listOf("Play chill music", "Take me home", "Set a reminder", "Recent downloads", "Take a screenshot")
+            else           -> listOf("Good night note", "Set alarm", "Play music", "Battery level", "Take a screenshot")
+        }
+        val ids = listOf(R.id.prompt_card_1, R.id.prompt_card_2, R.id.prompt_card_3, R.id.prompt_card_4, R.id.prompt_card_5)
+        ids.forEachIndexed { i, id ->
+            val tv = findViewById<android.widget.TextView>(id)
+            tv?.text = suggestions.getOrElse(i) { "" }
+            tv?.setOnClickListener { submit(suggestions.getOrElse(i) { "" }) }
+        }
     }
 
     private fun showAllPagesDialog() {
@@ -712,6 +690,13 @@ class AgentActivity : AppCompatActivity() {
                     text = text
                 )
             )
+            // Auto-title: use first user message as the session title (like Claude/ChatGPT)
+            if (currentSession.messages.size <= 2 && currentSession.title.matches(Regex("\\d{2} .+ \\d{4}, .+"))) {
+                val autoTitle = text.trim().take(48).let { if (it.length == 48) "$it…" else it }
+                currentSession.title = autoTitle
+                com.pr4nav.jarvis.session.JarvisSessionManager.saveSession(this, currentSession)
+                runOnUiThread { txtSessionTitle.text = autoTitle }
+            }
         }
     }
 
@@ -815,6 +800,18 @@ class AgentActivity : AppCompatActivity() {
 
     private fun submit(q: String) {
         if (q.isEmpty()) return
+        // Interrupt: a new message silently kills the running turn (stale
+        // callbacks already check activeTaskId and drop themselves).
+        try {
+            activeRenderer?.cancel()
+        } catch (_: Exception) { }
+        activeRenderer = null
+        try {
+            activeExecutionThread?.interrupt()
+        } catch (_: Exception) { }
+        activeExecutionThread = null
+        voiceEngine?.stopSpeaking()
+        hideThinking()
         lastSubmittedPrompt = q
         isCurrentTaskCancelled = false
         val taskId = java.util.UUID.randomUUID().toString()

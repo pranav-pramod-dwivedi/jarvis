@@ -42,6 +42,12 @@ object AgentBubbles {
                 topMargin = ChatUi.dp(ctx, 10)
                 marginStart = ChatUi.dp(ctx, 60)
             }
+            setOnLongClickListener {
+                val clipboard = it.context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("JARVIS response", text))
+                android.widget.Toast.makeText(it.context, "Copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                true
+            }
         }
     }
 
@@ -67,6 +73,13 @@ object AgentBubbles {
             }
         }
         card.addView(Markdown.renderMessage(ctx, markdown))
+        card.isLongClickable = true
+        card.setOnLongClickListener {
+            val clipboard = it.context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("JARVIS response", markdown))
+            android.widget.Toast.makeText(it.context, "Copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+            true
+        }
         if (!caption.isNullOrBlank()) {
             val cap = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL

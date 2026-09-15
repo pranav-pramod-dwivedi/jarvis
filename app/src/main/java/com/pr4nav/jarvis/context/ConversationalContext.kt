@@ -40,8 +40,7 @@ object ConversationalContext {
 
     fun getRecentTurns(limit: Int = 50): List<Pair<String, String>> {
         val recent = synchronized(turnHistory) {
-            val valid = turnHistory.filter { System.currentTimeMillis() - it.timestamp < 6 * 60 * 60 * 1000L }
-            valid.takeLast(limit)
+            turnHistory.takeLast(limit)  // No TTL filter — session loaded from disk covers restart gaps
         }
         val list = mutableListOf<Pair<String, String>>()
         for (turn in recent) {

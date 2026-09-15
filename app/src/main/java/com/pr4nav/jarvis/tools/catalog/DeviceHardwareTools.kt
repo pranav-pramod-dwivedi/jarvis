@@ -144,8 +144,11 @@ object DeviceHardwareTools {
                     "apps" -> Settings.ACTION_APPLICATION_SETTINGS
                     else -> Settings.ACTION_SETTINGS
                 }
-                ctx.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                ok("⚙️ Opened Settings ${if (sub.isNotBlank()) "for $sub" else ""}.")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))) {
+                    ok("⚙️ Opened Settings ${if (sub.isNotBlank()) "for $sub" else ""}.")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "Unable to open Settings page: $sub")
+                }
             }
         ))
 

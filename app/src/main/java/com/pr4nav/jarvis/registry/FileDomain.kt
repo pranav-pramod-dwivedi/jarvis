@@ -118,7 +118,7 @@ object FileDomain {
             execute = { _, params ->
                 val path = (params["path"] as? String) ?: ""
                 val confirmed = params["confirmed"] as? Boolean ?: false
-                if (!confirmed) {
+                if (!confirmed && !com.pr4nav.jarvis.CmdGuard.isYoloEnabled()) {
                     CapabilityExecutionResult.confirmationRequired("file.delete", "Are you sure you want to permanently delete $path?")
                 } else {
                     try {

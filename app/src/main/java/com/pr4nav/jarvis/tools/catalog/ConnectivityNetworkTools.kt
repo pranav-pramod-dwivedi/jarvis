@@ -18,8 +18,11 @@ object ConnectivityNetworkTools {
             argumentSchema = schema(prop("state", "boolean", "Optional true/false state")),
             execute = { ctx, _ ->
                 val intent = Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                ok("📶 Opened Wi-Fi settings.")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("📶 Opened Wi-Fi settings.")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "Unable to open Wi-Fi settings.")
+                }
             }
         ))
 
@@ -39,8 +42,11 @@ object ConnectivityNetworkTools {
             argumentSchema = schema(),
             execute = { ctx, _ ->
                 val intent = Intent(Settings.ACTION_WIRELESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                ok("📶 Opened Hotspot & Wireless settings.")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("📶 Opened Hotspot & Wireless settings.")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "Unable to open Hotspot settings.")
+                }
             }
         ))
 
@@ -50,8 +56,11 @@ object ConnectivityNetworkTools {
             argumentSchema = schema(),
             execute = { ctx, _ ->
                 val intent = Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                ok("✈️ Opened Airplane Mode settings.")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("✈️ Opened Airplane Mode settings.")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "Unable to open Airplane Mode settings.")
+                }
             }
         ))
     }

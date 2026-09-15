@@ -62,6 +62,7 @@ class TermuxPermissionFixActivity : ComponentActivity() {
                         val res = com.pr4nav.jarvis.Shell.termux("echo 'JARVIS_ALLOW_EXTERNAL_APPS_OK'", timeoutMs = 3500)
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                             if (res.rc == 0 && res.out.contains("JARVIS_ALLOW_EXTERNAL_APPS_OK")) {
+                                Toast.makeText(this@TermuxPermissionFixActivity, "Termux bridge verified! Launching JARVIS…", Toast.LENGTH_SHORT).show()
                                 SetupManager.setSetupCompleted(this@TermuxPermissionFixActivity, true)
                                 val intent = android.content.Intent(this@TermuxPermissionFixActivity, com.pr4nav.jarvis.MainActivity::class.java).apply {
                                     addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -69,13 +70,7 @@ class TermuxPermissionFixActivity : ComponentActivity() {
                                 startActivity(intent)
                                 finish()
                             } else {
-                                Toast.makeText(this@TermuxPermissionFixActivity, "Termux verified. Launching JARVIS…", Toast.LENGTH_SHORT).show()
-                                SetupManager.setSetupCompleted(this@TermuxPermissionFixActivity, true)
-                                val intent = android.content.Intent(this@TermuxPermissionFixActivity, com.pr4nav.jarvis.MainActivity::class.java).apply {
-                                    addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                startActivity(intent)
-                                finish()
+                                Toast.makeText(this@TermuxPermissionFixActivity, "Termux is still blocked. Please run the command in Termux and reload settings, or tap Continue anyway.", Toast.LENGTH_LONG).show()
                             }
                         }
                     }

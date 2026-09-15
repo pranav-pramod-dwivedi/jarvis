@@ -123,7 +123,7 @@ fun SetupFlowScreen(onFlowComplete: () -> Unit) {
                 delay(3200L - stage1Elapsed)
             }
 
-            // --- 2. Fast Fade Out Page 1 (300ms) ---
+            // --- 2. Fast Fade Out Page 1 (300ms) & Transition to Stage 2 ---
             pageAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
             currentStage = SetupStage.STAGE_2_TERMUX_CHECK
         }
@@ -137,46 +137,22 @@ fun SetupFlowScreen(onFlowComplete: () -> Unit) {
         withContext(Dispatchers.IO) {
             try {
                 TermuxBridge.init(context)
-                val res = Shell.termux("echo 'JARVIS_ALLOW_EXTERNAL_APPS_OK'", timeoutMs = 3500)
-                termuxAllowed = res.rc == 0 && res.out.contains("JARVIS_ALLOW_EXTERNAL_APPS_OK")
+                termuxAllowed = TermuxBridge.verifyExecution(timeoutMs = 3500L)
             } catch (_: Exception) {
                 termuxAllowed = false
             }
         }
         val stage2Elapsed = System.currentTimeMillis() - stage2StartTime
-        if (stage2Elapsed < 3200L) {
-            delay(3200L - stage2Elapsed)
+        if (stage2Elapsed < 2400L) {
+            delay(2400L - stage2Elapsed)
         }
 
         if (termuxAllowed) {
-            val needsAgyCheck = !SetupManager.isAgyCheckCompleted(context)
-            if (needsAgyCheck) {
-                // Transition to AGY Check stage (first time only)
-                pageAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
-                currentStage = SetupStage.STAGE_3_AGY_CHECK
-                pageAlpha.animateTo(1f, animationSpec = tween(durationMillis = 350, easing = LinearEasing))
-
-                val agyStartTime = System.currentTimeMillis()
-                withContext(Dispatchers.IO) {
-                    try {
-                        val res = Shell.ubuntu("which agy || test -x /usr/local/bin/agy", timeoutMs = 4000)
-                        android.util.Log.i("SetupFlow", "AGY check result: ${res.rc}")
-                    } catch (_: Exception) {}
-                    SetupManager.setAgyCheckCompleted(context, true)
-                }
-                val agyElapsed = System.currentTimeMillis() - agyStartTime
-                if (agyElapsed < 2600L) {
-                    delay(2600L - agyElapsed)
-                }
-                pageAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
-                onFlowComplete()
-            } else {
-                // Success -> Fast Fade Out Page 2 (300ms) & Complete
-                pageAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
-                onFlowComplete()
-            }
+            // Success -> Fast Fade Out Page 2 (300ms) & Complete
+            pageAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
+            onFlowComplete()
         } else {
-            // Denied -> Transition into Termux Permission Fix Screen (Stage 4)
+            // Denied / Not Working -> Transition into Termux Permission Fix Screen (Stage 4)
             pageAlpha.animateTo(0f, animationSpec = tween(durationMillis = 300, easing = LinearEasing))
             currentStage = SetupStage.STAGE_4_PERMISSION_DENIED_FIX
             pageAlpha.animateTo(1f, animationSpec = tween(durationMillis = 350, easing = LinearEasing))

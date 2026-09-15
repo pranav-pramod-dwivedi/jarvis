@@ -45,6 +45,10 @@ class AcousticWakeDetector(
 
     fun start() {
         if (isRunning) return
+        if (com.pr4nav.jarvis.system.GamingModeManager.isGamingModeActive(context)) {
+            Log.i(TAG, "Gaming mode active; AcousticWakeDetector will not start")
+            return
+        }
 
         val hasMic = androidx.core.content.ContextCompat.checkSelfPermission(
             context,
@@ -192,6 +196,8 @@ class AcousticWakeDetector(
                         }
                     } else {
                         voiceFrameCount = maxOf(0, voiceFrameCount - 1)
+                        // Battery conservation: Adaptive sleep during silence frames
+                        try { Thread.sleep(12) } catch (_: InterruptedException) { break }
                     }
                 }
             } catch (e: Exception) {

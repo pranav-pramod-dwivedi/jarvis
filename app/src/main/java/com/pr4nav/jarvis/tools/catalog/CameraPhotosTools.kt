@@ -16,8 +16,11 @@ object CameraPhotosTools {
             argumentSchema = schema(),
             execute = { ctx, _ ->
                 val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                ok("📷 Opening Camera.")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("📷 Opening Camera.")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No camera application found.")
+                }
             }
         ))
 
@@ -27,8 +30,11 @@ object CameraPhotosTools {
             argumentSchema = schema(),
             execute = { ctx, _ ->
                 val intent = Intent(MediaStore.ACTION_VIDEO_CAPTURE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(intent)
-                ok("📹 Opening Video Recorder.")
+                if (CatalogSchemaHelper.safeStartActivity(ctx, intent)) {
+                    ok("📹 Opening Video Recorder.")
+                } else {
+                    CatalogSchemaHelper.fail("APP_NOT_FOUND", "No video recorder application found.")
+                }
             }
         ))
 
