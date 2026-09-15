@@ -98,7 +98,7 @@
             android:layout_marginStart="6dp"
             android:background="@drawable/bg_btn_action_pill"
             android:paddingHorizontal="10dp"
-            android:text="TOOLS ON"
+                android:text="TOOLS OFF"
             android:textColor="#6EE7B7"
             android:textSize="11sp"
             android:textStyle="bold" />

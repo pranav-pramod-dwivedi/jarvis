@@ -561,22 +561,10 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
             try {
                 val turn = com.pr4nav.jarvis.llm.GeminiLiveClient.oneShotTurn(context, prompt, timeoutSec = 60L)
                 if (!turn.success) {
+                    // Live is terminal: no forward cloud hops from a testing dialog.
                     val err = turn.error ?: "Live turn failed"
                     Log.w(TAG, "Gemini Live failed: $err")
-                    val next = nextAfter(rt, RouteEngine.LIVE)
-                    if (next == null) {
-                        emitRouteExhausted(onEvent, onResult, err, t0)
-                    } else {
-                        onStatus?.invoke("Gemini Live failed; trying next engine…")
-                        when (next) {
-                            RouteEngine.KIRA -> executeKiraWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
-                            RouteEngine.GROQ -> executeGroqWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
-                            RouteEngine.GEMINI -> executeCloudFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult)
-                            RouteEngine.OLLAMA -> executeOllamaWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
-                            RouteEngine.LOCAL -> executeLocal(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
-                            RouteEngine.LIVE -> emitRouteExhausted(onEvent, onResult, err, t0)
-                        }
-                    }
+                    emitRouteExhausted(onEvent, onResult, err, t0)
                     return@thread
                 }
                 val latency = System.currentTimeMillis() - t0

@@ -53,7 +53,7 @@ class LivePlaygroundActivity : AppCompatActivity() {
     private lateinit var input: EditText
 
     private var audioResponses = true
-    private var toolsOn = true
+    private var toolsOn = false
     private var voiceIdx = 4 // Aoede in GeminiLiveClient.VOICES
 
     private var player: AudioTrack? = null
