@@ -27,6 +27,7 @@ enum class ExecutionSource(val label: String, val badge: String) {
     GROQ_AGENT("Groq Compound Agent", "[Groq Agent]"),
     AGY_AGENT("AGY Autonomous Agent", "[AGY Agent]"),
     OLLAMA_AGENT("Ollama Cloud", "[Ollama Cloud]"),
+    LIVE_AGENT("Gemini Live", "[Gemini Live]"),
     CLOUD_LLM("Gemini 2.0 Flash (Cloud)", "[Gemini 2.0 Flash (Cloud)]"),
     FALLBACK("System Fallback", "[System Fallback]")
 }
@@ -37,6 +38,7 @@ enum class RouteEngine(val id: String, val short: String) {
     GROQ("groq", "G"),
     GEMINI("gemini", "Gm"),
     OLLAMA("ollama", "O"),
+    LIVE("live", "Lv"),
     LOCAL("local", "L")
 }
 
@@ -181,7 +183,8 @@ object UnifiedAssistantDispatcher {
         "Groq → Gemini (skip Kira)" to listOf(RouteEngine.GROQ, RouteEngine.GEMINI),
         "Groq → Kira → Gemini" to listOf(RouteEngine.GROQ, RouteEngine.KIRA, RouteEngine.GEMINI),
         "Local only (offline, no keys needed)" to listOf(RouteEngine.LOCAL),
-        "Ollama only (solo engine)" to listOf(RouteEngine.OLLAMA)
+        "Ollama only (solo engine)" to listOf(RouteEngine.OLLAMA),
+        "Gemini Live only (testing)" to listOf(RouteEngine.LIVE)
     )
 
     /** Saved route plus the offline engine as an unconditional last resort.
@@ -462,6 +465,7 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
             RouteEngine.GEMINI -> executeCloudFallback(context, trimmed, t0, onStatus, onChunk, onEvent, onResult)
             RouteEngine.KIRA -> executeKiraWithFallback(context, trimmed, t0, onStatus, onChunk, onEvent, onResult, route)
             RouteEngine.OLLAMA -> executeOllamaWithFallback(context, trimmed, t0, onStatus, onChunk, onEvent, onResult, route)
+            RouteEngine.LIVE -> executeLiveWithFallback(context, trimmed, t0, onStatus, onChunk, onEvent, onResult, route)
             RouteEngine.LOCAL -> executeLocal(context, trimmed, t0, onStatus, onChunk, onEvent, onResult, route)
         }
     }
@@ -523,6 +527,10 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                         onStatus?.invoke("Ollama unavailable; escalating to Cloud…")
                         executeCloudFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult)
                     }
+                    RouteEngine.LIVE -> {
+                        onStatus?.invoke("Ollama unavailable; trying Gemini Live…")
+                        executeLiveWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                    }
                     RouteEngine.LOCAL -> {
                         onStatus?.invoke("Ollama unavailable; answering offline…")
                         executeLocal(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
@@ -534,6 +542,70 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                 }
             }
         )
+    }
+
+    private fun executeLiveWithFallback(
+        context: Context,
+        prompt: String,
+        t0: Long,
+        onStatus: ((String) -> Unit)?,
+        onChunk: ((String) -> Unit)?,
+        onEvent: ((AgentStreamEvent) -> Unit)? = null,
+        onResult: (UnifiedExecutionResult) -> Unit,
+        route: List<RouteEngine>? = null
+    ) {
+        val rt = route ?: effectiveRoute(context)
+        val model = com.pr4nav.jarvis.llm.GeminiLiveClient.getSelectedModel(context)
+        onStatus?.invoke("Asking Gemini Live…")
+        kotlin.concurrent.thread(name = "jarvis-live-turn") {
+            try {
+                val turn = com.pr4nav.jarvis.llm.GeminiLiveClient.oneShotTurn(context, prompt, timeoutSec = 60L)
+                if (!turn.success) {
+                    val err = turn.error ?: "Live turn failed"
+                    Log.w(TAG, "Gemini Live failed: $err")
+                    val next = nextAfter(rt, RouteEngine.LIVE)
+                    if (next == null) {
+                        emitRouteExhausted(onEvent, onResult, err, t0)
+                    } else {
+                        onStatus?.invoke("Gemini Live failed; trying next engine…")
+                        when (next) {
+                            RouteEngine.KIRA -> executeKiraWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                            RouteEngine.GROQ -> executeGroqWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                            RouteEngine.GEMINI -> executeCloudFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult)
+                            RouteEngine.OLLAMA -> executeOllamaWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                            RouteEngine.LOCAL -> executeLocal(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                            RouteEngine.LIVE -> emitRouteExhausted(onEvent, onResult, err, t0)
+                        }
+                    }
+                    return@thread
+                }
+                val latency = System.currentTimeMillis() - t0
+                val (_, cleanText) = com.pr4nav.jarvis.response.UserResponseSanitizer.stripThinking(turn.text)
+                val finalAnswer = if (cleanText.isNotBlank() && !cleanText.equals("null", ignoreCase = true)) cleanText else turn.text
+                val speech = com.pr4nav.jarvis.response.UserResponseSanitizer.sanitizeForSpeech(finalAnswer, prompt)
+                com.pr4nav.jarvis.context.ConversationalContext.recordTurn(prompt, speech)
+                emitTurn(onEvent, turn.thinkingTrace, finalAnswer, "Gemini Live ($model)", latency, true)
+                onResult(
+                    UnifiedExecutionResult(
+                        handled = true,
+                        source = ExecutionSource.LIVE_AGENT,
+                        jarvisResponse = com.pr4nav.jarvis.response.JarvisResponse(
+                            text = finalAnswer,
+                            speechText = speech,
+                            status = com.pr4nav.jarvis.response.TerminationStatus.FINAL_ANSWER
+                        ),
+                        speechResponse = speech,
+                        fullSummary = "[Gemini Live · ${latency}ms]\n\n$finalAnswer",
+                        thinkingTrace = turn.thinkingTrace,
+                        modelName = "Gemini Live ($model)",
+                        latencyMs = latency
+                    )
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Gemini Live crashed: ${e.message}")
+                emitRouteExhausted(onEvent, onResult, e.message ?: "live failed", t0)
+            }
+        }
     }
 
     private fun executeLocal(
@@ -645,6 +717,10 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                         onStatus?.invoke("Kira unavailable; falling back to Ollama…")
                         executeOllamaWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
                     }
+                    RouteEngine.LIVE -> {
+                        onStatus?.invoke("Kira unavailable; trying Gemini Live…")
+                        executeLiveWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                    }
                     RouteEngine.LOCAL -> {
                         onStatus?.invoke("Kira unavailable; answering offline…")
                         executeLocal(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
@@ -741,6 +817,10 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
                     RouteEngine.OLLAMA -> {
                         onStatus?.invoke("Groq unavailable; falling back to Ollama…")
                         executeOllamaWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
+                    }
+                    RouteEngine.LIVE -> {
+                        onStatus?.invoke("Groq unavailable; trying Gemini Live…")
+                        executeLiveWithFallback(context, prompt, t0, onStatus, onChunk, onEvent, onResult, rt)
                     }
                     RouteEngine.LOCAL -> {
                         onStatus?.invoke("Groq unavailable; answering offline…")

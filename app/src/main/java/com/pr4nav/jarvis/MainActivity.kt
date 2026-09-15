@@ -2896,6 +2896,14 @@ fun ConversationView(
             }
             item {
                 QuickNavChip(
+                    label = "LIVE",
+                    icon = { MicSvg(modifier = Modifier.size(13.dp), tint = Color(0xFFF0ABFC)) }
+                ) {
+                    context.startActivity(Intent(context, LivePlaygroundActivity::class.java))
+                }
+            }
+            item {
+                QuickNavChip(
                     label = "Files",
                     icon = { FolderSvg(modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f)) }
                 ) {

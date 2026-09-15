@@ -460,6 +460,7 @@ class AgentActivity : AppCompatActivity() {
         val pages = arrayOf(
             "AI Model Hub & Weights",
             "Routing Harness (engines · models · latency)",
+            "Gemini Live Playground",
             "Floating Companion HUD Overlay",
             "Voice & Assistant Settings",
             "Artifacts & Mini-Apps",
@@ -479,17 +480,18 @@ class AgentActivity : AppCompatActivity() {
                 when (which) {
                     0 -> startActivity(Intent(this, com.pr4nav.jarvis.voice.ModelHubActivity::class.java))
                     1 -> startActivity(Intent(this, RouteHarnessActivity::class.java))
-                    2 -> com.pr4nav.jarvis.companion.JarvisOverlayService.showHud(this)
-                    3 -> startActivity(Intent(this, com.pr4nav.jarvis.voice.VoiceSettingsActivity::class.java))
-                    4 -> startActivity(Intent(this, ArtifactsActivity::class.java))
-                    5 -> startActivity(Intent(this, BrowserActivity::class.java))
-                    6 -> startActivity(Intent(this, ConnectedServicesActivity::class.java))
-                    7 -> startActivity(Intent(this, ToolPlaygroundActivity::class.java))
-                    8 -> startActivity(Intent(this, CommanderActivity::class.java))
-                    9 -> startActivity(Intent(this, TerminalActivity::class.java))
-                    10 -> startActivity(Intent(this, DiagnosticsActivity::class.java))
-                    11 -> com.pr4nav.jarvis.system.GamingModeManager.forceStopAll(this)
-                    12 -> startActivity(Intent(this, PermissionsActivity::class.java))
+                    2 -> startActivity(Intent(this, LivePlaygroundActivity::class.java))
+                    3 -> com.pr4nav.jarvis.companion.JarvisOverlayService.showHud(this)
+                    4 -> startActivity(Intent(this, com.pr4nav.jarvis.voice.VoiceSettingsActivity::class.java))
+                    5 -> startActivity(Intent(this, ArtifactsActivity::class.java))
+                    6 -> startActivity(Intent(this, BrowserActivity::class.java))
+                    7 -> startActivity(Intent(this, ConnectedServicesActivity::class.java))
+                    8 -> startActivity(Intent(this, ToolPlaygroundActivity::class.java))
+                    9 -> startActivity(Intent(this, CommanderActivity::class.java))
+                    10 -> startActivity(Intent(this, TerminalActivity::class.java))
+                    11 -> startActivity(Intent(this, DiagnosticsActivity::class.java))
+                    12 -> com.pr4nav.jarvis.system.GamingModeManager.forceStopAll(this)
+                    13 -> startActivity(Intent(this, PermissionsActivity::class.java))
                 }
             }
             .setNegativeButton("Close", null)

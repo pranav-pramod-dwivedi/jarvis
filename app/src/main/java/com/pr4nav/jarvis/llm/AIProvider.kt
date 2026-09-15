@@ -15,7 +15,8 @@ enum class AIProvider(
     KIRA("Kira AI", RouteEngine.KIRA, "Free cascade · 1M context"),
     GROQ("Groq", RouteEngine.GROQ, "LPU inference · quotas apply"),
     GEMINI("Gemini", RouteEngine.GEMINI, "Google cloud · API key"),
-    OLLAMA("Ollama Cloud", RouteEngine.OLLAMA, "Cloud models · API key");
+    OLLAMA("Ollama Cloud", RouteEngine.OLLAMA, "Cloud models · API key"),
+    LIVE("Gemini Live", RouteEngine.LIVE, "Native audio dialog · testing");
 
     fun currentModel(context: Context): String = when (this) {
         KIRA -> {
@@ -29,6 +30,7 @@ enum class AIProvider(
         GROQ -> GroqClient.getModel(context)
         GEMINI -> GeminiCloudLLM.getModel(context)
         OLLAMA -> OllamaClient.getModel(context)
+        LIVE -> GeminiLiveClient.shortLabel(GeminiLiveClient.getSelectedModel(context))
     }
 
     fun currentModelId(context: Context): String = when (this) {
@@ -36,6 +38,7 @@ enum class AIProvider(
         GROQ -> GroqClient.getModel(context)
         GEMINI -> GeminiCloudLLM.getModel(context)
         OLLAMA -> OllamaClient.getModel(context)
+        LIVE -> GeminiLiveClient.getSelectedModel(context)
     }
 
     fun setModel(context: Context, id: String) = when (this) {
@@ -43,6 +46,7 @@ enum class AIProvider(
         GROQ -> GroqClient.setModel(context, id)
         GEMINI -> GeminiCloudLLM.setModel(context, id)
         OLLAMA -> OllamaClient.setModel(context, id)
+        LIVE -> GeminiLiveClient.setSelectedModel(context, id)
     }
 
     fun hasKey(context: Context): Boolean = when (this) {
@@ -50,6 +54,7 @@ enum class AIProvider(
         GROQ -> GroqClient.getApiKey(context).isNotBlank()
         GEMINI -> GeminiCloudLLM.getApiKey(context).isNotBlank()
         OLLAMA -> OllamaClient.getApiKey(context).isNotBlank()
+        LIVE -> GeminiCloudLLM.getApiKey(context).isNotBlank()
     }
 
     fun fetchModels(
@@ -61,5 +66,6 @@ enum class AIProvider(
         GROQ -> GroqClient.fetchAvailableModels(context = context, onSuccess = onSuccess, onError = onError)
         GEMINI -> GeminiCloudLLM.fetchAvailableModels(context = context, onSuccess = onSuccess, onError = onError)
         OLLAMA -> OllamaClient.fetchModels(context = context, onSuccess = onSuccess, onError = onError)
+        LIVE -> onSuccess(GeminiLiveClient.LIVE_MODELS)
     }
 }

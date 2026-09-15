@@ -149,6 +149,7 @@ class ProviderKeysActivity : AppCompatActivity() {
             AIProvider.GROQ -> GroqClient.getApiKey(this)
             AIProvider.GEMINI -> GeminiCloudLLM.getApiKey(this)
             AIProvider.OLLAMA -> OllamaClient.getApiKey(this)
+            AIProvider.LIVE -> GeminiCloudLLM.getApiKey(this)
         }
         val edit = EditText(this).apply {
             setText(current)
@@ -166,6 +167,7 @@ class ProviderKeysActivity : AppCompatActivity() {
                     AIProvider.GROQ -> GroqClient.setApiKey(this, v)
                     AIProvider.GEMINI -> GeminiCloudLLM.setApiKey(this, v)
                     AIProvider.OLLAMA -> OllamaClient.setApiKey(this, v)
+                    AIProvider.LIVE -> GeminiCloudLLM.setApiKey(this, v)
                 }
                 Toast.makeText(
                     this,
