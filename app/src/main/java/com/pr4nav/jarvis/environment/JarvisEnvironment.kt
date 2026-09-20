@@ -184,7 +184,7 @@ Current directory:
 ${snap.currentCwd}
 
 Available execution:
-${snap.shell}, Needle 2 Reflex, Canonical Tool Layer
+${snap.shell}, Needle 3 Reflex, Canonical Tool Layer
 
 Needle:
 Available (${snap.canonicalToolsCount} registered canonical tools)

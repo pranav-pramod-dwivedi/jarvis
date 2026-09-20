@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Route decision types produced by Needle 2 local router.
+ * Route decision types produced by Needle 3 local router.
  */
 enum class RouteType {
     DIRECT_TOOL,   // High-confidence deterministic capability -> execute immediately
@@ -30,7 +30,7 @@ data class TimingMetrics(
 }
 
 /**
- * Structured tool call specification inside a Needle 2 envelope.
+ * Structured tool call specification inside a Needle 3 envelope.
  */
 data class FunctionCall(
     val name: String,
@@ -38,7 +38,7 @@ data class FunctionCall(
 )
 
 /**
- * Representation of the official upstream Needle 2 JSON output.
+ * Representation of the official upstream Needle 3 JSON output.
  */
 data class NeedleEnvelope(
     val type: String,

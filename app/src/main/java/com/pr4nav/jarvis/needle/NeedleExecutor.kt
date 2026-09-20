@@ -17,7 +17,7 @@ import java.util.TimeZone
 import org.json.JSONObject
 
 /**
- * Executes structured tool calls produced by Needle 2 local router,
+ * Executes structured tool calls produced by Needle 3 local router,
  * dispatching them directly to existing JARVIS capabilities.
  */
 object NeedleExecutor {

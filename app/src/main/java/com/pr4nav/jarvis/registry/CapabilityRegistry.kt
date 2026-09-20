@@ -201,7 +201,7 @@ object CapabilityRegistry {
     }
 
     /**
-     * Export all registry schemas to Needle 2 tool format.
+     * Export all registry schemas to Needle 3 tool format.
      */
     fun exportNeedleSchemas(): JSONArray {
         val arr = JSONArray()

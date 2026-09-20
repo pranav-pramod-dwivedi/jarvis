@@ -236,7 +236,7 @@ class AgentActivity : AppCompatActivity() {
                 }
                 t.startsWith("Model:") || t.startsWith("• Model:") ||
                     t.startsWith("Latency:") || t.startsWith("• Latency:") ||
-                    t.contains("Full Power Engine") || t.contains("Needle 2 Reflex ·") ||
+                    t.contains("Full Power Engine") || t.contains("Needle 3 Reflex ·") || t.contains("Needle 2 Reflex ·") ||
                     t.contains("Kira Full Power") -> { /* caption-level meta, skip */ }
                 t.isNotBlank() -> toolRows.add(Markdown.stripToPlain(t).take(220))
             }

@@ -71,7 +71,7 @@ class ModelTestLabActivity : AppCompatActivity() {
         // Setup Engine Dropdown
         val engines = listOf(
             "⚡ Auto Router (Needle -> AGY -> Cloud)",
-            "⚡ Needle 2 Reflex (Direct Device Actions)",
+            "⚡ Needle 3 Reflex (Direct Device Actions)",
             "🤖 AGY Agent (PRoot Linux :5050)",
             "☁️ Gemini Cloud LLM (Full Command Access)"
         )
@@ -290,8 +290,8 @@ class ModelTestLabActivity : AppCompatActivity() {
                         }
                     }
                 }
-                1 -> { // Needle 2 Reflex
-                    sb.append("SELECTED ENGINE: ⚡ Needle 2 Reflex\n\n")
+                1 -> { // Needle 3 Reflex
+                    sb.append("SELECTED ENGINE: ⚡ Needle 3 Reflex\n\n")
                     val result = needleEngine.infer(input)
                     sb.append("METADATA:\n")
                     sb.append("• Engine: ${result.metadata.actualEngine} (${result.metadata.provider})\n")

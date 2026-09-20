@@ -24,12 +24,22 @@ object NeedleInstaller {
     fun installIfNeeded(context: Context): InstallationStatus {
         val dir = getNeedleDir(context)
         val binFile = File(dir, "needle")
-        val modelFile = File(dir, "needle2.cact")
+        val modelFile = File(dir, "needle3.cact")
         val toolsFile = File(dir, "tools.json")
 
         try {
+            // Clean up legacy Needle 2 weights if present
+            val legacyModel = File(dir, "needle2.cact")
+            if (legacyModel.exists()) {
+                legacyModel.delete()
+            }
+
             // 1. Copy binary from assets if missing or size differs
-            if (!binFile.exists() || binFile.length() == 0L) {
+            val binFd = try { context.assets.openFd("needle/needle-arm64") } catch (_: Exception) { null }
+            val binLen = binFd?.length ?: -1L
+            binFd?.close()
+
+            if (!binFile.exists() || binFile.length() == 0L || (binLen > 0 && binFile.length() != binLen)) {
                 copyAsset(context, "needle/needle-arm64", binFile)
                 binFile.setExecutable(true, false)
             } else {
@@ -37,8 +47,12 @@ object NeedleInstaller {
             }
 
             // 2. Copy .cact weights if missing or size differs
-            if (!modelFile.exists() || modelFile.length() == 0L) {
-                copyAsset(context, "needle/needle2.cact", modelFile)
+            val modelFd = try { context.assets.openFd("needle/needle3.cact") } catch (_: Exception) { null }
+            val modelLen = modelFd?.length ?: -1L
+            modelFd?.close()
+
+            if (!modelFile.exists() || modelFile.length() == 0L || (modelLen > 0 && modelFile.length() != modelLen)) {
+                copyAsset(context, "needle/needle3.cact", modelFile)
             }
 
             // 3. Generate/update tools.json

@@ -21,9 +21,9 @@ data class FallbackChainStep(
 
 data class EngineProvenanceTrace(
     val engine: String = "NEEDLE_REFLEX",
-    val model: String = "needle2-onnx",
+    val model: String = "needle3-cact",
     val modelHash: String = "N/A",
-    val runtime: String = "ONNX / Reflex Runtime",
+    val runtime: String = "Needle 3.0 / Reflex Runtime",
     val promptSource: String = "DIRECT_INTENT",
     val preprocessor: String = "LANGUAGE_NORMALIZER",
     val postprocessor: String = "CANONICAL_VALIDATOR",

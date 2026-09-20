@@ -55,9 +55,9 @@ class DiagnosticsActivity : AppCompatActivity() {
 
             sb.append(line("✓", "Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.SUPPORTED_ABIS.firstOrNull()}"))
 
-            // Needle 2 Local Router Diagnostics
+            // Needle 3 Local Router Diagnostics
             val needleRep = com.pr4nav.jarvis.needle.NeedleDiagnostics.getReport(this@DiagnosticsActivity)
-            sb.append("\n--- NEEDLE 2 LOCAL ROUTER ---\n")
+            sb.append("\n--- NEEDLE 3 LOCAL ROUTER ---\n")
             sb.append(line(if (needleRep.isInstalled) "✓" else "✗", "Needle installed", "binary ready"))
             sb.append(line(if (needleRep.isModelLoaded) "✓" else "✗", "Model loaded", "${needleRep.modelPath}"))
             sb.append(line(if (needleRep.isRuntimeAvailable) "✓" else "✗", "Runtime available", "~${"%.1f".format(needleRep.memoryUsageMb)} MB RAM"))

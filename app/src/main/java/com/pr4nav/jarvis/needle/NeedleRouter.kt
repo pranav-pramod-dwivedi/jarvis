@@ -4,7 +4,7 @@ import android.content.Context
 import java.util.Locale
 
 /**
- * Main Needle 2 Local Router.
+ * Main Needle 3 Local Router.
  * Ultra-low-latency local intent router deciding whether to execute deterministic tools,
  * render GUI dashboards, ask for clarification, or escalate to conversational LLM.
  */

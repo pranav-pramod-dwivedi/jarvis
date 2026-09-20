@@ -36,7 +36,7 @@ data class OrchestratorResult(
  *   ↓
  * INPUT
  *   ↓
- * NEEDLE 2 REFLEX (<15ms)
+ * NEEDLE 3 REFLEX (<15ms)
  *   ↓
  * LOCAL TOOL / MEMORY / INTENT
  *   ↓
@@ -98,7 +98,7 @@ object JarvisOrchestrator {
             val totalMs = System.currentTimeMillis() - t0
             onComplete(
                 OrchestratorResult(
-                    layer = "Needle 2 Diagnostics",
+                    layer = "Needle 3 Diagnostics",
                     summary = rep,
                     latencyMs = totalMs
                 )
@@ -165,15 +165,15 @@ object JarvisOrchestrator {
             return
         }
 
-        // 3. Layer 1: Needle 2 Reflex Layer (<15ms)
+        // 3. Layer 1: Needle 3 Reflex Layer (<15ms)
         val needleResult = NeedleRouter.route(trimmed, context)
         if (needleResult.route == RouteType.DIRECT_TOOL || needleResult.route == RouteType.GUI) {
             val summary = NeedleExecutor.execute(context, needleResult)
             val timing = needleResult.timing
-            val badge = "⚡ [Needle 2: ${timing.needleLatencyMs}ms · Tool: ${timing.toolLatencyMs}ms · Total: ${timing.totalLatencyMs}ms]\n🎯 $summary"
+            val badge = "⚡ [Needle 3: ${timing.needleLatencyMs}ms · Tool: ${timing.toolLatencyMs}ms · Total: ${timing.totalLatencyMs}ms]\n🎯 $summary"
             onComplete(
                 OrchestratorResult(
-                    layer = if (needleResult.route == RouteType.GUI) "JARVIS GUI" else "Needle 2 Reflex",
+                    layer = if (needleResult.route == RouteType.GUI) "JARVIS GUI" else "Needle 3 Reflex",
                     summary = summary,
                     fullOutput = badge,
                     latencyMs = timing.totalLatencyMs
@@ -181,10 +181,10 @@ object JarvisOrchestrator {
             )
             return
         } else if (needleResult.route == RouteType.CLARIFICATION) {
-            val clar = "🤔 [Needle 2]: ${needleResult.reasoning ?: "Did you mean to run ${needleResult.tool}?"}"
+            val clar = "🤔 [Needle 3]: ${needleResult.reasoning ?: "Did you mean to run ${needleResult.tool}?"}"
             onComplete(
                 OrchestratorResult(
-                    layer = "Needle 2 Reflex (Clarification)",
+                    layer = "Needle 3 Reflex (Clarification)",
                     summary = clar,
                     latencyMs = needleResult.timing.totalLatencyMs
                 )

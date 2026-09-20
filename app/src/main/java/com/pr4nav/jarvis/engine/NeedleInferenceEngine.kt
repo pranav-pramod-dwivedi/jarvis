@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Isolated Needle 2 Reflex Engine.
+ * Isolated Needle 3 Reflex Engine.
  * Performs fast-path deterministic grammar and binary execution.
  * Never silently delegates to Qwen or AGY.
  */
@@ -24,12 +24,18 @@ class NeedleInferenceEngine(private val context: Context) {
             requestedEngine = EngineType.NEEDLE_REFLEX,
             actualEngine = EngineType.NEEDLE_REFLEX,
             provider = "embedded_native",
-            runtimeBackend = "Needle 2.0 Native Grammar/Daemon",
+            runtimeBackend = "Needle 3.0 Native Grammar/Daemon",
             modelPath = File(context.filesDir, "needle").absolutePath,
-            modelFilename = "needle-2.bin",
-            modelHashSha256 = EngineMetadata.computeFileSha256(File(context.filesDir, "needle/needle-2.bin")),
-            tokenizer = "GrammarTokenizer-v2",
-            isModelLoaded = NeedleRuntime.isModelLoaded
+            modelFilename = "needle3.cact",
+            modelHashSha256 = EngineMetadata.computeFileSha256(File(context.filesDir, "needle/needle3.cact")),
+            tokenizer = "GrammarTokenizer-v3",
+            isModelLoaded = NeedleRuntime.isModelLoaded,
+            provenanceTrace = EngineProvenanceTrace(
+                engine = "NEEDLE_REFLEX",
+                model = "needle3-cact",
+                modelHash = EngineMetadata.computeFileSha256(File(context.filesDir, "needle/needle3.cact")),
+                runtime = "Needle 3.0 Native Grammar/Daemon"
+            )
         )
 
         return EngineInferenceResult(

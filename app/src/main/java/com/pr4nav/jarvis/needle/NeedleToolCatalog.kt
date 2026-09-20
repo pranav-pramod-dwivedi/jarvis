@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Catalog of official Needle 2 JSON schemas exposing JARVIS's registered capabilities.
+ * Catalog of official Needle 3 JSON schemas exposing JARVIS's registered capabilities.
  */
 object NeedleToolCatalog {
 

@@ -244,7 +244,7 @@ class HudChatAdapter(
                 val cleanCall = message.toolCall.substringBefore("(").substringBefore(" ")
                 return cleanCall.ifBlank { message.toolCall }
             }
-            if (message.text.contains("[Needle 2 Reflex]", ignoreCase = true)) return "Needle 2 Reflex"
+            if (message.text.contains("[Needle 3 Reflex]", ignoreCase = true) || message.text.contains("[Needle 2 Reflex]", ignoreCase = true)) return "Needle 3 Reflex"
             if (message.text.contains("[Pre-Routing Match]", ignoreCase = true)) return "Pre-Routing Engine"
             if (message.text.contains("[Groq", ignoreCase = true)) return "Groq LLaMA 3.3 70B"
             if (message.text.contains("[AGY", ignoreCase = true)) return "AGY Autonomous Agent"

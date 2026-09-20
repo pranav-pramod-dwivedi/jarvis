@@ -22,7 +22,7 @@ enum class AgentExecutionMode(val displayName: String, val badge: String, val de
 }
 
 enum class ExecutionSource(val label: String, val badge: String) {
-    DETERMINISTIC_NEEDLE("Needle 2 Reflex", "[Needle 2 Reflex]"),
+    DETERMINISTIC_NEEDLE("Needle 3 Reflex", "[Needle 3 Reflex]"),
     KIRA_AGENT("Kira AI Agent", "[Kira Agent]"),
     GROQ_AGENT("Groq Compound Agent", "[Groq Agent]"),
     AGY_AGENT("AGY Autonomous Agent", "[AGY Agent]"),
@@ -331,7 +331,7 @@ object UnifiedAssistantDispatcher {
                     val latency = System.currentTimeMillis() - t0
                     val thinkTrace = "<think>\n• Input: \"$trimmed\"\n• Router: Pre-Routing Continuation Match [$tool]\n• Reason: ${preDecision.reason}\n• Latency: ${latency}ms\n</think>"
                     if (onEvent == null) onChunk?.invoke(synthesizedAnswer)
-                                                emitTurn(onEvent, thinkTrace, synthesizedAnswer, "Needle 2 Reflex", latency, toolRes.success,
+                                                emitTurn(onEvent, thinkTrace, synthesizedAnswer, "Needle 3 Reflex", latency, toolRes.success,
                         tool, argSummary(args),
                         (toolRes.data?.toString() ?: toolRes.error?.message ?: "").take(1200),
                         if (toolRes.success) 0 else 1, latency);
@@ -342,7 +342,7 @@ object UnifiedAssistantDispatcher {
                             speechResponse = synthesizedAnswer,
 fullSummary = "$thinkTrace\n\n⚡ [Pre-Routing Match · ${latency}ms]\n$synthesizedAnswer",
                             thinkingTrace = thinkTrace,
-                            modelName = "Needle 2 Reflex",
+                            modelName = "Needle 3 Reflex",
                             toolResult = toolRes,
                             latencyMs = latency
                         )
@@ -379,10 +379,10 @@ fullSummary = "$thinkTrace\n\n⚡ [Deterministic Answer · ${latency}ms]\n$answe
         }
 
         // =========================================================================
-        // Tier 1: Deterministic Needle 2 Reflex (<15ms) - Active in all modes
+        // Tier 1: Deterministic Needle 3 Reflex (<15ms) - Active in all modes
         // =========================================================================
         if (!isConversationalOrInformational) {
-            onStatus?.invoke("⚡ Evaluating deterministic reflex & Needle 2...")
+            onStatus?.invoke("⚡ Evaluating deterministic reflex & Needle 3...")
 
             val normalized = LanguageNormalizer.normalize(trimmed)
             if (normalized != null && normalized.confidence >= 0.90f) {
@@ -404,7 +404,7 @@ fullSummary = "$thinkTrace\n\n⚡ [Deterministic Answer · ${latency}ms]\n$answe
 
                         Log.i(TAG, "Tier 1: Direct deterministic match [${normalized.tool}] in ${latency}ms -> $synthesizedAnswer")
                         if (onEvent == null) onChunk?.invoke(synthesizedAnswer)
-                                                        emitTurn(onEvent, thinkTrace, synthesizedAnswer, "Needle 2 Reflex", latency, toolRes.success,
+                                                        emitTurn(onEvent, thinkTrace, synthesizedAnswer, "Needle 3 Reflex", latency, toolRes.success,
                             normalized.tool, argSummary(normalized.args),
                             (toolRes.data?.toString() ?: toolRes.error?.message ?: "").take(1200),
                             if (toolRes.success) 0 else 1, latency);
@@ -413,9 +413,9 @@ fullSummary = "$thinkTrace\n\n⚡ [Deterministic Answer · ${latency}ms]\n$answe
                                 handled = toolRes.success,
                                 source = ExecutionSource.DETERMINISTIC_NEEDLE,
                                 speechResponse = synthesizedAnswer,
-fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesizedAnswer",
+fullSummary = "$thinkTrace\n\n⚡ [Needle 3 Reflex · ${latency}ms]\n$synthesizedAnswer",
                                 thinkingTrace = thinkTrace,
-                                modelName = "Needle 2 Reflex",
+                                modelName = "Needle 3 Reflex",
                                 toolResult = toolRes,
                                 latencyMs = latency
                             )
@@ -433,7 +433,7 @@ fullSummary = "$thinkTrace\n\n⚡ [Needle 2 Reflex · ${latency}ms]\n$synthesize
             val latency = System.currentTimeMillis() - t0
             val msg = "Needle Reflex did not match any device action for \"$trimmed\". Switch to 'Kira AI (Default)' or 'Groq Compound' for open-ended queries."
             if (onEvent == null) onChunk?.invoke(msg)
-            emitTurn(onEvent, "Deterministic matching yielded no action.", msg, "Needle 2 Reflex", latency, false);
+            emitTurn(onEvent, "Deterministic matching yielded no action.", msg, "Needle 3 Reflex", latency, false);
             onResult(
                 UnifiedExecutionResult(
                     handled = false,

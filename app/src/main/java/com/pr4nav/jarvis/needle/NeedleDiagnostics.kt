@@ -19,7 +19,7 @@ object NeedleDiagnostics {
         val modelPath: String
     ) {
         fun formatReport(): String = """
-            NEEDLE 2 STATUS
+            NEEDLE 3 STATUS
             ----------------------------------------
             Needle installed:       ${if (isInstalled) "✓" else "✗"}
             Model loaded:           ${if (isModelLoaded) "✓" else "✗"}
@@ -39,7 +39,7 @@ object NeedleDiagnostics {
     fun getReport(context: Context): DiagnosticReport {
         val dir = NeedleInstaller.getNeedleDir(context)
         val bin = File(dir, "needle")
-        val cact = File(dir, "needle2.cact")
+        val cact = File(dir, "needle3.cact")
 
         return DiagnosticReport(
             isInstalled = bin.exists() && bin.canExecute(),

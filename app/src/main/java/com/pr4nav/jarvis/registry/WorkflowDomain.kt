@@ -28,10 +28,10 @@ object WorkflowDomain {
                 val (pct, charging) = DeviceCapability.battery()
                 sb.append("• Android APIs: ✓ (Battery $pct% ${if (charging) "⚡" else ""})\n")
 
-                // 2. Needle 2 Reflex
+                // 2. Needle 3 Reflex
                 val needleOnline = NeedleRuntime.isModelLoaded
                 val needleLat = NeedleRuntime.averageInferenceMs
-                sb.append("• Needle 2 Reflex: ${if (needleOnline) "✓ (Daemon Ready · avg ${needleLat}ms)" else "○ (Offline/Direct)"}\n")
+                sb.append("• Needle 3 Reflex: ${if (needleOnline) "✓ (Daemon Ready · avg ${needleLat}ms)" else "○ (Offline/Direct)"}\n")
 
                 // 3. Termux Bridge
                 val termuxCheck = Shell.termux("uname -s", 3000)
