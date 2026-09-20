@@ -247,6 +247,7 @@ object Shell {
 
     fun local(command: String, timeoutMs: Long = 15_000): Res {
         val t0 = System.currentTimeMillis()
+        CmdGuard.check(command)?.let { return Res("", it, -1, 0L, false, "local") }
         return try {
             val p = ProcessBuilder("sh", "-c", command).start()
             val done = p.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
