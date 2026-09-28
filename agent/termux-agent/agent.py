@@ -161,3 +161,120 @@ def verify_signature(body: bytes, signature: str) -> bool:
 
 if __name__ == "__main__":
     print(json.dumps({"ok": True, **agent_info()}, indent=2))
+
+@skill("device.torch", "Turn the phone flashlight on or off.")
+def torch(args: dict[str, Any]) -> dict[str, Any]:
+    return termux_api("termux-torch", ["on" if bool(args.get("state", True)) else "off"])
+
+
+@skill("device.volume", "Read or set Android audio stream volumes.")
+def volume(args: dict[str, Any]) -> dict[str, Any]:
+    if "level" in args:
+        stream = str(args.get("stream", "music"))
+        return termux_api("termux-volume", [stream, str(int(args["level"]))])
+    return termux_api("termux-volume")
+
+
+@skill("device.brightness", "Read or set screen brightness.")
+def brightness(args: dict[str, Any]) -> dict[str, Any]:
+    if "level" in args:
+        return termux_api("termux-brightness", [str(max(0, min(255, int(args["level"]))))])
+    return termux_api("termux-brightness", ["auto"])
+
+
+@skill("device.wifi", "Read Wi-Fi connection information or trigger a Wi-Fi scan.")
+def wifi(args: dict[str, Any]) -> dict[str, Any]:
+    if args.get("scan"):
+        return termux_api("termux-wifi-scaninfo")
+    return termux_api("termux-wifi-connectioninfo")
+
+
+@skill("device.contacts", "Search/list contacts through Termux:API.")
+def contacts(args: dict[str, Any]) -> dict[str, Any]:
+    result = termux_api("termux-contact-list")
+    query = str(args.get("query", "")).strip().lower()
+    if query and result.get("success"):
+        try:
+            rows = json.loads(result["stdout"])
+            result["stdout"] = json.dumps([r for r in rows if query in json.dumps(r).lower()])
+        except Exception:
+            pass
+    return result
+
+
+@skill("device.call", "Place a phone call through Android/Termux:API.")
+def call_phone(args: dict[str, Any]) -> dict[str, Any]:
+    return termux_api("termux-telephony-call", [str(args["number"])])
+
+
+@skill("device.sms", "Send an SMS through Android/Termux:API.")
+def sms(args: dict[str, Any]) -> dict[str, Any]:
+    return termux_api("termux-sms-send", ["-n", str(args["number"]), str(args["text"])])
+
+
+@skill("device.sms_inbox", "Read recent SMS messages.")
+def sms_inbox(args: dict[str, Any]) -> dict[str, Any]:
+    limit = max(1, min(int(args.get("limit", 20)), 100))
+    return termux_api("termux-sms-list", ["-l", str(limit)])
+
+
+@skill("device.camera", "Take a photo with the Redmi camera through Termux:API.")
+def camera(args: dict[str, Any]) -> dict[str, Any]:
+    output = Path(str(args.get("path", ROOT / "captures" / f"photo-{int(time.time())}.jpg"))).expanduser()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    camera_id = str(args.get("camera", "0"))
+    return termux_api("termux-camera-photo", ["-c", camera_id, str(output)])
+
+
+@skill("device.media", "Control Android media playback.")
+def media(args: dict[str, Any]) -> dict[str, Any]:
+    action = str(args.get("action", "info"))
+    if action == "play": return termux_api("termux-media-player", ["play"])
+    if action == "pause": return termux_api("termux-media-player", ["pause"])
+    if action == "stop": return termux_api("termux-media-player", ["stop"])
+    if action == "info": return termux_api("termux-media-player", ["info"])
+    if action == "play_file": return termux_api("termux-media-player", ["play", str(args["path"])])
+    return {"success": False, "error": f"unsupported media action: {action}"}
+
+
+@skill("device.microphone", "Record audio through the Redmi microphone.")
+def microphone(args: dict[str, Any]) -> dict[str, Any]:
+    output = Path(str(args.get("path", ROOT / "captures" / f"recording-{int(time.time())}.m4a"))).expanduser()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    duration = max(1, min(int(args.get("durationSec", 10)), 300))
+    return termux_api("termux-microphone-record", ["-f", str(output), "-l", str(duration)])
+
+
+@skill("device.wallpaper", "Set the Android wallpaper from a local image.")
+def wallpaper(args: dict[str, Any]) -> dict[str, Any]:
+    return termux_api("termux-wallpaper", ["-f", str(Path(args["path"]).expanduser())])
+
+
+@skill("device.telephony_info", "Read cellular device information.")
+def telephony_info(_: dict[str, Any]) -> dict[str, Any]:
+    return termux_api("termux-telephony-deviceinfo")
+
+
+@skill("device.wake_lock", "Keep the Android device awake while a task is running.")
+def wake_lock(args: dict[str, Any]) -> dict[str, Any]:
+    return termux_api("termux-wake-lock" if bool(args.get("lock", True)) else "termux-wake-unlock")
+
+
+@skill("device.notification_remove", "Remove an Android notification created through Termux.")
+def notification_remove(args: dict[str, Any]) -> dict[str, Any]:
+    return termux_api("termux-notification-remove", [str(args["id"])])
+
+
+@skill("device.tts_engines", "List available Android text-to-speech engines.")
+def tts_engines(_: dict[str, Any]) -> dict[str, Any]:
+    return termux_api("termux-tts-engines")
+
+
+@skill("device.sensor", "Read Android sensor data.")
+def sensor(args: dict[str, Any]) -> dict[str, Any]:
+    argv = []
+    if args.get("sensor"):
+        argv += ["-s", str(args["sensor"])]
+    if args.get("delay"):
+        argv += ["-d", str(args["delay"])]
+    return termux_api("termux-sensor", argv)
