@@ -42,6 +42,11 @@ class NeedleRuntimeParsingTest {
     }
 
     @Test
+    fun filesystemShellQuote_escapesSingleQuotesSafely() {
+        assertEquals("'a'\\''b'", com.pr4nav.jarvis.Fs.shellQuote("a'b"))
+    }
+
+    @Test
     fun deviceAlarmValidation_rejectsInvalidTimes() {
         assertEquals("Hour must be between 0 and 23.", com.pr4nav.jarvis.capabilities.DeviceCapability.validateAlarmTime(24, 0))
         assertEquals("Minute must be between 0 and 59.", com.pr4nav.jarvis.capabilities.DeviceCapability.validateAlarmTime(23, 60))

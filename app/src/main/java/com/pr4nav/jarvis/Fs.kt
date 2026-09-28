@@ -14,6 +14,8 @@ import java.io.FileOutputStream
  */
 object Fs {
 
+    internal fun shellQuote(value: String): String = "'" + value.replace("'", "'\\''") + "'"
+
     enum class B { JAVA, SAF, TERMUX, ROOT, NONE }
 
     data class Entry(
@@ -269,13 +271,15 @@ object Fs {
             } catch (_: Exception) { granted = false; false }
         }
 
+        private fun q(value: String) = shellQuote(value)
+
         private fun sh(cmd: String): String {
             val r = Shell.root(cmd)
             return if (r.rc != 0 && r.err.isNotBlank()) "ERR: ${r.err}" else r.out
         }
 
         override fun list(path: String): List<Entry> {
-            val out = sh("ls -1Apl --time-style=+%s '$path'")
+            val out = sh("ls -1Apl --time-style=+%s ${q(path)}")
             if (out.startsWith("ERR:")) throw FsException(out.removePrefix("ERR:"))
             return Termux.parseLs(out, path).sortedWith(
                 compareByDescending<Entry> { it.isDir }.thenBy { it.name.lowercase() }
@@ -283,7 +287,7 @@ object Fs {
         }
 
         override fun read(path: String): String {
-            val out = sh("cat '$path'")
+            val out = sh("cat ${q(path)}")
             if (out.startsWith("ERR:")) throw FsException(out.removePrefix("ERR:"))
             return out
         }
@@ -291,19 +295,19 @@ object Fs {
         override fun write(path: String, content: String, append: Boolean) {
             val b64 = android.util.Base64.encodeToString(content.toByteArray(), android.util.Base64.NO_WRAP)
             val op = if (append) ">>" else ">"
-            val r = sh("echo '$b64' | base64 -d $op '$path'")
+            val r = sh("echo ${q(b64)} | base64 -d $op ${q(path)}")
             if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:"))
         }
 
-        override fun mkdir(path: String) { val r = sh("mkdir -p '$path'"); if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:")) }
-        override fun create(path: String) { val r = sh("touch '$path'"); if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:")) }
-        override fun delete(path: String) { val r = sh("rm -rf '$path'"); if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:")) }
-        override fun rename(from: String, to: String) { val r = sh("mv '$from' '$to'"); if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:")) }
-        override fun copy(src: String, dst: String) { val r = sh("cp -r '$src' '$dst'"); if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:")) }
+        override fun mkdir(path: String) { val r = sh("mkdir -p ${q(path)}"); if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:")) }
+        override fun create(path: String) { val r = sh("touch ${q(path)}"); if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:")) }
+        override fun delete(path: String) { val r = sh("rm -rf ${q(path)}"); if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:")) }
+        override fun rename(from: String, to: String) { val r = sh("mv ${q(from)} ${q(to)}"); if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:")) }
+        override fun copy(src: String, dst: String) { val r = sh("cp -r ${q(src)} ${q(dst)}"); if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:")) }
         override fun move(src: String, dst: String) { val r = sh("mv '$src' '$dst'"); if (r.startsWith("ERR:")) throw FsException(r.removePrefix("ERR:")) }
-        override fun exists(path: String) = !sh("test -e '$path' && echo Y").startsWith("ERR:") && sh("test -e '$path' && echo Y").contains("Y")
+        override fun exists(path: String) = !sh("test -e ${q(path)} && echo Y").contains("Y")
         override fun stat(path: String): Entry {
-            val out = sh("stat -c '%F|%s|%Y|%n' '$path'")
+            val out = sh("stat -c '%F|%s|%Y|%n' ${q(path)}")
             if (out.startsWith("ERR:")) throw FsException(out.removePrefix("ERR:"))
             val p = out.split("|")
             return Entry(p.getOrElse(3) { path }.substringAfterLast('/'), path, p.getOrElse(0) { "" } == "directory",
@@ -311,7 +315,7 @@ object Fs {
         }
 
         override fun search(root: String, query: String, max: Int): List<Entry> {
-            val out = sh("find '$root' -name '*$query*' 2>/dev/null | head -$max")
+            val out = sh("find ${q(root)} -name ${q("*$query*")} 2>/dev/null | head -$max")
             if (out.startsWith("ERR:")) throw FsException(out.removePrefix("ERR:"))
             return out.lines().filter { it.isNotBlank() }.map { p ->
                 Entry(p.substringAfterLast('/'), p, false, 0, 0, false)
@@ -351,7 +355,7 @@ object Fs {
         }
 
         override fun read(path: String): String {
-            val r = Shell.termux("cat '$path' 2>&1")
+            val r = Shell.termux("cat ${q(path)} 2>&1")
             if (r.rc != 0) throw FsException(r.out.ifBlank { "read failed" })
             return r.out
         }
@@ -359,27 +363,27 @@ object Fs {
         override fun write(path: String, content: String, append: Boolean) {
             val b64 = android.util.Base64.encodeToString(content.toByteArray(), android.util.Base64.NO_WRAP)
             val op = if (append) ">>" else ">"
-            val r = Shell.termux("echo '$b64' | base64 -d $op '$path'")
+            val r = Shell.termux("echo ${q(b64)} | base64 -d $op ${q(path)}")
             if (r.rc != 0) throw FsException(r.out.ifBlank { "write failed" })
         }
 
-        override fun mkdir(path: String) { Shell.termux("mkdir -p '$path'").let { if (it.rc != 0) throw FsException(it.out) } }
-        override fun create(path: String) { Shell.termux("touch '$path'").let { if (it.rc != 0) throw FsException(it.out) } }
-        override fun delete(path: String) { Shell.termux("rm -rf '$path'").let { if (it.rc != 0) throw FsException(it.out) } }
-        override fun rename(from: String, to: String) { Shell.termux("mv '$from' '$to'").let { if (it.rc != 0) throw FsException(it.out) } }
-        override fun copy(src: String, dst: String) { Shell.termux("cp -r '$src' '$dst'").let { if (it.rc != 0) throw FsException(it.out) } }
+        override fun mkdir(path: String) { Shell.termux("mkdir -p ${q(path)}").let { if (it.rc != 0) throw FsException(it.out) } }
+        override fun create(path: String) { Shell.termux("touch ${q(path)}").let { if (it.rc != 0) throw FsException(it.out) } }
+        override fun delete(path: String) { Shell.termux("rm -rf ${q(path)}").let { if (it.rc != 0) throw FsException(it.out) } }
+        override fun rename(from: String, to: String) { Shell.termux("mv ${q(from)} ${q(to)}").let { if (it.rc != 0) throw FsException(it.out) } }
+        override fun copy(src: String, dst: String) { Shell.termux("cp -r ${q(src)} ${q(dst)}").let { if (it.rc != 0) throw FsException(it.out) } }
         override fun move(src: String, dst: String) { Shell.termux("mv '$src' '$dst'").let { if (it.rc != 0) throw FsException(it.out) } }
-        override fun exists(path: String) = Shell.termux("test -e '$path' && echo Y").out.contains("Y")
+        override fun exists(path: String) = Shell.termux("test -e ${q(path)} && echo Y").out.contains("Y")
 
         override fun stat(path: String): Entry {
-            val out = Shell.termux("stat -c '%F|%s|%Y|%n' '$path' 2>&1").out
+            val out = Shell.termux("stat -c '%F|%s|%Y|%n' ${q(path)} 2>&1").out
             val p = out.split("|")
             if (p.size < 4) throw FsException("stat failed: $path")
             return Entry(p[3].substringAfterLast('/'), path, p[0] == "directory", p[1].toLongOrNull() ?: 0, (p[2].toLongOrNull() ?: 0) * 1000, false)
         }
 
         override fun search(root: String, query: String, max: Int): List<Entry> {
-            val out = Shell.termux("find '$root' -name '*$query*' 2>/dev/null | head -$max").out
+            val out = Shell.termux("find ${q(root)} -name ${q("*$query*")} 2>/dev/null | head -$max").out
             return out.lines().filter { it.isNotBlank() }.map { p -> Entry(p.substringAfterLast('/'), p, false, 0, 0, false) }
         }
     }
