@@ -300,7 +300,7 @@ def open_settings(args: dict[str, Any]) -> dict[str, Any]:
 
 @skill("android.open_url", "Open a URL using Android's default browser.")
 def android_open_url(args: dict[str, Any]) -> dict[str, Any]:
-    return android_intent("android.intent.action.VIEW", {"android.intent.extra.TEXT": str(args["url"])})
+    return run(["am", "start", "-a", "android.intent.action.VIEW", "-d", str(args["url"])])
 
 
 @skill("android.media_scan", "Ask Android media providers to scan a file/directory.")
