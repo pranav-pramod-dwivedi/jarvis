@@ -42,6 +42,13 @@ class NeedleRuntimeParsingTest {
     }
 
     @Test
+    fun deviceAlarmValidation_rejectsInvalidTimes() {
+        assertEquals("Hour must be between 0 and 23.", com.pr4nav.jarvis.capabilities.DeviceCapability.validateAlarmTime(24, 0))
+        assertEquals("Minute must be between 0 and 59.", com.pr4nav.jarvis.capabilities.DeviceCapability.validateAlarmTime(23, 60))
+        assertEquals(null, com.pr4nav.jarvis.capabilities.DeviceCapability.validateAlarmTime(23, 59))
+    }
+
+    @Test
     fun parseAlarm_rejectsInvalidClockMinute() {
         val parsed = NeedleRuntime.parseAlarm("set an alarm at 8:75 pm")
 

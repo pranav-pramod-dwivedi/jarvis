@@ -91,7 +91,15 @@ object DeviceCapability : Capability {
         JSONObject().put("torch", torchOn?.let { if (it) "on" else "off" } ?: "unknown").toString()
     )
 
-    fun setAlarm(hour: Int?, minute: Int?, label: String?): CapabilityResult = try {
+    internal fun validateAlarmTime(hour: Int?, minute: Int?): String? {
+        if (hour != null && hour !in 0..23) return "Hour must be between 0 and 23."
+        if (minute != null && minute !in 0..59) return "Minute must be between 0 and 59."
+        return null
+    }
+
+    fun setAlarm(hour: Int?, minute: Int?, label: String?): CapabilityResult {
+        validateAlarmTime(hour, minute)?.let { return CapabilityResult.fail(it) }
+        return try {
         val i = Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
             putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)
             hour?.let { putExtra(android.provider.AlarmClock.EXTRA_HOUR, it) }
@@ -100,7 +108,8 @@ object DeviceCapability : Capability {
         }
         Capabilities.require().startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         CapabilityResult.ok(JSONObject().put("alarm", "$hour:${minute ?: 0} '$label'").toString())
-    } catch (e: Exception) { CapabilityResult.fail("No alarm app available: ${e.message}") }
+        } catch (e: Exception) { CapabilityResult.fail("No alarm app available: ${e.message}") }
+    }
 
     fun setTimer(seconds: Int, label: String?): CapabilityResult = try {
         val i = Intent(android.provider.AlarmClock.ACTION_SET_TIMER).apply {
