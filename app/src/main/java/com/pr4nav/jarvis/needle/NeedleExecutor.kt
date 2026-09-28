@@ -22,6 +22,17 @@ import org.json.JSONObject
  */
 object NeedleExecutor {
 
+    internal fun normalizeCanonicalArguments(tool: String, args: Map<String, Any?>): JSONObject {
+        val normalized = JSONObject(args)
+        if (tool == "system.volume" && !normalized.has("action")) {
+            when (normalized.optString("direction", "").lowercase()) {
+                "up" -> normalized.put("action", "raise")
+                "down" -> normalized.put("action", "lower")
+            }
+        }
+        return normalized
+    }
+
     fun execute(context: Context, routeResult: NeedleRouteResult): String {
         routeResult.timing.toolStartMs = System.currentTimeMillis()
         val tool = routeResult.tool ?: return "No tool selected."
@@ -30,7 +41,7 @@ object NeedleExecutor {
         val summary = try {
             val canonical = com.pr4nav.jarvis.tools.CanonicalToolRegistry.get(tool)
             if (canonical != null) {
-                val jsonArgs = org.json.JSONObject(args)
+                val jsonArgs = normalizeCanonicalArguments(tool, args)
                 val res = canonical.executeWithTimeout(context, jsonArgs)
                 if (res.success) {
                     val dataJson = res.data as? org.json.JSONObject

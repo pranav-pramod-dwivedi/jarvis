@@ -30,6 +30,18 @@ class NeedleRuntimeParsingTest {
     }
 
     @Test
+    fun offlineGrammar_preservesRouterVolumeDirection() {
+        assertEquals("up", NeedleRuntime.queryOfflineGrammar("volume up").functionCalls.single().arguments["direction"])
+        assertEquals("down", NeedleRuntime.queryOfflineGrammar("volume down").functionCalls.single().arguments["direction"])
+    }
+
+    @Test
+    fun executor_normalizesVolumeDirectionForCanonicalRegistry() {
+        assertEquals("raise", com.pr4nav.jarvis.needle.NeedleExecutor.normalizeCanonicalArguments("system.volume", mapOf("direction" to "up")).optString("action"))
+        assertEquals("lower", com.pr4nav.jarvis.needle.NeedleExecutor.normalizeCanonicalArguments("system.volume", mapOf("direction" to "down")).optString("action"))
+    }
+
+    @Test
     fun parseAlarm_rejectsInvalidClockMinute() {
         val parsed = NeedleRuntime.parseAlarm("set an alarm at 8:75 pm")
 
