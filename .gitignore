@@ -27,3 +27,5 @@ kokoro_model/
 release_assets/
 *.onnx
 *.bin
+__pycache__/
+*.pyc
