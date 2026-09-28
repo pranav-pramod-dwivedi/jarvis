@@ -278,3 +278,48 @@ def sensor(args: dict[str, Any]) -> dict[str, Any]:
     if args.get("delay"):
         argv += ["-d", str(args["delay"])]
     return termux_api("termux-sensor", argv)
+
+@skill("device.screenshot", "Capture the current Android screen to a local file without sending the image through the MCP transport.")
+def screenshot(args: dict[str, Any]) -> dict[str, Any]:
+    output = Path(str(args.get("path", ROOT / "captures" / f"screen-{int(time.time())}.png"))).expanduser()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    return termux_api("termux-screenshot", ["-f", str(output)])
+
+
+@skill("android.open_app", "Launch an Android package by package name.")
+def open_app(args: dict[str, Any]) -> dict[str, Any]:
+    package = str(args["package"])
+    return run(["monkey", "-p", package, "1"])
+
+
+@skill("android.open_settings", "Open an Android settings page by intent action.")
+def open_settings(args: dict[str, Any]) -> dict[str, Any]:
+    action = str(args.get("action", "android.settings.SETTINGS"))
+    return android_intent(action)
+
+
+@skill("android.open_url", "Open a URL using Android's default browser.")
+def android_open_url(args: dict[str, Any]) -> dict[str, Any]:
+    return android_intent("android.intent.action.VIEW", {"android.intent.extra.TEXT": str(args["url"])})
+
+
+@skill("android.media_scan", "Ask Android media providers to scan a file/directory.")
+def media_scan(args: dict[str, Any]) -> dict[str, Any]:
+    return termux_api("termux-media-scan", ["-r", str(args["path"])])
+
+
+@skill("android.share", "Share a local file or text using Android's share sheet.")
+def android_share(args: dict[str, Any]) -> dict[str, Any]:
+    argv = ["termux-share"]
+    if args.get("title"): argv += ["--title", str(args["title"])]
+    if args.get("contentType"): argv += ["--content-type", str(args["contentType"])]
+    argv.append(str(args.get("path", args.get("text", ""))))
+    return run(argv)
+
+
+@skill("android.download", "Download a URL into the Termux/Android download area.")
+def download(args: dict[str, Any]) -> dict[str, Any]:
+    argv = [str(args["url"])]
+    if args.get("output"):
+        argv += ["-o", str(args["output"])]
+    return termux_api("termux-download", argv)
