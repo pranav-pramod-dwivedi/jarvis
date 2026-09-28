@@ -3,6 +3,7 @@ set -euo pipefail
 ROOT="$HOME/.jarvis-agent"
 mkdir -p "$ROOT"
 cp "$(dirname "$0")/agent.py" "$ROOT/agent.py"
+cp "$(dirname "$0")/mcp_server.py" "$ROOT/mcp_server.py"
 cp "$(dirname "$0")/catalog.json" "$ROOT/catalog.json"
 chmod 700 "$ROOT" "$ROOT/agent.py"
 if [ ! -f "$ROOT/token" ]; then
