@@ -59,9 +59,9 @@ object NeedleInstaller {
             val schemaJson = NeedleToolCatalog.generateSchemasJson()
             toolsFile.writeText(schemaJson)
 
-            val installed = binFile.exists() && binFile.canExecute()
-            val modelOk = modelFile.exists() && modelFile.length() > 1_000_000L
-            val toolsOk = toolsFile.exists() && toolsFile.length() > 50L
+            val installed = binFile.exists() && binFile.isFile && binFile.length() > 0L && (binLen <= 0L || binFile.length() == binLen) && binFile.canExecute()
+            val modelOk = modelFile.exists() && modelFile.isFile && modelFile.length() > 0L && (modelLen <= 0L || modelFile.length() == modelLen)
+            val toolsOk = toolsFile.exists() && toolsFile.isFile && toolsFile.length() > 50L
 
             Log.i(TAG, "Needle installation verified: bin=$installed (${binFile.length()}b), model=$modelOk, tools=$toolsOk")
             syncToTermux(binFile)
@@ -81,14 +81,26 @@ object NeedleInstaller {
     }
 
     private fun copyAsset(context: Context, assetPath: String, destFile: File) {
+        val tempFile = File(destFile.parentFile, "${destFile.name}.tmp")
         try {
             context.assets.open(assetPath).use { input ->
-                FileOutputStream(destFile).use { output ->
+                FileOutputStream(tempFile).use { output ->
                     input.copyTo(output)
+                    output.fd.sync()
                 }
             }
+            if (!tempFile.exists() || tempFile.length() == 0L) {
+                throw IllegalStateException("Asset copy produced an empty file: $assetPath")
+            }
+            if (destFile.exists() && !destFile.delete()) {
+                throw IllegalStateException("Could not replace existing asset: ${destFile.absolutePath}")
+            }
+            if (!tempFile.renameTo(destFile)) {
+                throw IllegalStateException("Could not finalize asset copy: ${destFile.absolutePath}")
+            }
         } catch (e: Exception) {
-            Log.w(TAG, "Could not copy $assetPath from assets (may be missing or not bundled yet): ${e.message}")
+            tempFile.delete()
+            throw e
         }
     }
 
