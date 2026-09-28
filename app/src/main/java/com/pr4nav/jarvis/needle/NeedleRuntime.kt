@@ -574,19 +574,21 @@ object NeedleRuntime {
         var hour = 7
         var minute = 0
 
-        val timePattern = Regex("(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?")
+        val timePattern = Regex("(?:\\bat\\s+|@\\s*)?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)|\\bat\\s+(\\d{1,2})(?::(\\d{2}))?|\\b(\\d{1,2}):(\\d{2})\\b")
         val match = timePattern.find(lower)
         if (match != null) {
-            val rawH = match.groupValues[1].toIntOrNull() ?: 7
-            val rawM = match.groupValues[2].toIntOrNull() ?: 0
+            val rawH = (match.groupValues[1].ifBlank { match.groupValues[4] }.ifBlank { match.groupValues[6] }).toIntOrNull() ?: 7
+            val rawM = (match.groupValues[2].ifBlank { match.groupValues[5] }.ifBlank { match.groupValues[7] }).toIntOrNull() ?: 0
             val ampm = match.groupValues[3]
 
-            hour = when {
-                ampm == "pm" && rawH < 12 -> rawH + 12
-                ampm == "am" && rawH == 12 -> 0
-                else -> rawH
+            if (rawH in 0..23 && rawM in 0..59 && (ampm.isBlank() || rawH in 1..12)) {
+                hour = when {
+                    ampm == "pm" && rawH < 12 -> rawH + 12
+                    ampm == "am" && rawH == 12 -> 0
+                    else -> rawH
+                }
+                minute = rawM
             }
-            minute = rawM
         }
 
         val label = when {
