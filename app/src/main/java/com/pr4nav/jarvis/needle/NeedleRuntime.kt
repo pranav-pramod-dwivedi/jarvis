@@ -43,10 +43,10 @@ object NeedleRuntime {
     @Volatile var peakRamMb: Double = 29.5
 
     val isModelLoaded: Boolean
-        get() = isDaemonRunning || (binaryFile?.canExecute() == true)
+        get() = isDaemonRunning || hasUsableRuntimeFiles()
 
     val isRuntimeAvailable: Boolean
-        get() = isInitialized && (binaryFile?.canExecute() == true || isDaemonRunning)
+        get() = isInitialized && (isDaemonRunning || hasUsableRuntimeFiles())
 
     val averageInferenceMs: Long
         get() {
@@ -99,7 +99,7 @@ object NeedleRuntime {
             }
 
             // Tier 2: Direct one-shot CLI execution of bundled native binary
-            if (binaryFile?.canExecute() == true && modelFile?.exists() == true && toolsFile?.exists() == true) {
+            if (hasUsableRuntimeFiles()) {
                 val envelope = queryDirectCli(prompt, maxTokens)
                 if (envelope != null) {
                     recordTiming(start, envelope)
@@ -458,6 +458,15 @@ object NeedleRuntime {
             peakRamMb = 29.5,
             rawJson = raw
         )
+    }
+
+    private fun hasUsableRuntimeFiles(): Boolean {
+        val bin = binaryFile
+        val model = modelFile
+        val tools = toolsFile
+        return bin?.isFile == true && bin.canExecute() &&
+            model?.isFile == true && model.length() > 0L &&
+            tools?.isFile == true && tools.length() > 0L
     }
 
     private fun recordTiming(startMs: Long, envelope: NeedleEnvelope) {
