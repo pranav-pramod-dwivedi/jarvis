@@ -66,4 +66,4 @@ FEATURES.append("diagnostics.service_rollback"); agent.SKILLS["diagnostics.servi
 FEATURES.append("diagnostics.service_installd"); agent.SKILLS["diagnostics.service_installd"]=("Read-only Android installd service diagnostics.", lambda args, _s="installd": agent.shell("dumpsys "+_s+" | head -240"))
 FEATURES.append("diagnostics.service_storaged"); agent.SKILLS["diagnostics.service_storaged"]=("Read-only Android storaged service diagnostics.", lambda args, _s="storaged": agent.shell("dumpsys "+_s+" | head -240"))
 
-assert len(FEATURES) == 60
+assert len(FEATURES) == 62
