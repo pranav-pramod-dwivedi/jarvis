@@ -46,10 +46,42 @@ def tool_list():
 def common_legacy_schema(name):
     return {'type':'object','additionalProperties':True,'properties':{'path':{'type':'string'},'source':{'type':'string'},'destination':{'type':'string'},'text':{'type':'string'},'x':{'type':'integer'},'y':{'type':'integer'},'key':{'type':'string'},'package':{'type':'string'},'url':{'type':'string'}}}
 
+def validate_args(name,args):
+    """Validate the subset of JSON Schema constraints we advertise to MCP clients."""
+    spec=schema(name)
+    if spec.get('type') != 'object' or not isinstance(args,dict):
+        return "arguments must be a JSON object"
+    required=spec.get('required',[])
+    missing=[key for key in required if key not in args]
+    if missing:
+        return "missing required argument(s): "+", ".join(missing)
+    for key,rule in spec.get('properties',{}).items():
+        if key not in args:
+            continue
+        value=args[key]
+        kind=rule.get('type')
+        if kind == 'string' and not isinstance(value,str):
+            return f"argument {key!r} must be a string"
+        if kind == 'integer' and (not isinstance(value,int) or isinstance(value,bool)):
+            return f"argument {key!r} must be an integer"
+        if kind == 'boolean' and not isinstance(value,bool):
+            return f"argument {key!r} must be a boolean"
+        if isinstance(value,int) and not isinstance(value,bool):
+            if 'minimum' in rule and value < rule['minimum']:
+                return f"argument {key!r} must be >= {rule['minimum']}"
+            if 'maximum' in rule and value > rule['maximum']:
+                return f"argument {key!r} must be <= {rule['maximum']}"
+    return None
+
 def call(name,args):
     if name=='jarvis.capabilities': return {'success':True,**legacy_dispatch.MATRIX}
+    error=validate_args(name,args)
+    if error:
+        return {'success':False,'error':error}
     if name.startswith('jarvis.'):
         return legacy_dispatch.execute(name[7:],args)
+    if name not in agent.SKILLS:
+        return {'success':False,'error':f'unknown tool: {name}'}
     return agent.execute(name,args)
 
 def send(x):
@@ -67,7 +99,8 @@ def main():
             elif method=='tools/list': send({'jsonrpc':'2.0','id':rid,'result':{'tools':tool_list()}})
             elif method=='tools/call':
                 result=call(params.get('name',''),params.get('arguments') or {})
-                send({'jsonrpc':'2.0','id':rid,'result':{'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':not result.get('success',True)}})
+                is_error=not isinstance(result,dict) or not result.get('success',True)
+                send({'jsonrpc':'2.0','id':rid,'result':{'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':is_error}})
             elif rid is not None: send({'jsonrpc':'2.0','id':rid,'error':{'code':-32601,'message':f'Method not found: {method}'}})
         except Exception as e:
             if rid is not None: send({'jsonrpc':'2.0','id':rid,'error':{'code':-32603,'message':str(e)}})
