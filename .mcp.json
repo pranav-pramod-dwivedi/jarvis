@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "jarvis-redmi-termux-agent": {
+      "command": "python3",
+      "args": [
+        "/Users/tanutripathi/AndroidStudioProjects/Jarvis/agent/termux-agent/mcp_server.py"
+      ]
+    }
+  }
+}

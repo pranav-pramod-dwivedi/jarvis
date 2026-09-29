@@ -35,4 +35,4 @@ The old Android Jarvis project remains in this repository as the capability refe
 
 ## Install on Termux
 
-The installer will be generated once the Termux device is connected. It will install the Python runtime, Termux:API integration where available, create the service directory, and register the agent for boot/background operation.
+The installer is `install.sh`. It installs the MCP runtime, legacy dispatcher, capability matrix, and self-test under `~/.jarvis-agent`. Termux:API is installed separately and root-only operations use `su`.

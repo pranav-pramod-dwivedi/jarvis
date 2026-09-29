@@ -37,9 +37,22 @@ def run(argv: list[str], timeout: int = COMMAND_TIMEOUT) -> dict[str, Any]:
             "stdout": proc.stdout, "stderr": proc.stderr}
 
 
+DANGEROUS_PATTERNS = (
+    r"\brm\s+-[rfR]*\s+/(?:\s|$|\*)",
+    r"\bmkfs(?:\.|\s)",
+    r"\bdd\s+if=",
+    r"(?:>|of=)\s*/dev/(?:block/)?",
+    r"\bfastboot\s+(?:flash|erase)\b",
+    r"\bparted\b.*\bmklabel\b",
+)
+
 def shell(command: str) -> dict[str, Any]:
-    # Explicit shell skill. Callers must opt into it; ordinary skills never
-    # interpolate user input into a shell command.
+    # Root makes the shell extremely powerful. Keep routine commands open, but
+    # refuse irreversible storage/firmware primitives through the generic tool.
+    import re
+    for pattern in DANGEROUS_PATTERNS:
+        if re.search(pattern, command, re.IGNORECASE):
+            return {"success": False, "error": {"code": "DANGEROUS_COMMAND_BLOCKED", "message": pattern}}
     return run(["sh", "-lc", command])
 
 
@@ -159,8 +172,6 @@ def verify_signature(body: bytes, signature: str) -> bool:
     return hmac.compare_digest(expected, signature)
 
 
-if __name__ == "__main__":
-    print(json.dumps({"ok": True, **agent_info()}, indent=2))
 
 @skill("device.torch", "Turn the phone flashlight on or off.")
 def torch(args: dict[str, Any]) -> dict[str, Any]:

@@ -1,80 +1,73 @@
 #!/usr/bin/env python3
-"""Minimal dependency-free MCP stdio server for the Redmi Termux agent."""
+"""Dependency-free MCP stdio server for the rooted Redmi JARVIS agent."""
 from __future__ import annotations
-import json
-import sys
+import json,sys
 import agent
+import legacy_dispatch
 
-SERVER_INFO = {"name": "jarvis-redmi-termux-agent", "version": "0.1.0"}
-PROTOCOL = "2024-11-05"
+SERVER_INFO={"name":"jarvis-redmi-termux-agent","version":"0.2.0"}
+PROTOCOL="2024-11-05"
 
-
-def send(message):
-    sys.stdout.write(json.dumps(message, ensure_ascii=False, separators=(",", ":")) + "\n")
-    sys.stdout.flush()
-
+def schema(name):
+    common={"type":"object","additionalProperties":True}
+    exact={
+      'device.battery':{},'device.location':{},'device.clipboard_get':{},'device.wifi':{},
+      'device.tts_engines':{},'device.telephony_info':{},'agent.info':{},
+      'device.notification':{'properties':{'title':{'type':'string'},'content':{'type':'string'}},'required':['content']},
+      'device.toast':{'properties':{'text':{'type':'string'}},'required':['text']},
+      'device.clipboard_set':{'properties':{'text':{'type':'string'}},'required':['text']},
+      'device.vibrate':{'properties':{'durationMs':{'type':'integer','minimum':1,'maximum':10000}}},
+      'device.torch':{'properties':{'state':{'type':'boolean'}}},
+      'device.volume':{'properties':{'stream':{'type':'string'},'level':{'type':'integer','minimum':0}}},
+      'device.brightness':{'properties':{'level':{'type':'integer','minimum':0,'maximum':255}}},
+      'device.call':{'properties':{'number':{'type':'string'}},'required':['number']},
+      'device.sms':{'properties':{'number':{'type':'string'},'text':{'type':'string'}},'required':['number','text']},
+      'device.screenshot':{'properties':{'path':{'type':'string'}}},
+      'android.open_app':{'properties':{'package':{'type':'string'}},'required':['package']},
+      'android.open_settings':{'properties':{'action':{'type':'string'}}},
+      'android.open_url':{'properties':{'url':{'type':'string','format':'uri'}},'required':['url']},
+      'files.read':{'properties':{'path':{'type':'string'}},'required':['path']},
+      'shell.exec':{'properties':{'command':{'type':'string'}},'required':['command']},
+    }
+    if name in exact: return {'type':'object',**exact[name]}
+    return common
 
 def tool_list():
-    tools = []
-    for name, (description, _) in sorted(agent.SKILLS.items()):
-        tools.append({
-            "name": name,
-            "description": description,
-            "inputSchema": {"type": "object", "additionalProperties": True},
-        })
-    tools.append({
-        "name": "jarvis_legacy_catalog",
-        "description": "Discover the 134 capability names migrated from the original Jarvis Android project.",
-        "inputSchema": {"type": "object", "properties": {}},
-    })
-    return tools
+    out=[]
+    for name,(desc,_) in sorted(agent.SKILLS.items()):
+        out.append({'name':name,'description':desc,'inputSchema':schema(name)})
+    for name,cap in sorted(legacy_dispatch.CAPS.items()):
+        out.append({'name':'jarvis.'+name,'description':f"Legacy JARVIS capability [{cap['status']}]: {cap['reason']}",'inputSchema':common_legacy_schema(name)})
+    out.append({'name':'jarvis.capabilities','description':'Return the complete 134-tool JARVIS capability matrix with execution status.','inputSchema':{'type':'object','properties':{}}})
+    return out
 
+def common_legacy_schema(name):
+    return {'type':'object','additionalProperties':True,'properties':{'path':{'type':'string'},'source':{'type':'string'},'destination':{'type':'string'},'text':{'type':'string'},'x':{'type':'integer'},'y':{'type':'integer'},'key':{'type':'string'},'package':{'type':'string'},'url':{'type':'string'}}}
 
-def call(name, args):
-    if name == "jarvis_legacy_catalog":
-        try:
-            return json.loads(agent.CATALOG.read_text())
-        except Exception as exc:
-            return {"success": False, "error": str(exc)}
-    return agent.execute(name, args)
+def call(name,args):
+    if name=='jarvis.capabilities': return {'success':True,**legacy_dispatch.MATRIX}
+    if name.startswith('jarvis.'):
+        return legacy_dispatch.execute(name[7:],args)
+    return agent.execute(name,args)
 
+def send(x):
+    sys.stdout.write(json.dumps(x,separators=(',',':'),ensure_ascii=False)+'\n');sys.stdout.flush()
 
 def main():
     for line in sys.stdin:
-        if not line.strip():
-            continue
-        request_id = None
+        if not line.strip(): continue
+        rid=None
         try:
-            req = json.loads(line)
-            request_id = req.get("id")
-            method = req.get("method")
-            params = req.get("params") or {}
-            if method == "initialize":
-                send({"jsonrpc":"2.0","id":request_id,"result":{
-                    "protocolVersion": PROTOCOL,
-                    "capabilities":{"tools":{}},
-                    "serverInfo": SERVER_INFO,
-                }})
-            elif method == "notifications/initialized":
-                continue
-            elif method == "ping":
-                send({"jsonrpc":"2.0","id":request_id,"result":{}})
-            elif method == "tools/list":
-                send({"jsonrpc":"2.0","id":request_id,"result":{"tools":tool_list()}})
-            elif method == "tools/call":
-                name = params.get("name", "")
-                args = params.get("arguments") or {}
-                result = call(name, args)
-                send({"jsonrpc":"2.0","id":request_id,"result":{
-                    "content":[{"type":"text","text":json.dumps(result, ensure_ascii=False, indent=2)}],
-                    "isError": not result.get("success", True),
-                }})
-            elif request_id is not None:
-                send({"jsonrpc":"2.0","id":request_id,"error":{"code":-32601,"message":f"Method not found: {method}"}})
-        except Exception as exc:
-            if request_id is not None:
-                send({"jsonrpc":"2.0","id":request_id,"error":{"code":-32603,"message":str(exc)}})
+            req=json.loads(line);rid=req.get('id');method=req.get('method');params=req.get('params') or {}
+            if method=='initialize': send({'jsonrpc':'2.0','id':rid,'result':{'protocolVersion':PROTOCOL,'capabilities':{'tools':{}},'serverInfo':SERVER_INFO}})
+            elif method=='notifications/initialized': pass
+            elif method=='ping': send({'jsonrpc':'2.0','id':rid,'result':{}})
+            elif method=='tools/list': send({'jsonrpc':'2.0','id':rid,'result':{'tools':tool_list()}})
+            elif method=='tools/call':
+                result=call(params.get('name',''),params.get('arguments') or {})
+                send({'jsonrpc':'2.0','id':rid,'result':{'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':not result.get('success',True)}})
+            elif rid is not None: send({'jsonrpc':'2.0','id':rid,'error':{'code':-32601,'message':f'Method not found: {method}'}})
+        except Exception as e:
+            if rid is not None: send({'jsonrpc':'2.0','id':rid,'error':{'code':-32603,'message':str(e)}})
 
-
-if __name__ == "__main__":
-    main()
+if __name__=='__main__': main()

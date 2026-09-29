@@ -1,13 +1,15 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ROOT="$HOME/.jarvis-agent"
 mkdir -p "$ROOT"
-cp "$(dirname "$0")/agent.py" "$ROOT/agent.py"
-cp "$(dirname "$0")/mcp_server.py" "$ROOT/mcp_server.py"
-cp "$(dirname "$0")/catalog.json" "$ROOT/catalog.json"
-chmod 700 "$ROOT" "$ROOT/agent.py"
+for f in agent.py mcp_server.py legacy_dispatch.py capability_matrix.json catalog.json self_test.py; do
+  cp "$SCRIPT_DIR/$f" "$ROOT/$f"
+done
+chmod 700 "$ROOT"
+chmod 700 "$ROOT"/*.py
 if [ ! -f "$ROOT/token" ]; then
-  python - <<'PY'
+  python3 - <<'PY'
 import secrets
 from pathlib import Path
 p=Path.home()/'.jarvis-agent'/'token'

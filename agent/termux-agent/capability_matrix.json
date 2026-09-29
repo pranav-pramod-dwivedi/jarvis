@@ -1,0 +1,812 @@
+{
+  "version": 1,
+  "device": "Redmi Note 8 Pro",
+  "android": "11",
+  "root": true,
+  "capabilities": [
+    {
+      "name": "remember",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "pin.create",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "pin.dismiss",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "system.torch",
+      "status": "mapped",
+      "target": "device.torch",
+      "reason": "Mapped to device.torch."
+    },
+    {
+      "name": "system.volume",
+      "status": "mapped",
+      "target": "device.volume",
+      "reason": "Mapped to device.volume."
+    },
+    {
+      "name": "system.battery",
+      "status": "mapped",
+      "target": "device.battery",
+      "reason": "Mapped to device.battery."
+    },
+    {
+      "name": "system.screenshot",
+      "status": "mapped",
+      "target": "device.screenshot",
+      "reason": "Mapped to device.screenshot."
+    },
+    {
+      "name": "media.play",
+      "status": "mapped",
+      "target": "device.media",
+      "reason": "Mapped to device.media."
+    },
+    {
+      "name": "open_app",
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to android.open_app."
+    },
+    {
+      "name": "close_app",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "navigate",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "call_contact",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "send_message",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "read_file",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "write_file",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "search_files",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "run_command",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "get_location",
+      "status": "mapped",
+      "target": "device.location",
+      "reason": "Mapped to device.location."
+    },
+    {
+      "name": "get_battery",
+      "status": "mapped",
+      "target": "device.battery",
+      "reason": "Mapped to device.battery."
+    },
+    {
+      "name": "get_wifi",
+      "status": "mapped",
+      "target": "device.wifi",
+      "reason": "Mapped to device.wifi."
+    },
+    {
+      "name": "system.bluetooth",
+      "status": "mapped",
+      "target": "android.open_settings",
+      "reason": "Mapped to android.open_settings."
+    },
+    {
+      "name": "get_bluetooth",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "open_settings",
+      "status": "mapped",
+      "target": "android.open_settings",
+      "reason": "Mapped to android.open_settings."
+    },
+    {
+      "name": "open_system_page",
+      "status": "mapped",
+      "target": "android.open_settings",
+      "reason": "Mapped to android.open_settings."
+    },
+    {
+      "name": "jarvis_environment",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "take_screenshot",
+      "status": "mapped",
+      "target": "device.screenshot",
+      "reason": "Mapped to device.screenshot."
+    },
+    {
+      "name": "screen_info",
+      "status": "root-ui",
+      "target": null,
+      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+    },
+    {
+      "name": "click",
+      "status": "root-ui",
+      "target": null,
+      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+    },
+    {
+      "name": "scroll",
+      "status": "root-ui",
+      "target": null,
+      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+    },
+    {
+      "name": "type_text",
+      "status": "root-ui",
+      "target": null,
+      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+    },
+    {
+      "name": "clipboard_get",
+      "status": "mapped",
+      "target": "device.clipboard_get",
+      "reason": "Mapped to device.clipboard_get."
+    },
+    {
+      "name": "clipboard_set",
+      "status": "mapped",
+      "target": "device.clipboard_set",
+      "reason": "Mapped to device.clipboard_set."
+    },
+    {
+      "name": "call_history",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "find_contact",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "draft_message",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "open_${subName}_settings",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "delete_file",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "rename_file",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "copy_file",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "create_folder",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "find_downloads",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "open_url",
+      "status": "mapped",
+      "target": "android.open_url",
+      "reason": "Mapped to android.open_url."
+    },
+    {
+      "name": "search_web",
+      "status": "network",
+      "target": null,
+      "reason": "Requires network/web access; not intrinsically device-local."
+    },
+    {
+      "name": "reminder_create",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "reminder_list_today",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "reminder_open_app",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "reminder_water_log",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "reminder_medicine_set",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "music_play",
+      "status": "mapped",
+      "target": "device.media",
+      "reason": "Mapped to device.media."
+    },
+    {
+      "name": "music_pause",
+      "status": "mapped",
+      "target": "device.media",
+      "reason": "Mapped to device.media."
+    },
+    {
+      "name": "music_resume",
+      "status": "mapped",
+      "target": "device.media",
+      "reason": "Mapped to device.media."
+    },
+    {
+      "name": "music_next",
+      "status": "mapped",
+      "target": "device.media",
+      "reason": "Mapped to device.media."
+    },
+    {
+      "name": "music_previous",
+      "status": "mapped",
+      "target": "device.media",
+      "reason": "Mapped to device.media."
+    },
+    {
+      "name": "music_open_spotify",
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to android.open_app."
+    },
+    {
+      "name": "device_torch_toggle",
+      "status": "mapped",
+      "target": "device.torch",
+      "reason": "Mapped to device.torch."
+    },
+    {
+      "name": "device_torch_on",
+      "status": "mapped",
+      "target": "device.torch",
+      "reason": "Mapped to device.torch."
+    },
+    {
+      "name": "device_torch_off",
+      "status": "mapped",
+      "target": "device.torch",
+      "reason": "Mapped to device.torch."
+    },
+    {
+      "name": "device_volume_set",
+      "status": "mapped",
+      "target": "device.volume",
+      "reason": "Mapped to device.volume."
+    },
+    {
+      "name": "device_volume_raise",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "device_volume_lower",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "device_volume_mute",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "device_battery_status",
+      "status": "mapped",
+      "target": "device.battery",
+      "reason": "Mapped to device.battery."
+    },
+    {
+      "name": "device_screenshot_take",
+      "status": "mapped",
+      "target": "device.screenshot",
+      "reason": "Mapped to device.screenshot."
+    },
+    {
+      "name": "device_vibrate",
+      "status": "mapped",
+      "target": "device.vibrate",
+      "reason": "Mapped to device.vibrate."
+    },
+    {
+      "name": "device_settings_open",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "device_lock_screen",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "weather_current",
+      "status": "network",
+      "target": null,
+      "reason": "Requires network/web access; not intrinsically device-local."
+    },
+    {
+      "name": "weather_rain_check",
+      "status": "network",
+      "target": null,
+      "reason": "Requires network/web access; not intrinsically device-local."
+    },
+    {
+      "name": "weather_forecast_weekly",
+      "status": "network",
+      "target": null,
+      "reason": "Requires network/web access; not intrinsically device-local."
+    },
+    {
+      "name": "app_launch_friendly",
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to android.open_app."
+    },
+    {
+      "name": "file_storage_stats",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "read_screen_text",
+      "status": "root-ui",
+      "target": null,
+      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+    },
+    {
+      "name": "virtual_touch",
+      "status": "root-ui",
+      "target": null,
+      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+    },
+    {
+      "name": "virtual_scroll",
+      "status": "root-ui",
+      "target": null,
+      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+    },
+    {
+      "name": "virtual_type",
+      "status": "root-ui",
+      "target": null,
+      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+    },
+    {
+      "name": "press_global_key",
+      "status": "root-ui",
+      "target": null,
+      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+    },
+    {
+      "name": "diagnostic_ping",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "browser_render_app",
+      "status": "jarvis-browser",
+      "target": null,
+      "reason": "Requires the JarvisBrowser capability/service, not a generic Android primitive."
+    },
+    {
+      "name": "browser_launch_app",
+      "status": "jarvis-browser",
+      "target": null,
+      "reason": "Requires the JarvisBrowser capability/service, not a generic Android primitive."
+    },
+    {
+      "name": "browser_list_apps",
+      "status": "jarvis-browser",
+      "target": null,
+      "reason": "Requires the JarvisBrowser capability/service, not a generic Android primitive."
+    },
+    {
+      "name": "browser_save_app",
+      "status": "jarvis-browser",
+      "target": null,
+      "reason": "Requires the JarvisBrowser capability/service, not a generic Android primitive."
+    },
+    {
+      "name": "browser_delete_app",
+      "status": "jarvis-browser",
+      "target": null,
+      "reason": "Requires the JarvisBrowser capability/service, not a generic Android primitive."
+    },
+    {
+      "name": "notes_create",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "notes_list",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "list_add_item",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "list_view",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "network_wifi_toggle",
+      "status": "mapped",
+      "target": "android.open_settings",
+      "reason": "Mapped to android.open_settings."
+    },
+    {
+      "name": "network_bluetooth_toggle",
+      "status": "mapped",
+      "target": "android.open_settings",
+      "reason": "Mapped to android.open_settings."
+    },
+    {
+      "name": "network_hotspot_open",
+      "status": "mapped",
+      "target": "android.open_settings",
+      "reason": "Mapped to android.open_settings."
+    },
+    {
+      "name": "network_airplane_mode_open",
+      "status": "mapped",
+      "target": "android.open_settings",
+      "reason": "Mapped to android.open_settings."
+    },
+    {
+      "name": "contact_find",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "contact_add",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "contact_open_app",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "phone_call_contact",
+      "status": "mapped",
+      "target": "device.call",
+      "reason": "Mapped to device.call."
+    },
+    {
+      "name": "phone_dial_number",
+      "status": "mapped",
+      "target": "device.call",
+      "reason": "Mapped to device.call."
+    },
+    {
+      "name": "phone_open_app",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "message_send_sms",
+      "status": "mapped",
+      "target": "device.sms",
+      "reason": "Mapped to device.sms."
+    },
+    {
+      "name": "message_send_whatsapp",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "message_open_app",
+      "status": "adapter-needed",
+      "target": null,
+      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+    },
+    {
+      "name": "message_share_text",
+      "status": "mapped",
+      "target": "android.share",
+      "reason": "Mapped to android.share."
+    },
+    {
+      "name": "clock_alarm_set",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "clock_alarm_list",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_alarm_snooze",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_alarm_dismiss",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_timer_start",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "clock_timer_list",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_stopwatch_start",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_world_time",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_time_current",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_date_current",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_time_difference",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_open_app",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_timer_preset_tea",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_timer_preset_pasta",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_timer_preset_workout",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "clock_day_of_week",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "calendar_event_create",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "calendar_open_day",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "calendar_open_app",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "calendar_next_meeting",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "calendar_quick_meeting",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+    },
+    {
+      "name": "calc_math_evaluate",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "calc_tip_calculate",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "calc_unit_convert",
+      "status": "root-shell",
+      "target": null,
+      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+    },
+    {
+      "name": "maps_navigate_to",
+      "status": "mapped",
+      "target": "android.open_url",
+      "reason": "Mapped to android.open_url."
+    },
+    {
+      "name": "maps_search_nearby",
+      "status": "mapped",
+      "target": "android.open_url",
+      "reason": "Mapped to android.open_url."
+    },
+    {
+      "name": "maps_navigate_home",
+      "status": "android-app",
+      "target": null,
+      "reason": "Requires Maps app or web integration."
+    },
+    {
+      "name": "maps_open_app",
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to android.open_app."
+    },
+    {
+      "name": "camera_photo_take",
+      "status": "mapped",
+      "target": "device.camera",
+      "reason": "Mapped to device.camera."
+    },
+    {
+      "name": "camera_video_record",
+      "status": "mapped",
+      "target": "device.camera",
+      "reason": "Mapped to device.camera."
+    },
+    {
+      "name": "photos_open_app",
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to android.open_app."
+    },
+    {
+      "name": "web_google_search",
+      "status": "mapped",
+      "target": "android.open_url",
+      "reason": "Mapped to android.open_url."
+    },
+    {
+      "name": "web_open_url",
+      "status": "mapped",
+      "target": "android.open_url",
+      "reason": "Mapped to android.open_url."
+    },
+    {
+      "name": "web_wikipedia_lookup",
+      "status": "mapped",
+      "target": "android.open_url",
+      "reason": "Mapped to android.open_url."
+    }
+  ]
+}
