@@ -653,3 +653,6 @@ def calendar_quick_meeting(args: dict[str, Any]) -> dict[str, Any]:
 
 # Extended native capability pack.
 import extended_skills  # noqa: E402,F401
+
+# Load the second diagnostic capability pack.
+import service_diagnostics  # noqa: E402,F401
