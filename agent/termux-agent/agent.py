@@ -650,3 +650,60 @@ def calendar_open_day(args: dict[str, Any]) -> dict[str, Any]:
 def calendar_quick_meeting(args: dict[str, Any]) -> dict[str, Any]:
     title=str(args.get("title","Quick Sync")); start=int(time.time()*1000)+3600000; end=start+1800000
     return run(["am","start","-a","android.intent.action.INSERT","-d","content://com.android.calendar/events","--es","title",title,"--el","beginTime",str(start),"--el","endTime",str(end)])
+
+
+def _probe(argv: list[str], timeout: int = 5) -> dict[str, Any]:
+    try:
+        return run(argv, timeout)
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+@skill("device.system_info", "Collect a compact, non-destructive device/runtime snapshot.")
+def system_info(_: dict[str, Any]) -> dict[str, Any]:
+    probes = {
+        "android": ["getprop", "ro.build.version.release"],
+        "sdk": ["getprop", "ro.build.version.sdk"],
+        "model": ["getprop", "ro.product.model"],
+        "manufacturer": ["getprop", "ro.product.manufacturer"],
+        "kernel": ["uname", "-a"],
+        "uptime": ["uptime"],
+        "storage": ["df", "-h", "/data"],
+        "memory": ["sh", "-lc", "cat /proc/meminfo | head -8"],
+        "root": ["su", "-c", "id"],
+        "termux": ["sh", "-lc", f"printf '%s' {shlex.quote(TERMUX_BIN)}"],
+    }
+    out = {}
+    for key, argv in probes.items():
+        r = _probe(argv)
+        out[key] = {"success": r.get("success", False), "stdout": r.get("stdout", ""), "stderr": r.get("stderr", "")}
+    return {"success": True, "timestamp": int(time.time()), "data": out}
+
+@skill("device.processes", "List running processes with lightweight CPU/memory metadata.")
+def processes(args: dict[str, Any]) -> dict[str, Any]:
+    limit=max(1,min(int(args.get("limit",50)),200))
+    return _probe(["sh","-lc",f"ps -A -o PID,PPID,USER,STAT,NAME | head -n {limit+1}"])
+
+@skill("device.packages", "List installed Android packages, optionally filtered by substring.")
+def packages(args: dict[str, Any]) -> dict[str, Any]:
+    query=str(args.get("query","")).strip().lower()
+    r=_probe(["pm","list","packages"])
+    if not r.get("success"): return r
+    lines=[x.strip() for x in r.get("stdout","").splitlines() if x.strip()]
+    if query: lines=[x for x in lines if query in x.lower()]
+    return {"success":True,"count":len(lines),"packages":lines[:max(1,min(int(args.get("limit",200)),1000))]}
+
+@skill("device.root_status", "Verify root identity and common root tooling without changing device state.")
+def root_status(_: dict[str, Any]) -> dict[str, Any]:
+    return {"success": True, "id": _probe(["su","-c","id"]), "which_su": _probe(["sh","-lc","command -v su"]), "which_magisk": _probe(["sh","-lc","command -v magisk"])}
+
+@skill("diagnostics.snapshot", "Build a single compact diagnostic snapshot for troubleshooting.")
+def diagnostics_snapshot(_: dict[str, Any]) -> dict[str, Any]:
+    return {"success": True, "timestamp": int(time.time()), "system": system_info({}), "root": root_status({}), "battery": battery({}), "wifi": execute("device.wifi", {}) if "device.wifi" in SKILLS else None, "packages": packages({"limit":25})}
+
+@skill("diagnostics.health_check", "Run safe health probes and report failures without modifying the device.")
+def diagnostics_health_check(_: dict[str, Any]) -> dict[str, Any]:
+    checks={"root":"su -c id","termux-api":f"{shlex.quote(TERMUX_BIN)}/termux-battery-status","storage":"df -h /data","android":"getprop ro.build.version.release"}
+    results={}
+    for name,cmd in checks.items(): results[name]=_probe(["sh","-lc",cmd])
+    healthy=sum(1 for r in results.values() if r.get("success"))
+    return {"success": healthy==len(results), "healthy": healthy, "total": len(results), "checks": results}
