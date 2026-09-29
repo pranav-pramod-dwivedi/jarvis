@@ -18,7 +18,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
-ROOT = Path(os.environ.get("JARVIS_AGENT_HOME", str(Path.home() / ".jarvis-agent")))
+_DEFAULT_HOME = Path("/data/data/com.termux/files/home") if Path("/data/data/com.termux/files/home").exists() else Path.home()
+ROOT = Path(os.environ.get("JARVIS_AGENT_HOME", str(_DEFAULT_HOME / ".jarvis-agent")))
 CATALOG = Path(os.environ.get("JARVIS_AGENT_CATALOG", str(ROOT / "catalog.json")))
 TOKEN_FILE = Path(os.environ.get("JARVIS_AGENT_TOKEN_FILE", str(ROOT / "token")))
 COMMAND_TIMEOUT = int(os.environ.get("JARVIS_COMMAND_TIMEOUT", "30"))
@@ -531,3 +532,70 @@ def device_keyevent(args: dict[str, Any]) -> dict[str, Any]:
     key=str(args.get('key','back')).lower(); code=names.get(key,key if key.isdigit() else None)
     if code is None: return {"success":False,"error":"unknown key"}
     return run(["su","-c",f"input keyevent {code}"])
+
+# JarvisBrowser-compatible local mini-app library. The transport returns metadata;
+# HTML/CSS/JS remains on the phone unless explicitly requested.
+BROWSER_ROOT = ROOT / "browser"
+
+@skill("browser.render_app", "Create a self-contained local HTML mini-app and optionally open it in the Android browser.")
+def browser_render_app(args: dict[str, Any]) -> dict[str, Any]:
+    import re
+    app_id=re.sub(r"[^a-zA-Z0-9_-]", "-", str(args["app_id"]).strip())[:80]
+    if not app_id: return {"success":False,"error":"invalid app_id"}
+    title=str(args.get("title",app_id)); html=str(args.get("html",""))
+    if not html: return {"success":False,"error":"html is required"}
+    css=str(args.get("css","")); js=str(args.get("js",""))
+    body=html if re.search(r"<html[ >]",html,re.I) else f"<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>{title}</title><style>{css}</style></head><body>{html}<script>{js}</script></body></html>"
+    temporary=bool(args.get("is_temporary",True))
+    bucket="temporary" if temporary else "saved"
+    target=BROWSER_ROOT/bucket/app_id
+    target.mkdir(parents=True,exist_ok=True); (target/"index.html").write_text(body)
+    if bool(args.get("launch",True)):
+        r=run(["am","start","-a","android.intent.action.VIEW","-d",f"file://{target/'index.html'}"])
+    else: r={"success":True,"exitCode":0,"stdout":"","stderr":""}
+    return {"success":r.get("success",False),"app_id":app_id,"title":title,"path":str(target/"index.html"),"is_temporary":temporary,"launch":r}
+
+@skill("browser.list_apps", "List local JarvisBrowser-compatible saved mini-apps without reading their contents.")
+def browser_list_apps(_: dict[str, Any]) -> dict[str, Any]:
+    base=BROWSER_ROOT/"saved"; base.mkdir(parents=True,exist_ok=True)
+    apps=[]
+    for p in sorted(base.iterdir()):
+        if p.is_dir() and (p/"index.html").exists(): apps.append({"app_id":p.name,"path":str(p/"index.html"),"size":(p/"index.html").stat().st_size})
+    return {"success":True,"count":len(apps),"apps":apps}
+
+@skill("browser.launch_app", "Launch a saved local mini-app by ID.")
+def browser_launch_app(args: dict[str, Any]) -> dict[str, Any]:
+    app_id=str(args["app_id"]); p=(BROWSER_ROOT/"saved"/app_id/"index.html").resolve()
+    base=(BROWSER_ROOT/"saved").resolve()
+    if base not in p.parents or not p.exists(): return {"success":False,"error":"app not found"}
+    r=run(["am","start","-a","android.intent.action.VIEW","-d",f"file://{p}"])
+    return {**r,"app_id":app_id,"path":str(p)}
+
+@skill("browser.delete_app", "Delete a saved local mini-app by exact ID.")
+def browser_delete_app(args: dict[str, Any]) -> dict[str, Any]:
+    import shutil
+    app_id=str(args["app_id"]); p=(BROWSER_ROOT/"saved"/app_id).resolve(); base=(BROWSER_ROOT/"saved").resolve()
+    if base not in p.parents or not p.is_dir(): return {"success":False,"error":"app not found"}
+    shutil.rmtree(p); return {"success":True,"app_id":app_id}
+
+@skill("browser.save_app", "Promote a temporary local mini-app into the persistent saved library.")
+def browser_save_app(args: dict[str, Any]) -> dict[str, Any]:
+    import shutil
+    app_id=str(args["app_id"]); src=(BROWSER_ROOT/"temporary"/app_id).resolve(); base=(BROWSER_ROOT/"temporary").resolve()
+    if base not in src.parents or not src.is_dir(): return {"success":False,"error":"temporary app not found"}
+    dst=(BROWSER_ROOT/"saved"/app_id).resolve(); dst.parent.mkdir(parents=True,exist_ok=True)
+    if dst.exists(): shutil.rmtree(dst)
+    shutil.move(str(src),str(dst)); return {"success":True,"app_id":app_id,"path":str(dst/"index.html")}
+
+@skill("clock.world_time", "Return current time for an IANA timezone or common city name.")
+def clock_world_time(args: dict[str, Any]) -> dict[str, Any]:
+    import datetime as _dt
+    import subprocess as _sp
+    aliases={'tokyo':'Asia/Tokyo','london':'Europe/London','new york':'America/New_York','los angeles':'America/Los_Angeles','san francisco':'America/Los_Angeles','delhi':'Asia/Kolkata','mumbai':'Asia/Kolkata','bengaluru':'Asia/Kolkata','singapore':'Asia/Singapore','dubai':'Asia/Dubai'}
+    location=str(args['location']).strip(); zone=aliases.get(location.lower(),location)
+    try:
+        proc=_sp.run(['sh','-lc',f'TZ={shlex.quote(zone)} date +%Y-%m-%dT%H:%M:%S%z %Z'],capture_output=True,text=True,timeout=3)
+        if proc.returncode != 0: raise ValueError(proc.stderr.strip() or 'timezone unavailable')
+        display=proc.stdout.strip()
+    except Exception as exc: return {"success":False,"error":f"unknown timezone/location: {location}","detail":str(exc)}
+    return {"success":True,"location":location,"timezone":zone,"display":display}

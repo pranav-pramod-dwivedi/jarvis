@@ -468,33 +468,33 @@
     },
     {
       "name": "browser_render_app",
-      "status": "jarvis-browser",
-      "target": null,
-      "reason": "Requires the JarvisBrowser capability/service, not a generic Android primitive."
+      "status": "mapped",
+      "target": "browser.render_app",
+      "reason": "Mapped to a native phone-local implementation."
     },
     {
       "name": "browser_launch_app",
       "status": "mapped",
-      "target": "android.open_app",
-      "reason": "Mapped to a structured native agent primitive."
+      "target": "browser.launch_app",
+      "reason": "Mapped to a native phone-local implementation."
     },
     {
       "name": "browser_list_apps",
-      "status": "jarvis-browser",
-      "target": null,
-      "reason": "Requires the JarvisBrowser capability/service, not a generic Android primitive."
+      "status": "mapped",
+      "target": "browser.list_apps",
+      "reason": "Mapped to a native phone-local implementation."
     },
     {
       "name": "browser_save_app",
-      "status": "jarvis-browser",
-      "target": null,
-      "reason": "Requires the JarvisBrowser capability/service, not a generic Android primitive."
+      "status": "mapped",
+      "target": "browser.save_app",
+      "reason": "Mapped to a native phone-local implementation."
     },
     {
       "name": "browser_delete_app",
-      "status": "jarvis-browser",
-      "target": null,
-      "reason": "Requires the JarvisBrowser capability/service, not a generic Android primitive."
+      "status": "mapped",
+      "target": "browser.delete_app",
+      "reason": "Mapped to a native phone-local implementation."
     },
     {
       "name": "notes_create",
@@ -648,9 +648,9 @@
     },
     {
       "name": "clock_world_time",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "clock.world_time",
+      "reason": "Mapped to a native phone-local implementation."
     },
     {
       "name": "clock_time_current",
