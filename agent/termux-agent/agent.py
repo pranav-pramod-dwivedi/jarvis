@@ -334,3 +334,157 @@ def download(args: dict[str, Any]) -> dict[str, Any]:
     if args.get("output"):
         argv += ["-o", str(args["output"])]
     return termux_api("termux-download", argv)
+
+# Extended rooted-device primitives. These are structured tools so the model can
+# operate the phone without falling back to an unrestricted shell for routine work.
+@skill("device.root_status", "Verify root access and return the effective Android identity.")
+def root_status(_: dict[str, Any]) -> dict[str, Any]:
+    return run(["su", "-c", "id"])
+
+@skill("device.system_info", "Return concise Android model, build, kernel, storage and memory information.")
+def system_info(_: dict[str, Any]) -> dict[str, Any]:
+    return shell("printf 'model='; getprop ro.product.model; printf 'android='; getprop ro.build.version.release; printf 'build='; getprop ro.build.display.id; printf 'kernel='; uname -r; printf 'memory='; cat /proc/meminfo | head -3; printf 'storage='; df -h /data /sdcard")
+
+@skill("device.processes", "List Android processes with PID, user and command information.")
+def processes(args: dict[str, Any]) -> dict[str, Any]:
+    limit = max(1, min(int(args.get("limit", 100)), 500))
+    return shell(f"ps -A -o USER,PID,PPID,NAME,ARGS | head -n {limit + 1}")
+
+@skill("device.service", "Inspect or control an Android init service using rooted shell.")
+def service(args: dict[str, Any]) -> dict[str, Any]:
+    name = str(args["name"])
+    action = str(args.get("action", "status"))
+    if action not in {"status", "start", "stop", "restart"}:
+        return {"success": False, "error": "action must be status/start/stop/restart"}
+    if action == "status": return run(["su", "-c", f"getprop init.svc.{shlex.quote(name)}"])
+    return run(["su", "-c", f"setprop ctl.{action} {shlex.quote(name)}"])
+
+@skill("apps.list", "List installed Android packages, optionally filtered by text.")
+def apps_list(args: dict[str, Any]) -> dict[str, Any]:
+    result = run(["pm", "list", "packages", "-f"])
+    query = str(args.get("query", "")).lower()
+    if query and result.get("success"):
+        result["stdout"] = "\n".join(x for x in result["stdout"].splitlines() if query in x.lower()) + "\n"
+    return result
+
+@skill("apps.force_stop", "Force-stop an Android application by package name.")
+def apps_force_stop(args: dict[str, Any]) -> dict[str, Any]:
+    return run(["am", "force-stop", str(args["package"])])
+
+@skill("apps.clear_cache", "Clear an Android application's cache using root/package manager facilities.")
+def apps_clear_cache(args: dict[str, Any]) -> dict[str, Any]:
+    return run(["su", "-c", f"pm clear --cache-only {shlex.quote(str(args['package']))}"])
+
+@skill("files.write", "Write UTF-8 text to a specified path using root when necessary.")
+def files_write(args: dict[str, Any]) -> dict[str, Any]:
+    path = str(Path(str(args["path"])).expanduser())
+    content = str(args.get("content", ""))
+    if not path.startswith(str(ROOT)) and not bool(args.get("allowSystemPath", False)):
+        return {"success": False, "error": "path outside agent workspace; set allowSystemPath=true for an explicitly chosen path"}
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(content)
+    return {"success": True, "path": path, "bytes": len(content.encode())}
+
+@skill("files.stat", "Return file metadata without transferring file contents.")
+def files_stat(args: dict[str, Any]) -> dict[str, Any]:
+    p = Path(str(args["path"])).expanduser()
+    st = p.stat()
+    return {"success": True, "path": str(p), "size": st.st_size, "mtime": st.st_mtime, "isFile": p.is_file(), "isDir": p.is_dir()}
+
+@skill("files.search", "Search filenames under a directory and return a bounded text result.")
+def files_search(args: dict[str, Any]) -> dict[str, Any]:
+    base = str(Path(str(args.get("path", "/sdcard"))).expanduser())
+    pattern = str(args.get("pattern", "*"))
+    limit = max(1, min(int(args.get("limit", 200)), 1000))
+    return shell(f"find {shlex.quote(base)} -name {shlex.quote(pattern)} -print 2>/dev/null | head -n {limit}")
+
+@skill("files.delete", "Delete an explicitly selected file or empty directory; refuses broad/root paths.")
+def files_delete(args: dict[str, Any]) -> dict[str, Any]:
+    p = Path(str(args["path"])).expanduser().resolve()
+    protected = {Path('/'), Path('/data'), Path('/system'), Path('/vendor'), Path('/product'), Path('/sdcard')}
+    if p in protected or len(p.parts) < 4:
+        return {"success": False, "error": "protected or insufficiently specific path"}
+    if p.is_dir(): p.rmdir()
+    else: p.unlink()
+    return {"success": True, "path": str(p)}
+
+@skill("network.ping", "Test network reachability with a single bounded ICMP request.")
+def network_ping(args: dict[str, Any]) -> dict[str, Any]:
+    host = str(args.get("host", "1.1.1.1"))
+    return run(["ping", "-c", "1", "-W", "2", host], timeout=5)
+
+@skill("time.now", "Return the phone's current local time as structured text.")
+def time_now(_: dict[str, Any]) -> dict[str, Any]:
+    return shell("date '+%Y-%m-%dT%H:%M:%S%z %A'")
+
+@skill("calc.evaluate", "Evaluate a basic arithmetic expression without invoking a shell.")
+def calc_evaluate(args: dict[str, Any]) -> dict[str, Any]:
+    import ast, operator
+    ops={ast.Add:operator.add,ast.Sub:operator.sub,ast.Mult:operator.mul,ast.Div:operator.truediv,ast.Mod:operator.mod,ast.Pow:operator.pow,ast.USub:operator.neg,ast.UAdd:operator.pos}
+    def ev(n):
+        if isinstance(n,ast.Constant) and isinstance(n.value,(int,float)): return n.value
+        if isinstance(n,ast.UnaryOp) and type(n.op) in ops: return ops[type(n.op)](ev(n.operand))
+        if isinstance(n,ast.BinOp) and type(n.op) in ops: return ops[type(n.op)](ev(n.left),ev(n.right))
+        raise ValueError('unsupported expression')
+    value=ev(ast.parse(str(args['expression']),mode='eval').body)
+    return {"success":True,"value":value}
+
+# Local persistent state: lightweight memory, pins, notes and reminders stay on
+# the phone. Only requested records need to cross MCP, keeping traffic cheap.
+def _db():
+    import sqlite3
+    ROOT.mkdir(parents=True, exist_ok=True)
+    db=sqlite3.connect(ROOT / "state.sqlite3")
+    db.execute("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY, key TEXT UNIQUE, value TEXT NOT NULL, updated REAL NOT NULL)")
+    db.execute("CREATE TABLE IF NOT EXISTS pins (id INTEGER PRIMARY KEY, title TEXT NOT NULL, value TEXT, created REAL NOT NULL)")
+    db.execute("CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, updated REAL NOT NULL)")
+    db.execute("CREATE TABLE IF NOT EXISTS reminders (id INTEGER PRIMARY KEY, title TEXT NOT NULL, due REAL NOT NULL, done INTEGER NOT NULL DEFAULT 0)")
+    return db
+
+@skill("memory.remember", "Persist a small key/value memory locally on the phone.")
+def memory_remember(args: dict[str, Any]) -> dict[str, Any]:
+    key=str(args["key"]); value=str(args["value"])
+    db=_db(); db.execute("INSERT INTO memory(key,value,updated) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated=excluded.updated",(key,value,time.time())); db.commit(); db.close()
+    return {"success":True,"key":key}
+
+@skill("memory.recall", "Recall one or all locally stored memories.")
+def memory_recall(args: dict[str, Any]) -> dict[str, Any]:
+    db=_db(); key=args.get("key")
+    if key: rows=db.execute("SELECT key,value,updated FROM memory WHERE key=?",(str(key),)).fetchall()
+    else: rows=db.execute("SELECT key,value,updated FROM memory ORDER BY updated DESC LIMIT 100").fetchall()
+    db.close(); return {"success":True,"memories":[{"key":a,"value":b,"updated":c} for a,b,c in rows]}
+
+@skill("memory.forget", "Delete one locally stored memory by key.")
+def memory_forget(args: dict[str, Any]) -> dict[str, Any]:
+    db=_db(); db.execute("DELETE FROM memory WHERE key=?",(str(args["key"]),)); db.commit(); db.close(); return {"success":True}
+
+@skill("pin.create", "Create a persistent phone-local pin/bookmark.")
+def pin_create(args: dict[str, Any]) -> dict[str, Any]:
+    db=_db(); cur=db.execute("INSERT INTO pins(title,value,created) VALUES(?,?,?)",(str(args["title"]),str(args.get("value","")),time.time())); db.commit(); i=cur.lastrowid; db.close(); return {"success":True,"id":i}
+
+@skill("pin.list", "List phone-local pins.")
+def pin_list(_: dict[str, Any]) -> dict[str, Any]:
+    db=_db(); rows=db.execute("SELECT id,title,value,created FROM pins ORDER BY created DESC").fetchall(); db.close(); return {"success":True,"pins":[{"id":a,"title":b,"value":c,"created":d} for a,b,c,d in rows]}
+
+@skill("pin.dismiss", "Dismiss a phone-local pin by id.")
+def pin_dismiss(args: dict[str, Any]) -> dict[str, Any]:
+    db=_db(); db.execute("DELETE FROM pins WHERE id=?",(int(args["id"]),)); db.commit(); db.close(); return {"success":True}
+
+@skill("notes.create", "Create or update a small local note.")
+def notes_create(args: dict[str, Any]) -> dict[str, Any]:
+    db=_db(); title=str(args["title"]); body=str(args.get("body", "")); row=db.execute("SELECT id FROM notes WHERE title=?",(title,)).fetchone()
+    if row: db.execute("UPDATE notes SET body=?,updated=? WHERE id=?",(body,time.time(),row[0])); i=row[0]
+    else: cur=db.execute("INSERT INTO notes(title,body,updated) VALUES(?,?,?)",(title,body,time.time())); i=cur.lastrowid
+    db.commit(); db.close(); return {"success":True,"id":i}
+
+@skill("notes.list", "List local notes, optionally filtered by title.")
+def notes_list(args: dict[str, Any]) -> dict[str, Any]:
+    db=_db(); q=str(args.get("query","")); rows=db.execute("SELECT id,title,body,updated FROM notes WHERE title LIKE ? ORDER BY updated DESC",('%'+q+'%',)).fetchall(); db.close(); return {"success":True,"notes":[{"id":a,"title":b,"body":c,"updated":d} for a,b,c,d in rows]}
+
+@skill("reminders.create", "Create a local reminder with a Unix timestamp deadline.")
+def reminders_create(args: dict[str, Any]) -> dict[str, Any]:
+    db=_db(); cur=db.execute("INSERT INTO reminders(title,due) VALUES(?,?)",(str(args["title"]),float(args["due"]))); db.commit(); i=cur.lastrowid; db.close(); return {"success":True,"id":i}
+
+@skill("reminders.list", "List pending local reminders.")
+def reminders_list(_: dict[str, Any]) -> dict[str, Any]:
+    db=_db(); rows=db.execute("SELECT id,title,due,done FROM reminders WHERE done=0 ORDER BY due").fetchall(); db.close(); return {"success":True,"reminders":[{"id":a,"title":b,"due":c,"done":bool(d)} for a,b,c,d in rows]}

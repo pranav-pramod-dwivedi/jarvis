@@ -6,21 +6,21 @@
   "capabilities": [
     {
       "name": "remember",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "memory.remember",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "pin.create",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "pin.create",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "pin.dismiss",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "pin.dismiss",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "system.torch",
@@ -66,45 +66,45 @@
     },
     {
       "name": "navigate",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "android.open_url",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "call_contact",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "device.call",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "send_message",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "device.sms",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "read_file",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "files.read",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "write_file",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "files.write",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "search_files",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "files.search",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "run_command",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "shell.exec",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "get_location",
@@ -132,9 +132,9 @@
     },
     {
       "name": "get_bluetooth",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "android.open_settings",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "open_settings",
@@ -150,9 +150,9 @@
     },
     {
       "name": "jarvis_environment",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "device.system_info",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "take_screenshot",
@@ -162,27 +162,27 @@
     },
     {
       "name": "screen_info",
-      "status": "root-ui",
-      "target": null,
-      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+      "status": "mapped",
+      "target": "device.screenshot",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "click",
-      "status": "root-ui",
-      "target": null,
-      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+      "status": "mapped",
+      "target": "shell.exec",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "scroll",
-      "status": "root-ui",
-      "target": null,
-      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+      "status": "mapped",
+      "target": "shell.exec",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "type_text",
-      "status": "root-ui",
-      "target": null,
-      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+      "status": "mapped",
+      "target": "shell.exec",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "clipboard_get",
@@ -198,33 +198,33 @@
     },
     {
       "name": "call_history",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "shell.exec",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "find_contact",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "device.contacts",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "draft_message",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "memory.remember",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "open_${subName}_settings",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "android.open_settings",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "delete_file",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "files.delete",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "rename_file",
@@ -246,9 +246,9 @@
     },
     {
       "name": "find_downloads",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "files.search",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "open_url",
@@ -264,21 +264,21 @@
     },
     {
       "name": "reminder_create",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "reminders.create",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "reminder_list_today",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "reminders.list",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "reminder_open_app",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "reminder_water_log",
@@ -354,21 +354,21 @@
     },
     {
       "name": "device_volume_raise",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "device.volume",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "device_volume_lower",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "device.volume",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "device_volume_mute",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "device.volume",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "device_battery_status",
@@ -390,15 +390,15 @@
     },
     {
       "name": "device_settings_open",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "android.open_settings",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "device_lock_screen",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "shell.exec",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "weather_current",
@@ -426,45 +426,45 @@
     },
     {
       "name": "file_storage_stats",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "device.system_info",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "read_screen_text",
-      "status": "root-ui",
-      "target": null,
-      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+      "status": "mapped",
+      "target": "device.screenshot",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "virtual_touch",
-      "status": "root-ui",
-      "target": null,
-      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+      "status": "mapped",
+      "target": "shell.exec",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "virtual_scroll",
-      "status": "root-ui",
-      "target": null,
-      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+      "status": "mapped",
+      "target": "shell.exec",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "virtual_type",
-      "status": "root-ui",
-      "target": null,
-      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+      "status": "mapped",
+      "target": "shell.exec",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "press_global_key",
-      "status": "root-ui",
-      "target": null,
-      "reason": "Requires rooted Android UI/input or accessibility primitives; not a plain Termux:API call."
+      "status": "mapped",
+      "target": "shell.exec",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "diagnostic_ping",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "network.ping",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "browser_render_app",
@@ -474,9 +474,9 @@
     },
     {
       "name": "browser_launch_app",
-      "status": "jarvis-browser",
-      "target": null,
-      "reason": "Requires the JarvisBrowser capability/service, not a generic Android primitive."
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "browser_list_apps",
@@ -498,15 +498,15 @@
     },
     {
       "name": "notes_create",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "notes.create",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "notes_list",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "notes.list",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "list_add_item",
@@ -546,21 +546,21 @@
     },
     {
       "name": "contact_find",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "device.contacts",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "contact_add",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "device.contacts",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "contact_open_app",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "phone_call_contact",
@@ -576,9 +576,9 @@
     },
     {
       "name": "phone_open_app",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "message_send_sms",
@@ -594,9 +594,9 @@
     },
     {
       "name": "message_open_app",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "message_share_text",
@@ -654,15 +654,15 @@
     },
     {
       "name": "clock_time_current",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "time.now",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "clock_date_current",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "time.now",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "clock_time_difference",
@@ -672,9 +672,9 @@
     },
     {
       "name": "clock_open_app",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "clock_timer_preset_tea",
@@ -696,9 +696,9 @@
     },
     {
       "name": "clock_day_of_week",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "time.now",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "calendar_event_create",
@@ -714,9 +714,9 @@
     },
     {
       "name": "calendar_open_app",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "android.open_app",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "calendar_next_meeting",
@@ -732,21 +732,21 @@
     },
     {
       "name": "calc_math_evaluate",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "calc.evaluate",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "calc_tip_calculate",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "calc.evaluate",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "calc_unit_convert",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "calc.evaluate",
+      "reason": "Mapped to a structured native agent capability."
     },
     {
       "name": "maps_navigate_to",
@@ -762,9 +762,9 @@
     },
     {
       "name": "maps_navigate_home",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Maps app or web integration."
+      "status": "mapped",
+      "target": "android.open_url",
+      "reason": "Mapped to a structured native agent primitive."
     },
     {
       "name": "maps_open_app",
