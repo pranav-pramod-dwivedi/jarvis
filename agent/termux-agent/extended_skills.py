@@ -157,4 +157,4 @@ FEATURES.append("ui.device_policy"); agent.SKILLS["ui.device_policy"]=("Read ui.
 FEATURES.append("ui.accessibility"); agent.SKILLS["ui.accessibility"]=("Read ui.accessibility from the Android device.", _cmd("dumpsys accessibility | head -120"))
 FEATURES.append("ui.clipboard"); agent.SKILLS["ui.clipboard"]=("Read ui.clipboard from the Android device.", _cmd("cmd clipboard get 2>/dev/null"))
 
-assert len(FEATURES) == 140
+assert len(FEATURES) == 142
