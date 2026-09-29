@@ -25,3 +25,19 @@ def verify(envelope:dict[str,Any],secret:str,now:int|None=None,max_skew:int=MAX_
     if not isinstance(timestamp,int) or abs(now-timestamp)>max_skew: return False
     supplied=str(envelope.get("signature",""))
     return bool(supplied) and hmac.compare_digest(supplied,sign(envelope,secret))
+
+def make_response(request:dict[str,Any],result:dict[str,Any],secret:str)->dict[str,Any]:
+    envelope={"protocol":PROTOCOL,"kind":"response","id":request.get("id",""),
+              "clientId":request.get("clientId",""),"timestamp":int(time.time()),
+              "result":result}
+    envelope["signature"]=sign(envelope,secret)
+    return envelope
+
+def verify_response(envelope:dict[str,Any],secret:str,now:int|None=None,max_skew:int=MAX_SKEW_SECONDS)->bool:
+    now=int(time.time()) if now is None else now
+    if envelope.get("protocol")!=PROTOCOL or envelope.get("kind")!="response": return False
+    if not isinstance(envelope.get("id"),str) or not envelope.get("id"): return False
+    timestamp=envelope.get("timestamp")
+    if not isinstance(timestamp,int) or abs(now-timestamp)>max_skew: return False
+    supplied=str(envelope.get("signature",""))
+    return bool(supplied) and hmac.compare_digest(supplied,sign(envelope,secret))
