@@ -12,6 +12,9 @@ result=relay_worker.process(execute)
 assert result['success'] and result['deviceTarget']=='Redmi Note 8 Pro'
 replay=relay_worker.process(execute)
 assert not replay['success'] and replay['error']['code']=='REPLAYED_REQUEST'
+invalid=relay_protocol.make_request('execute',{'name':'device.vibrate','arguments':{'durationMs':0}},secret,'test-client')
+invalid_result=relay_worker.process(invalid)
+assert not invalid_result['success'] and '>= 1' in invalid_result['error']
 bad=dict(execute); bad['signature']=relay_protocol.sign(bad,'wrong')
 rejected=relay_worker.process(bad)
 assert not rejected['success'] and rejected['error']['code']=='INVALID_RELAY_SIGNATURE'

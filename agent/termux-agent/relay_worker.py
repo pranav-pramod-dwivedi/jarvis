@@ -3,7 +3,7 @@
 from __future__ import annotations
 import json,os,time,urllib.error,urllib.request
 from pathlib import Path
-import agent,relay_protocol
+import agent,relay_protocol,mcp_server
 POLL_SECONDS=max(1,int(os.environ.get("JARVIS_RELAY_POLL_SECONDS","5")))
 TIMEOUT_SECONDS=max(1,int(os.environ.get("JARVIS_RELAY_TIMEOUT_SECONDS","20")))
 RELAY_URL=os.environ.get("JARVIS_RELAY_URL","").strip()
@@ -36,7 +36,7 @@ def process(envelope:dict)->dict:
     if not isinstance(params,dict) or not isinstance(params.get("name"),str): return {"success":False,"error":{"code":"INVALID_EXECUTE_PARAMS","message":"name is required"}}
     name=params["name"]; arguments=params.get("arguments") or {}
     if not isinstance(arguments,dict): return {"success":False,"error":{"code":"INVALID_EXECUTE_PARAMS","message":"arguments must be an object"}}
-    started=time.time(); result=agent.execute(name,arguments)
+    started=time.time(); result=mcp_server.call(name,arguments)
     _journal({"id":request_id,"name":name,"success":bool(result.get("success",False)),"durationMs":round((time.time()-started)*1000)})
     return result
 def loop()->None:
