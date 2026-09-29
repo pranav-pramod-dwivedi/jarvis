@@ -618,3 +618,35 @@ def clock_time_difference(args: dict[str, Any]) -> dict[str, Any]:
     target=int(run(["sh","-lc",f"TZ={shlex.quote(zone)} date +%z"])["stdout"].strip() or 0)
     diff=(target-local)/100
     return {"success":True,"location":location,"timezone":zone,"differenceHours":diff}
+
+
+@skill("clock.show_alarms", "Open the Android Clock alarm list.")
+def clock_show_alarms(_: dict[str, Any]) -> dict[str, Any]:
+    return run(["am","start","-a","android.intent.action.SHOW_ALARMS"])
+
+@skill("clock.snooze_alarm", "Snooze the currently ringing alarm for a bounded number of minutes.")
+def clock_snooze_alarm(args: dict[str, Any]) -> dict[str, Any]:
+    mins=max(1,min(int(args.get("minutes",9)),60))
+    return run(["am","start","-a","android.intent.action.SNOOZE_ALARM","--ei","android.intent.extra.alarm.SNOOZE_DURATION",str(mins)])
+
+@skill("clock.dismiss_alarm", "Dismiss the currently ringing alarm.")
+def clock_dismiss_alarm(_: dict[str, Any]) -> dict[str, Any]:
+    return run(["am","start","-a","android.intent.action.DISMISS_ALARM"])
+
+@skill("clock.show_timers", "Open the Android Clock timer list.")
+def clock_show_timers(_: dict[str, Any]) -> dict[str, Any]:
+    return run(["am","start","-a","android.intent.action.SHOW_TIMERS"])
+
+@skill("clock.show_stopwatch", "Open the Android Clock stopwatch.")
+def clock_show_stopwatch(_: dict[str, Any]) -> dict[str, Any]:
+    return run(["am","start","-a","android.intent.action.SHOW_STOPWATCH"])
+
+@skill("calendar.open_day", "Open Android Calendar at a specific timestamp or today.")
+def calendar_open_day(args: dict[str, Any]) -> dict[str, Any]:
+    ms=int(args.get("timestampMs",int(time.time()*1000)))
+    return run(["am","start","-a","android.intent.action.VIEW","-d",f"content://com.android.calendar/time/{ms}"])
+
+@skill("calendar.quick_meeting", "Open the Android Calendar event editor for a 30-minute meeting one hour from now.")
+def calendar_quick_meeting(args: dict[str, Any]) -> dict[str, Any]:
+    title=str(args.get("title","Quick Sync")); start=int(time.time()*1000)+3600000; end=start+1800000
+    return run(["am","start","-a","android.intent.action.INSERT","-d","content://com.android.calendar/events","--es","title",title,"--el","beginTime",str(start),"--el","endTime",str(end)])
