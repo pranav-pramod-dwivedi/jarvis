@@ -650,3 +650,6 @@ def calendar_open_day(args: dict[str, Any]) -> dict[str, Any]:
 def calendar_quick_meeting(args: dict[str, Any]) -> dict[str, Any]:
     title=str(args.get("title","Quick Sync")); start=int(time.time()*1000)+3600000; end=start+1800000
     return run(["am","start","-a","android.intent.action.INSERT","-d","content://com.android.calendar/events","--es","title",title,"--el","beginTime",str(start),"--el","endTime",str(end)])
+
+# Extended native capability pack.
+import extended_skills  # noqa: E402,F401
