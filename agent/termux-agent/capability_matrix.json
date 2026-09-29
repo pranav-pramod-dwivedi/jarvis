@@ -612,39 +612,39 @@
     },
     {
       "name": "clock_alarm_list",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "clock.show_alarms",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "clock_alarm_snooze",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "clock.snooze_alarm",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "clock_alarm_dismiss",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "clock.dismiss_alarm",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "clock_timer_start",
-      "status": "root-shell",
-      "target": null,
-      "reason": "Implementable through rooted Android shell/filesystem, but needs a dedicated structured adapter."
+      "status": "mapped",
+      "target": "clock.timer_start",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "clock_timer_list",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "clock.show_timers",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "clock_stopwatch_start",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "clock.show_stopwatch",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "clock_world_time",
@@ -666,9 +666,9 @@
     },
     {
       "name": "clock_time_difference",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "clock.time_difference",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "clock_open_app",
@@ -678,21 +678,21 @@
     },
     {
       "name": "clock_timer_preset_tea",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "clock.timer_start",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "clock_timer_preset_pasta",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "clock.timer_start",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "clock_timer_preset_workout",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "clock.timer_start",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "clock_day_of_week",
@@ -708,9 +708,9 @@
     },
     {
       "name": "calendar_open_day",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "calendar.open_day",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "calendar_open_app",
@@ -726,9 +726,9 @@
     },
     {
       "name": "calendar_quick_meeting",
-      "status": "android-app",
-      "target": null,
-      "reason": "Requires Android app/provider integration or intents; can be implemented on the target phone."
+      "status": "mapped",
+      "target": "calendar.quick_meeting",
+      "reason": "Mapped to a native Android implementation."
     },
     {
       "name": "calc_math_evaluate",

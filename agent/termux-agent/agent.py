@@ -599,3 +599,22 @@ def clock_world_time(args: dict[str, Any]) -> dict[str, Any]:
         display=proc.stdout.strip()
     except Exception as exc: return {"success":False,"error":f"unknown timezone/location: {location}","detail":str(exc)}
     return {"success":True,"location":location,"timezone":zone,"display":display}
+
+
+@skill("clock.timer_start", "Start an Android countdown timer from seconds or minutes with an optional label.")
+def clock_timer_start_native(args: dict[str, Any]) -> dict[str, Any]:
+    sec=int(args.get("seconds",0))
+    if sec<=0: sec=max(1,int(args.get("minutes",0))*60)
+    if sec<=0: sec=300
+    label=str(args.get("label","Timer"))
+    return run(["am","start","-a","android.intent.action.SET_TIMER","--ei","android.intent.extra.alarm.LENGTH",str(sec),"--es","android.intent.extra.alarm.MESSAGE",label])
+
+@skill("clock.time_difference", "Return the current local-vs-target timezone offset in hours using Android timezone data.")
+def clock_time_difference(args: dict[str, Any]) -> dict[str, Any]:
+    location=str(args["location"])
+    aliases={'tokyo':'Asia/Tokyo','london':'Europe/London','new york':'America/New_York','los angeles':'America/Los_Angeles','delhi':'Asia/Kolkata','mumbai':'Asia/Kolkata','bengaluru':'Asia/Kolkata','singapore':'Asia/Singapore','dubai':'Asia/Dubai'}
+    zone=aliases.get(location.lower(),location)
+    local=int(run(["date","+%z"])["stdout"].strip() or 0)
+    target=int(run(["sh","-lc",f"TZ={shlex.quote(zone)} date +%z"])["stdout"].strip() or 0)
+    diff=(target-local)/100
+    return {"success":True,"location":location,"timezone":zone,"differenceHours":diff}
