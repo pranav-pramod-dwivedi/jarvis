@@ -9,6 +9,8 @@ TIMEOUT_SECONDS=max(1,int(os.environ.get("JARVIS_RELAY_TIMEOUT_SECONDS","20")))
 RELAY_URL=os.environ.get("JARVIS_RELAY_URL","").strip()
 CLIENT_ID=os.environ.get("JARVIS_RELAY_CLIENT_ID","termux-phone").strip()
 JOURNAL=Path(os.environ.get("JARVIS_RELAY_JOURNAL",str(agent.ROOT/"relay-journal.jsonl")))
+REPLAY_TTL_SECONDS=max(60,int(os.environ.get("JARVIS_RELAY_REPLAY_TTL_SECONDS","300")))
+_SEEN:dict[str,float]={}
 def _secret()->str: return agent.token()
 def _post(payload:dict)->dict:
     body=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
@@ -22,6 +24,12 @@ def process(envelope:dict)->dict:
     secret=_secret()
     if not relay_protocol.verify(envelope,secret): return {"success":False,"error":{"code":"INVALID_RELAY_SIGNATURE","message":"request authentication failed"}}
     request_id=envelope["id"]; method=envelope.get("method","")
+    now=time.time()
+    for key,seen_at in list(_SEEN.items()):
+        if now-seen_at > REPLAY_TTL_SECONDS: del _SEEN[key]
+    if request_id in _SEEN:
+        return {"success":False,"error":{"code":"REPLAYED_REQUEST","message":"request id was already executed"}}
+    _SEEN[request_id]=now
     if method=="poll": return {"success":True,"kind":"ready","clientId":CLIENT_ID}
     if method!="execute": return {"success":False,"error":{"code":"UNKNOWN_RELAY_METHOD","message":method}}
     params=envelope.get("params") or {}

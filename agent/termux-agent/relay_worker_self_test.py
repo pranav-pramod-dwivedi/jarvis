@@ -10,6 +10,8 @@ assert ready['success'] and ready['kind']=='ready'
 execute=relay_protocol.make_request('execute',{'name':'agent.info','arguments':{}},secret,'test-client')
 result=relay_worker.process(execute)
 assert result['success'] and result['deviceTarget']=='Redmi Note 8 Pro'
+replay=relay_worker.process(execute)
+assert not replay['success'] and replay['error']['code']=='REPLAYED_REQUEST'
 bad=dict(execute); bad['signature']=relay_protocol.sign(bad,'wrong')
 rejected=relay_worker.process(bad)
 assert not rejected['success'] and rejected['error']['code']=='INVALID_RELAY_SIGNATURE'
