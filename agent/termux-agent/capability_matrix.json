@@ -588,9 +588,9 @@
     },
     {
       "name": "message_send_whatsapp",
-      "status": "adapter-needed",
-      "target": null,
-      "reason": "Capability is documented by Jarvis but has no verified Termux-native implementation yet."
+      "status": "mapped",
+      "target": "message.whatsapp",
+      "reason": "Uses Android VIEW intent to open a WhatsApp chat with optional prefilled text; explicit send remains a separate user action."
     },
     {
       "name": "message_open_app",

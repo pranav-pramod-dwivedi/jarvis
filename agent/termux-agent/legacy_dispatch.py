@@ -64,27 +64,65 @@ def _ui(name,args):
         return r
     return {'success':False,'error':{'code':'ROOT_UI_ADAPTER_MISSING','message':name}}
 
+def _safe_target(value):
+    p=Path(str(value)).expanduser().resolve()
+    protected={Path('/'),Path('/data'),Path('/system'),Path('/vendor'),Path('/product'),Path('/sdcard'),Path('/storage')}
+    if p in protected or len(p.parts)<4:
+        raise ValueError('protected or insufficiently specific path')
+    return str(p)
+
 def _shell(name,args):
-    if name=='delete_file':
-        return agent.run(['su','-c',f"rm -rf -- {json.dumps(str(args['path']))}"])
-    if name=='rename_file':
-        return agent.run(['su','-c',f"mv -- {json.dumps(str(args['source']))} {json.dumps(str(args['destination']))}"])
-    if name=='copy_file':
-        return agent.run(['su','-c',f"cp -a -- {json.dumps(str(args['source']))} {json.dumps(str(args['destination']))}"])
-    if name=='create_folder':
-        return agent.run(['su','-c',f"mkdir -p -- {json.dumps(str(args['path']))}"])
-    if name=='write_file':
-        return agent.run(['su','-c',f"python3 -c 'from pathlib import Path; Path({str(args['path'])!r}).write_text({str(args.get('content',''))!r})'"])
-    if name in {'search_files','find_downloads'}:
-        base=str(args.get('path','/sdcard/Download'))
-        query=str(args.get('query','*'))
-        return agent.run(['su','-c',f"find {json.dumps(base)} -iname {json.dumps(query)} -print | head -200"])
-    if name=='file_storage_stats':
-        return agent.run(['df','-h','/data','/sdcard'])
-    if name=='diagnostic_ping':
-        return agent.run(['ping','-c','1','-W','2',str(args.get('host','1.1.1.1'))])
-    if name=='jarvis_environment':
-        return agent.run(['sh','-lc','getprop ro.product.model; getprop ro.build.version.release; id; df -h /data /sdcard; uname -a'])
+    try:
+        if name=='close_app':
+            return agent.execute('apps.force_stop',{'package':args['package']})
+        if name=='delete_file':
+            path=_safe_target(args['path'])
+            return agent.execute('files.delete',{'path':path,'recursive':bool(args.get('recursive',False))})
+        if name=='rename_file':
+            src=_safe_target(args['source']); dst=_safe_target(args['destination'])
+            return agent.run(['su','-c',f"mv -- {json.dumps(src)} {json.dumps(dst)}"])
+        if name=='copy_file':
+            src=_safe_target(args['source']); dst=_safe_target(args['destination'])
+            return agent.run(['su','-c',f"cp -a -- {json.dumps(src)} {json.dumps(dst)}"])
+        if name=='create_folder':
+            path=_safe_target(args['path'])
+            return agent.run(['su','-c',f"mkdir -p -- {json.dumps(path)}"])
+        if name=='write_file':
+            return agent.execute('files.write',{'path':args['path'],'content':args.get('content',''),'allowSystemPath':True})
+        if name in {'search_files','find_downloads'}:
+            base=str(args.get('path','/sdcard/Download')); query=str(args.get('query','*'))
+            return agent.execute('files.search',{'path':base,'pattern':query,'limit':200})
+        if name=='file_storage_stats':
+            return agent.execute('device.system_info',{})
+        if name=='diagnostic_ping':
+            return agent.execute('network.ping',{'host':args.get('host','1.1.1.1')})
+        if name=='jarvis_environment':
+            return agent.execute('device.system_info',{})
+        if name=='call_history':
+            return agent.run(['su','-c','content query --uri content://call_log/calls --projection number,date,type,duration --sort "date DESC" 2>/dev/null | head -100'])
+        if name=='clock_alarm_set':
+            argv=['am','start','-a','android.intent.action.SET_ALARM']
+            if 'hour' in args: argv += ['--ei','android.intent.extra.alarm.HOUR',str(int(args['hour']))]
+            if 'minute' in args: argv += ['--ei','android.intent.extra.alarm.MINUTES',str(int(args['minute']))]
+            if args.get('message'): argv += ['--es','android.intent.extra.alarm.MESSAGE',str(args['message'])]
+            return agent.run(argv)
+        if name=='clock_timer_start':
+            argv=['am','start','-a','android.intent.action.SET_TIMER','--ei','android.intent.extra.alarm.LENGTH',str(int(args['seconds']))]
+            return agent.run(argv)
+        if name=='calendar_event_create':
+            argv=['am','start','-a','android.intent.action.INSERT','-t','vnd.android.cursor.item/event','-d','content://com.android.calendar/events']
+            if args.get('title'): argv += ['--es','title',str(args['title'])]
+            if args.get('description'): argv += ['--es','description',str(args['description'])]
+            if args.get('location'): argv += ['--es','eventLocation',str(args['location'])]
+            return agent.run(argv)
+        if name=='calendar_next_meeting':
+            return agent.run(['su','-c','content query --uri content://com.android.calendar/events --projection title,dtstart,dtend,eventLocation --where "dtstart>"'"'"'$(date +%s)000'"'"' --sort "dtstart ASC" 2>/dev/null | head -20'])
+        if name in {'list_add_item','list_view'}:
+            if name=='list_add_item':
+                return agent.execute('notes.create',{'title':str(args.get('list','default')),'body':str(args.get('item',args.get('text','')))})
+            return agent.execute('notes.list',{'query':str(args.get('list',''))})
+    except Exception as exc:
+        return {'success':False,'error':{'code':'ROOT_SHELL_VALIDATION','message':str(exc)}}
     return {'success':False,'error':{'code':'ROOT_SHELL_ADAPTER_MISSING','message':name}}
 
 def execute(name,args):

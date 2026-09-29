@@ -22,6 +22,7 @@ ROOT = Path(os.environ.get("JARVIS_AGENT_HOME", str(Path.home() / ".jarvis-agent
 CATALOG = Path(os.environ.get("JARVIS_AGENT_CATALOG", str(ROOT / "catalog.json")))
 TOKEN_FILE = Path(os.environ.get("JARVIS_AGENT_TOKEN_FILE", str(ROOT / "token")))
 COMMAND_TIMEOUT = int(os.environ.get("JARVIS_COMMAND_TIMEOUT", "30"))
+TERMUX_BIN = os.environ.get("JARVIS_TERMUX_BIN", "/data/data/com.termux/files/usr/bin")
 
 
 def token() -> str:
@@ -57,7 +58,7 @@ def shell(command: str) -> dict[str, Any]:
 
 
 def termux_api(binary: str, args: list[str] | None = None) -> dict[str, Any]:
-    return run([binary, *(args or [])])
+    return run([str(Path(TERMUX_BIN) / binary), *(args or [])])
 
 
 def android_intent(action: str, extras: dict[str, str] | None = None) -> dict[str, Any]:
@@ -404,7 +405,12 @@ def files_delete(args: dict[str, Any]) -> dict[str, Any]:
     protected = {Path('/'), Path('/data'), Path('/system'), Path('/vendor'), Path('/product'), Path('/sdcard')}
     if p in protected or len(p.parts) < 4:
         return {"success": False, "error": "protected or insufficiently specific path"}
-    if p.is_dir(): p.rmdir()
+    if p.is_dir():
+        if not bool(args.get("recursive", False)):
+            p.rmdir()
+        else:
+            import shutil
+            shutil.rmtree(p)
     else: p.unlink()
     return {"success": True, "path": str(p)}
 
@@ -488,3 +494,40 @@ def reminders_create(args: dict[str, Any]) -> dict[str, Any]:
 @skill("reminders.list", "List pending local reminders.")
 def reminders_list(_: dict[str, Any]) -> dict[str, Any]:
     db=_db(); rows=db.execute("SELECT id,title,due,done FROM reminders WHERE done=0 ORDER BY due").fetchall(); db.close(); return {"success":True,"reminders":[{"id":a,"title":b,"due":c,"done":bool(d)} for a,b,c,d in rows]}
+
+@skill("message.whatsapp", "Open a WhatsApp chat for a number with optional prefilled text; does not send automatically.")
+def whatsapp(args: dict[str, Any]) -> dict[str, Any]:
+    number = ''.join(ch for ch in str(args["number"]) if ch.isdigit() or ch == '+')
+    if not number: return {"success": False, "error": "valid phone number required"}
+    text = str(args.get("text", ""))
+    uri = "https://wa.me/" + number.lstrip('+')
+    if text:
+        from urllib.parse import quote
+        uri += "?text=" + quote(text, safe="")
+    return run(["am", "start", "-a", "android.intent.action.VIEW", "-d", uri])
+
+@skill("device.ui_tree", "Return the current Android accessibility/UI hierarchy as text, bounded for transport efficiency.")
+def ui_tree(args: dict[str, Any]) -> dict[str, Any]:
+    out = "/data/local/tmp/jarvis-window.xml"
+    r = run(["su", "-c", f"uiautomator dump {out} >/dev/null 2>&1 && cat {out}"])
+    if r.get("success"):
+        limit = max(1000, min(int(args.get("maxChars", 30000)), 100000))
+        r["stdout"] = r["stdout"][:limit]
+    return r
+
+@skill("device.tap", "Tap an Android screen coordinate through rooted input.")
+def device_tap(args: dict[str, Any]) -> dict[str, Any]:
+    return run(["su", "-c", f"input tap {int(args['x'])} {int(args['y'])}"])
+
+@skill("device.type_text", "Type text into the currently focused Android input field.")
+def device_type_text(args: dict[str, Any]) -> dict[str, Any]:
+    text = str(args.get("text", ""))
+    escaped = text.replace('%','%25').replace(' ','%s')
+    return run(["su", "-c", f"input text {shlex.quote(escaped)}"])
+
+@skill("device.keyevent", "Send a bounded Android global key event by numeric code or common name.")
+def device_keyevent(args: dict[str, Any]) -> dict[str, Any]:
+    names={'back':4,'home':3,'recents':187,'notifications':83,'quick_settings':84,'power':26,'enter':66,'delete':67}
+    key=str(args.get('key','back')).lower(); code=names.get(key,key if key.isdigit() else None)
+    if code is None: return {"success":False,"error":"unknown key"}
+    return run(["su","-c",f"input keyevent {code}"])
