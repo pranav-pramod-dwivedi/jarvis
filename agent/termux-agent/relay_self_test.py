@@ -7,6 +7,10 @@ secret="test-secret-with-sufficient-entropy"
 req=relay_protocol.make_request("poll",{},secret,"self-test")
 assert relay_protocol.verify(req,secret)
 assert not relay_protocol.verify(req,"wrong-secret")
+missing_id=dict(req); del missing_id["id"]
+assert not relay_protocol.verify(missing_id,secret)
+missing_params=dict(req); del missing_params["params"]
+assert not relay_protocol.verify(missing_params,secret)
 tampered=dict(req); tampered["method"]="execute"
 assert not relay_protocol.verify(tampered,secret)
 stale=dict(req); stale["timestamp"]=int(time.time())-relay_protocol.MAX_SKEW_SECONDS-1

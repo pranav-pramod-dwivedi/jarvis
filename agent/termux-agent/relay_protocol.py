@@ -21,6 +21,10 @@ def make_request(method:str,params:dict[str,Any],secret:str,client_id:str)->dict
 def verify(envelope:dict[str,Any],secret:str,now:int|None=None,max_skew:int=MAX_SKEW_SECONDS)->bool:
     now=int(time.time()) if now is None else now
     if envelope.get("protocol")!=PROTOCOL or envelope.get("kind")!="request": return False
+    if not isinstance(envelope.get("id"),str) or not envelope.get("id"): return False
+    if not isinstance(envelope.get("clientId"),str) or not envelope.get("clientId"): return False
+    if not isinstance(envelope.get("method"),str) or not envelope.get("method"): return False
+    if not isinstance(envelope.get("params"),dict): return False
     timestamp=envelope.get("timestamp")
     if not isinstance(timestamp,int) or abs(now-timestamp)>max_skew: return False
     supplied=str(envelope.get("signature",""))
