@@ -43,7 +43,7 @@ DANGEROUS_PATTERNS = (
     r"\brm\s+-[rfR]*\s+/(?:\s|$|\*)",
     r"\bmkfs(?:\.|\s)",
     r"\bdd\s+if=",
-    r"(?:>|of=)\s*/dev/(?:block/)?",
+    r"(?:>|of=)\s*/dev/(?!null(?:\b|/))(?:block/)?",
     r"\bfastboot\s+(?:flash|erase)\b",
     r"\bparted\b.*\bmklabel\b",
 )
