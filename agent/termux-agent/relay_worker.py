@@ -16,8 +16,8 @@ def _post(payload:dict)->dict:
     with urllib.request.urlopen(request,timeout=TIMEOUT_SECONDS) as response: return json.loads(response.read().decode("utf-8"))
 def _journal(event:dict)->None:
     JOURNAL.parent.mkdir(parents=True,exist_ok=True)
-    with JOURNAL.open("a",encoding="utf-8") as handle: handle.write(json.dumps(event,separators=(",",":"),ensure_ascii=False)+"
-")
+    with JOURNAL.open("a",encoding="utf-8") as handle:
+        handle.write(json.dumps(event,separators=(",",":"),ensure_ascii=False)+"\n")
 def process(envelope:dict)->dict:
     secret=_secret()
     if not relay_protocol.verify(envelope,secret): return {"success":False,"error":{"code":"INVALID_RELAY_SIGNATURE","message":"request authentication failed"}}
