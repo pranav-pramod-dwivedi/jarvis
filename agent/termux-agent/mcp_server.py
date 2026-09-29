@@ -12,7 +12,7 @@ def schema(name):
     common={"type":"object","additionalProperties":True}
     exact={
       'device.battery':{},'device.location':{},'device.clipboard_get':{},'device.wifi':{},
-      'device.tts_engines':{},'device.telephony_info':{},'agent.info':{},
+      'device.tts_engines':{},'device.telephony_info':{},'agent.info':{},'device.system_info':{},'device.root_status':{},'diagnostics.snapshot':{},'diagnostics.health_check':{},
       'device.notification':{'properties':{'title':{'type':'string'},'content':{'type':'string'}},'required':['content']},
       'device.toast':{'properties':{'text':{'type':'string'}},'required':['text']},
       'device.clipboard_set':{'properties':{'text':{'type':'string'}},'required':['text']},
@@ -23,6 +23,8 @@ def schema(name):
       'device.call':{'properties':{'number':{'type':'string'}},'required':['number']},
       'device.sms':{'properties':{'number':{'type':'string'},'text':{'type':'string'}},'required':['number','text']},
       'device.screenshot':{'properties':{'path':{'type':'string'}}},
+      'device.processes':{'properties':{'limit':{'type':'integer','minimum':1,'maximum':200}}},
+      'device.packages':{'properties':{'query':{'type':'string'},'limit':{'type':'integer','minimum':1,'maximum':1000}}},
       'android.open_app':{'properties':{'package':{'type':'string'}},'required':['package']},
       'android.open_settings':{'properties':{'action':{'type':'string'}}},
       'android.open_url':{'properties':{'url':{'type':'string','format':'uri'}},'required':['url']},
