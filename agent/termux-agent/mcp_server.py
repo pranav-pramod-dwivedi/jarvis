@@ -92,7 +92,15 @@ def main():
         if not line.strip(): continue
         rid=None
         try:
-            req=json.loads(line);rid=req.get('id');method=req.get('method');params=req.get('params') or {}
+            req=json.loads(line)
+            if not isinstance(req,dict):
+                send({'jsonrpc':'2.0','id':None,'error':{'code':-32600,'message':'Invalid Request'}})
+                continue
+            rid=req.get('id');method=req.get('method');params=req.get('params') or {}
+            if not isinstance(method,str):
+                if rid is not None:
+                    send({'jsonrpc':'2.0','id':rid,'error':{'code':-32600,'message':'Invalid Request'}})
+                continue
             if method=='initialize': send({'jsonrpc':'2.0','id':rid,'result':{'protocolVersion':PROTOCOL,'capabilities':{'tools':{}},'serverInfo':SERVER_INFO}})
             elif method=='notifications/initialized': pass
             elif method=='ping': send({'jsonrpc':'2.0','id':rid,'result':{}})
@@ -102,6 +110,8 @@ def main():
                 is_error=not isinstance(result,dict) or not result.get('success',True)
                 send({'jsonrpc':'2.0','id':rid,'result':{'content':[{'type':'text','text':json.dumps(result,ensure_ascii=False)}],'isError':is_error}})
             elif rid is not None: send({'jsonrpc':'2.0','id':rid,'error':{'code':-32601,'message':f'Method not found: {method}'}})
+        except json.JSONDecodeError:
+            send({'jsonrpc':'2.0','id':None,'error':{'code':-32700,'message':'Parse error'}})
         except Exception as e:
             if rid is not None: send({'jsonrpc':'2.0','id':rid,'error':{'code':-32603,'message':str(e)}})
 
