@@ -12,3 +12,4 @@ print('agent skills:',len(agent.SKILLS))
 print('legacy capabilities:',len(legacy_dispatch.CAPS))
 print('mapped targets valid: yes')
 print('matrix integrity: yes')
+import relay_worker_self_test
