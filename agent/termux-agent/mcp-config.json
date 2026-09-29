@@ -1,0 +1,6 @@
+{
+  "name": "jarvis-redmi-termux-agent",
+  "transport": "stdio",
+  "command": "python",
+  "args": ["/data/data/com.termux/files/home/.jarvis-agent/mcp_server.py"]
+}
